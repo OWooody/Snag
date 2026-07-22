@@ -133,43 +133,84 @@ Expected: `{"enabled":true,"requests":[]}`
 
 Package: **`@snag-tech/react`** (public scoped package, npm org `snag-tech`).
 
+- **npm:** https://www.npmjs.com/package/@snag-tech/react
+- **Source:** `packages/react/`
+
 ### Prerequisites
 
-1. [npm account](https://www.npmjs.com/signup)
-2. **Own the `@snag-tech` scope** — org at [npmjs.com/org/snag-tech](https://www.npmjs.com/org/snag-tech).
-3. Log in: `npm login`
+1. [npm account](https://www.npmjs.com/signup) with **2FA enabled** (Authorization and writes)
+2. Member of the **`snag-tech`** org on npm
+3. Logged in: `npm login` → `npm whoami` should print your username
 
-### Publish
+### First publish (one-time)
 
-From the monorepo root or `packages/react`:
+Already done for `0.1.0`. For reference:
 
 ```sh
 cd packages/react
-npm run build
-npm publish --access public
+npm publish --access public --otp=<6-digit-code>
 ```
 
-`prepublishOnly` runs `build` automatically. Bump version before republishing:
+`--otp` is required if 2FA is on. `prepublishOnly` runs `build` automatically.
+
+### Next time you publish
+
+Do this whenever you ship SDK changes:
+
+**1. Make your code changes** in `packages/react/`.
+
+**2. Bump the version** (pick one):
 
 ```sh
-npm version patch   # 0.1.0 → 0.1.1
-npm publish --access public
+cd packages/react
+npm version patch    # 0.1.0 → 0.1.1  (bug fixes)
+npm version minor    # 0.1.0 → 0.2.0  (new features, backwards compatible)
+npm version major    # 0.1.0 → 1.0.0  (breaking changes)
 ```
 
-### Host app install (after publish)
+This updates `package.json` and creates a git tag. Commit the version bump if you tag releases in git.
+
+**3. Publish to npm:**
+
+```sh
+npm publish --access public --otp=<6-digit-code>
+```
+
+Get `<6-digit-code>` from your authenticator app. Codes expire quickly — run publish right after generating one.
+
+**4. Verify:**
+
+```sh
+npm view @snag-tech/react version
+```
+
+Should match the version you just published.
+
+**5. Tell host teams to upgrade:**
+
+```sh
+npm install @snag-tech/react@latest
+# or pin: npm install @snag-tech/react@0.1.1
+```
+
+### Host app install
 
 ```sh
 npm install @snag-tech/react
 ```
 
-### Local tarball (before publish or for private handoff)
+```tsx
+import { initSnag, SnagOverlay } from "@snag-tech/react";
+```
+
+### Local tarball (private handoff, no npm)
 
 ```sh
 cd packages/react
 npm pack
-# → snag-react-0.1.0.tgz
+# → snag-tech-react-0.1.0.tgz
 
-npm install /path/to/snag/packages/react/snag-react-0.1.0.tgz
+npm install /path/to/snag/packages/react/snag-tech-react-0.1.0.tgz
 ```
 
 ---
