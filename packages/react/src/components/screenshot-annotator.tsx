@@ -144,11 +144,15 @@ export function ScreenshotAnnotator({
     if (saving) return;
     setSaving(true);
     try {
-      if (strokes.length === 0) {
+      const allStrokes =
+        currentRef.current && currentRef.current.points.length > 0
+          ? [...strokesRef.current, currentRef.current]
+          : strokesRef.current;
+      if (allStrokes.length === 0) {
         onDone(screenshot);
         return;
       }
-      const annotated = await compositeAnnotatedScreenshot(screenshot, strokes);
+      const annotated = await compositeAnnotatedScreenshot(screenshot, allStrokes);
       onDone(annotated);
     } catch (error) {
       console.warn("[snag] annotation export failed:", error);
