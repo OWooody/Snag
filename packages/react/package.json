@@ -39,7 +39,8 @@
     "react-dom": ">=18"
   },
   "dependencies": {
-    "html-to-image": "^1.11.13"
+    "html-to-image": "^1.11.13",
+    "perfect-freehand": "^1.2.3"
   },
   "devDependencies": {
     "@types/react": "^18.3.18",
