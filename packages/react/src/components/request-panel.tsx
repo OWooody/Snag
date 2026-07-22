@@ -5,6 +5,7 @@ import { resolveContext } from "../config";
 import type { SnagScreenshot } from "../protocol";
 import type { SnagTheme } from "../theme";
 import { RequestsList } from "./requests-list";
+import { ScreenshotAnnotator } from "./screenshot-annotator";
 
 const MAX_PROMPT_LENGTH = 2000;
 
@@ -22,6 +23,11 @@ export function RequestPanel({ screenshot, theme, onClose }: RequestPanelProps) 
   const [phase, setPhase] = useState<Phase>("editing");
   const [prompt, setPrompt] = useState("");
   const [includeScreenshot, setIncludeScreenshot] = useState(true);
+  const [workingScreenshot, setWorkingScreenshot] = useState<SnagScreenshot | null>(
+    screenshot,
+  );
+  const [isAnnotated, setIsAnnotated] = useState(false);
+  const [annotating, setAnnotating] = useState(false);
   const [agentUrl, setAgentUrl] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -38,7 +44,8 @@ export function RequestPanel({ screenshot, theme, onClose }: RequestPanelProps) 
       const response = await createSnagRequest({
         prompt: trimmed,
         context,
-        screenshot: includeScreenshot && screenshot ? screenshot : undefined,
+        screenshot:
+          includeScreenshot && workingScreenshot ? workingScreenshot : undefined,
         locale: typeof context.locale === "string" ? context.locale : undefined,
       });
       setAgentUrl(response.agent_url);
@@ -48,6 +55,21 @@ export function RequestPanel({ screenshot, theme, onClose }: RequestPanelProps) 
       setPhase("editing");
     }
   };
+
+  if (annotating && workingScreenshot) {
+    return (
+      <ScreenshotAnnotator
+        screenshot={workingScreenshot}
+        theme={theme}
+        onCancel={() => setAnnotating(false)}
+        onDone={(result) => {
+          setWorkingScreenshot(result);
+          setIsAnnotated(result.base64 !== screenshot?.base64);
+          setAnnotating(false);
+        }}
+      />
+    );
+  }
 
   return (
     <div
@@ -201,7 +223,7 @@ export function RequestPanel({ screenshot, theme, onClose }: RequestPanelProps) 
               }}
             />
 
-            {screenshot ? (
+            {workingScreenshot ? (
               <div
                 style={{
                   marginTop: 16,
@@ -210,16 +232,48 @@ export function RequestPanel({ screenshot, theme, onClose }: RequestPanelProps) 
                   padding: 12,
                 }}
               >
-                <img
-                  src={`data:image/jpeg;base64,${screenshot.base64}`}
-                  alt="Screenshot preview"
+                <button
+                  type="button"
+                  onClick={() => setAnnotating(true)}
+                  disabled={phase === "submitting"}
+                  aria-label="Mark up screenshot"
                   style={{
+                    display: "block",
                     width: "100%",
-                    maxHeight: 160,
-                    objectFit: "cover",
-                    borderRadius: 8,
+                    padding: 0,
+                    border: "none",
+                    background: "transparent",
+                    cursor: phase === "submitting" ? "not-allowed" : "pointer",
+                    position: "relative",
                   }}
-                />
+                >
+                  <img
+                    src={`data:image/jpeg;base64,${workingScreenshot.base64}`}
+                    alt="Screenshot preview"
+                    style={{
+                      width: "100%",
+                      maxHeight: 160,
+                      objectFit: "cover",
+                      borderRadius: 8,
+                      display: "block",
+                    }}
+                  />
+                  <span
+                    style={{
+                      position: "absolute",
+                      left: 10,
+                      bottom: 10,
+                      padding: "4px 8px",
+                      borderRadius: 6,
+                      background: "rgba(0,0,0,0.65)",
+                      color: "#fff",
+                      fontSize: 11,
+                      fontWeight: 700,
+                    }}
+                  >
+                    {isAnnotated ? "Marked up · Edit" : "Mark up"}
+                  </span>
+                </button>
                 <label
                   style={{
                     display: "flex",
