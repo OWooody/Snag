@@ -1,73 +1,113 @@
-# @snag/react
+# @snag-tech/react
 
-Snag React web SDK — an in-app floating button for development and staging builds that turns "can we change this?" into a running AI coding agent. The user describes the change on the screen they are looking at; Snag attaches a screenshot and app context and sends it to the Snag relay, which launches a cloud coding agent against the project's repository. Status, branch, and PR links show up back inside the app.
+Add an in-app “fix this” button to your staging or internal build. Testers describe a change on the screen they’re looking at; Snag sends it (with a screenshot) to your team’s coding agent.
 
-## Install
+**You need two values from your Snag admin** before you start:
+
+- `endpoint` — relay URL
+- `projectKey` — your app’s `snag_pk_...` key
+
+---
+
+## 1. Install
 
 ```sh
-npm install @snag/react
+npm install @snag-tech/react
 ```
 
-Peer dependencies: `react >= 18`, `react-dom >= 18`.
+Or from a tarball your admin provides:
 
-## Usage
+```sh
+npm install ./snag-react-0.1.0.tgz
+```
 
-Initialize once and mount the overlay at your app root. It is safe to mount in every build: the overlay renders nothing unless the relay reports the project enabled.
+Requires **React 18+**.
+
+---
+
+## 2. Add environment variables
+
+Only set these in **dev/staging**. Leave them unset in production — the button won’t appear.
+
+**Vite** (`.env.local`):
+
+```env
+VITE_SNAG_ENDPOINT=https://<project-ref>.supabase.co/functions/v1/relay
+VITE_SNAG_PROJECT_KEY=snag_pk_...
+```
+
+**Next.js** (`.env.local`):
+
+```env
+NEXT_PUBLIC_SNAG_ENDPOINT=https://<project-ref>.supabase.co/functions/v1/relay
+NEXT_PUBLIC_SNAG_PROJECT_KEY=snag_pk_...
+```
+
+Restart the dev server after changing env files.
+
+---
+
+## 3. Add two lines to your app
+
+Call `initSnag` once at startup, then mount `<SnagOverlay />` at the root.
+
+**Vite / CRA:**
 
 ```tsx
-import { initSnag, SnagOverlay } from "@snag/react";
+import { initSnag, SnagOverlay } from "@snag-tech/react";
 
 initSnag({
-  endpoint: "https://<your-snag-relay>/functions/v1/relay",
-  projectKey: "snag_pk_...",
+  endpoint: import.meta.env.VITE_SNAG_ENDPOINT,
+  projectKey: import.meta.env.VITE_SNAG_PROJECT_KEY,
   getContext: () => ({
     route: window.location.pathname,
-    locale: document.documentElement.lang,
-    app_version: "1.0.0",
     environment: "staging",
   }),
 });
 
-// In your root component tree:
-<SnagOverlay />
+export function App() {
+  return (
+    <>
+      {/* your app */}
+      <SnagOverlay />
+    </>
+  );
+}
 ```
 
-## Visibility gating
+**Next.js** — use a client component (`"use client"`) and `NEXT_PUBLIC_*` env vars. Mount once in `layout.tsx`.
 
-There is deliberately no client-side environment flag. On startup the SDK sends one `GET` to `endpoint` with the `x-snag-key` header; the relay responds `{ enabled: true }` only when the project exists and is enabled. Any other response — 403, error, timeout — and the overlay renders nothing for the session. Disabling the project in the database is the remote kill switch.
+---
 
-## Relay contract
+## That’s it
 
-The SDK talks to a single endpoint implementing the protocol in `src/protocol.ts`:
+- If env vars are set and your project is enabled, a floating button appears.
+- If not, nothing renders — safe to ship the code in all builds.
+- To turn Snag off remotely, your admin disables the project — no deploy needed on your side.
 
-- `GET endpoint` with `x-snag-key` → `{ enabled, requests? }`. Doubles as the enablement probe and the request-list fetch.
-- `POST endpoint` with `CreateSnagRequestBody` — `{ prompt, context, screenshot?, locale? }` → `{ id, agent_url }`.
+---
 
-Optional header: `Authorization: Bearer <token>` when `getAuthToken` returns one.
+## Optional
 
-## Screenshots
+| Option | What it does |
+|--------|----------------|
+| `getContext` | Attach route, version, environment to every request |
+| `getAuthToken` | Send `Authorization: Bearer` when the user is logged in |
+| `theme` | Override button/panel colors |
+| `debug: true` | Log probe/request details to the console |
 
-Captured with `html-to-image` at the moment the floating button is pressed — before the request panel opens, so the panel never appears in its own screenshot. Images are downscaled to at most 1000px wide and JPEG-compressed before upload. The user can exclude the screenshot with a toggle before submitting.
+---
 
-**Web caveats:** cross-origin images and iframes may be missing from captures. Only enable Snag in environments with non-sensitive/seeded data.
+## Troubleshooting
 
-## Theming
+| Problem | Fix |
+|---------|-----|
+| No button | Check env vars, restart dev server, ask admin to confirm project is enabled |
+| Button was working, now gone | Admin may have disabled the project — contact them |
+| Request fails | Usually repo/agent config on the admin side — send them the error |
 
-Pass `theme` to `initSnag` to override any of the defaults in `src/theme.ts` (accent, background, surface, text colors).
+---
 
-## Local development
+## Security note
 
-```sh
-npm install
-npm run build
-```
-
-To test in another project without publishing:
-
-```sh
-cd packages/react && npm pack
-# in your project:
-npm install /path/to/snag-react-0.1.0.tgz
-```
-
-Or use [yalc](https://github.com/wclr/yalc) for faster iteration.
+`projectKey` is visible in your JS bundle (like an analytics write key). Only use Snag on **non-production** builds with **non-sensitive** data — screenshots capture the real screen.

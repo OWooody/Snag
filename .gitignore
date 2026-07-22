@@ -7,3 +7,4 @@ dist/
 supabase/.temp/
 supabase/.branches/
 .env.supabase.local
+packages/react/*.tgz

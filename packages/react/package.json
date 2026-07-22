@@ -1,8 +1,20 @@
 {
-  "name": "@snag/react",
+  "name": "@snag-tech/react",
   "version": "0.1.0",
   "description": "Snag — in-app change requests that launch AI coding agents. React web SDK.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OWooody/Snag.git",
+    "directory": "packages/react"
+  },
+  "bugs": {
+    "url": "https://github.com/OWooody/Snag/issues"
+  },
+  "homepage": "https://github.com/OWooody/Snag/tree/main/packages/react#readme",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -25,6 +37,7 @@
   ],
   "scripts": {
     "build": "tsup",
+    "prepublishOnly": "npm run build",
     "typecheck": "tsc --noEmit",
     "dev": "tsup --watch"
   },
