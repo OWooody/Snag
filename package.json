@@ -6,9 +6,9 @@
     "apps/*"
   ],
   "scripts": {
-    "build": "npm run build -w @snag/react",
+    "build": "npm run build -w @snag-tech/react",
     "dev": "npm run dev -w @snag/demo",
-    "typecheck": "npm run typecheck -w @snag/react && npm run typecheck -w @snag/demo"
+    "typecheck": "npm run typecheck -w @snag-tech/react && npm run typecheck -w @snag/demo"
   },
   "engines": {
     "node": ">=18"

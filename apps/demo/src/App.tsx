@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { initSnag, SnagOverlay } from "@snag/react";
+import { initSnag, SnagOverlay } from "@snag-tech/react";
 
 const endpoint = import.meta.env.VITE_SNAG_ENDPOINT as string | undefined;
 const projectKey = import.meta.env.VITE_SNAG_PROJECT_KEY as string | undefined;

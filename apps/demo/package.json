@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@snag/react": "*",
+    "@snag-tech/react": "*",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
