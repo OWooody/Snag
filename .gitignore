@@ -6,3 +6,4 @@ dist/
 .env.local
 supabase/.temp/
 supabase/.branches/
+.env.supabase.local

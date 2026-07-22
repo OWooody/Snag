@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "supabase": {
-      "url": "https://mcp.supabase.com/mcp?project_ref=lsssxrpkecgapxbfqgcj&features=database,development,functions"
+      "url": "https://mcp.supabase.com/mcp?project_ref=lsssxrpkecgapxbfqgcj&read_only=true"
     }
   }
 }
