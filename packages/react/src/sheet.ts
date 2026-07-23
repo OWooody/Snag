@@ -18,6 +18,9 @@ const GLASS_BORDER = "1px solid rgba(255, 255, 255, 0.55)";
 /** Sheet slide duration — keep in sync with `glassSheetStyle` transition. */
 export const SHEET_MOTION_MS = 360;
 
+/** Tab body height / fade duration when switching New ↔ Requests. */
+export const TAB_MOTION_MS = 280;
+
 /**
  * Present a bottom sheet with expand (slide up) / de-expand (slide down) motion.
  * Call `requestClose` instead of unmounting; `onExited` fires after the exit
