@@ -375,16 +375,19 @@ function AnimatedTabBody({
     if (tab === displayTab) return;
     setVisible(false);
     const hideMs = Math.round(TAB_MOTION_MS * 0.45);
-    let outer = 0;
+    const hideTimer = window.setTimeout(() => setDisplayTab(tab), hideMs);
+    return () => window.clearTimeout(hideTimer);
+  }, [tab, displayTab]);
+
+  // Fade back in after displayTab catches up. Kept separate so the swap effect's
+  // cleanup can't cancel the rAF that restores opacity.
+  useEffect(() => {
+    if (tab !== displayTab) return;
     let inner = 0;
-    const hideTimer = window.setTimeout(() => {
-      setDisplayTab(tab);
-      outer = requestAnimationFrame(() => {
-        inner = requestAnimationFrame(() => setVisible(true));
-      });
-    }, hideMs);
+    const outer = requestAnimationFrame(() => {
+      inner = requestAnimationFrame(() => setVisible(true));
+    });
     return () => {
-      window.clearTimeout(hideTimer);
       cancelAnimationFrame(outer);
       cancelAnimationFrame(inner);
     };
