@@ -43,6 +43,7 @@ export function RequestPanel({ screenshot, theme, onClose }: RequestPanelProps) 
   const [annotating, setAnnotating] = useState(false);
   const [agentUrl, setAgentUrl] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [listRefreshKey, setListRefreshKey] = useState(0);
 
   const submit = async () => {
     const trimmed = prompt.trim();
@@ -63,6 +64,7 @@ export function RequestPanel({ screenshot, theme, onClose }: RequestPanelProps) 
       });
       setAgentUrl(response.agent_url);
       setPhase("done");
+      setListRefreshKey((key) => key + 1);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Request failed");
       setPhase("editing");
@@ -169,7 +171,7 @@ export function RequestPanel({ screenshot, theme, onClose }: RequestPanelProps) 
         <AnimatedTabBody tab={tab}>
           {(activeTab) =>
             activeTab === "list" ? (
-              <RequestsList theme={theme} />
+              <RequestsList theme={theme} refreshKey={listRefreshKey} />
             ) : phase === "done" ? (
               <div>
                 <p style={{ color: theme.text, fontSize: 15 }}>
@@ -187,7 +189,7 @@ export function RequestPanel({ screenshot, theme, onClose }: RequestPanelProps) 
                 ) : null}
                 <button
                   type="button"
-                  onClick={requestClose}
+                  onClick={() => setTab("list")}
                   style={{
                     display: "block",
                     marginTop: 20,
@@ -201,7 +203,7 @@ export function RequestPanel({ screenshot, theme, onClose }: RequestPanelProps) 
                     cursor: "pointer",
                   }}
                 >
-                  Done
+                  View requests
                 </button>
               </div>
             ) : (

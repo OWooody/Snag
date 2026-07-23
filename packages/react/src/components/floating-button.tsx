@@ -101,9 +101,10 @@ export function FloatingButton({
     >
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
         <path
-          d="M12 3L13.09 8.26L18 7L14.74 11.09L20 12L14.74 12.91L18 17L13.09 15.74L12 21L10.91 15.74L6 17L9.26 12.91L4 12L9.26 11.09L6 7L10.91 8.26L12 3Z"
+          d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
           stroke="currentColor"
           strokeWidth="2"
+          strokeLinecap="round"
           strokeLinejoin="round"
         />
       </svg>

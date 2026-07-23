@@ -6,11 +6,18 @@
     "apps/*"
   ],
   "scripts": {
-    "build": "npm run build -w @snag-tech/react",
+    "build": "npm run build -w @snag/shared && npm run build -w @snag-tech/react",
     "dev": "npm run dev -w @snag/demo",
-    "typecheck": "npm run typecheck -w @snag-tech/react && npm run typecheck -w @snag/demo"
+    "dev:admin": "npm run dev -w @snag/admin",
+    "typecheck": "npm run typecheck -w @snag/shared && npm run typecheck -w @snag-tech/react && npm run typecheck -w @snag/demo && npm run typecheck -w @snag/admin"
   },
   "engines": {
     "node": ">=18"
+  },
+  "overrides": {
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0"
   }
 }

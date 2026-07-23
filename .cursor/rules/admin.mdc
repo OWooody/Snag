@@ -1,0 +1,38 @@
+---
+description: Rules for Snag admin panel — security, UI, and data patterns
+globs: apps/admin/**,packages/shared/**,supabase/migrations/*admin*
+alwaysApply: false
+---
+
+# Snag Admin Panel Rules
+
+## Security
+- NEVER import `SUPABASE_SERVICE_ROLE_KEY` or `SNAG_KEY_ENCRYPTION_SECRET` in `"use client"` files
+- NEVER select or return `cursor_api_key_encrypted` or decrypted Cursor keys in API responses
+- Use `SAFE_PROJECT_COLUMNS` from `@snag/shared` for all client-facing project queries
+- Sensitive mutations go through Route Handlers in `apps/admin/app/api/` with session + role checks
+- All Route Handlers must call `writeAuditLog` for create/update/delete/rotate actions
+- Never store prompts or screenshot content in audit log metadata
+
+## Auth & roles
+- Company reads: Supabase user session + RLS
+- Company writes: Route Handler + `canManageProject()` (owner/admin only)
+- Platform operations: Route Handler + `isPlatformAdminUser()` + service role client
+- Impersonation is read-only: `canManageProject` returns false while impersonating; log start/stop via `impersonation.start` / `impersonation.stop`
+- Platform pages call `requirePlatformAdmin()` in Server Components
+
+## UI
+- Use components from `apps/admin/components/ui/` (shadcn-style)
+- Destructive actions (disable project, rotate key) require `AlertDialog` confirmation
+- Status badges use `StatusBadge` with protocol statuses: queued, running, finished, error
+- Pages need loading/empty states; use Sonner toasts for mutation feedback
+
+## Data
+- Reuse types and zod schemas from `@snag/shared` — do not duplicate protocol shapes
+- New schema changes must include RLS policies in the same migration file
+- Slug validation: `^[a-z0-9-]+$`
+
+## Patterns
+- Server Components for layouts and initial data
+- Client Components for forms, tables with polling, and interactive dialogs
+- TanStack Query for request lists; `refetchInterval: 30000` when status is queued or running

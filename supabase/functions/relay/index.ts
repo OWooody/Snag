@@ -14,6 +14,7 @@ import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   cursorProvider,
+  userFacingLaunchError,
   type AgentImage,
   type AgentProvider,
 } from "../_shared/agent_provider.ts";
@@ -21,7 +22,7 @@ import { decryptSecret, getEncryptionSecret } from "../_shared/crypto.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 
 const LIST_LIMIT = 20;
-const STALE_RUNNING_MS = 3 * 60 * 1000;
+const STALE_RUNNING_MS = 30 * 1000;
 const MAX_CONTEXT_JSON_LENGTH = 4000;
 const MAX_SCREENSHOT_BASE64_LENGTH = 2_800_000;
 
@@ -29,8 +30,11 @@ const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers":
-    "authorization, content-type, x-snag-key",
+    "authorization, content-type, x-snag-key, x-snag-requester",
 };
+
+const MAX_REQUESTER_LENGTH = 128;
+const REQUESTER_PATTERN = /^[\x20-\x7E]+$/;
 
 const createSchema = z.object({
   prompt: z.string().trim().min(1).max(2000),
@@ -59,6 +63,15 @@ interface ProjectRow {
   per_ip_hourly_limit: number;
   hourly_limit: number;
   daily_limit: number;
+  agent_mode: "plan_only" | "execute" | null;
+  snag_organizations: { agent_mode: "plan_only" | "execute" } | null;
+}
+
+type AgentMode = "plan_only" | "execute";
+
+function resolveEffectiveAgentMode(project: ProjectRow): AgentMode {
+  const orgMode = project.snag_organizations?.agent_mode;
+  return project.agent_mode ?? orgMode ?? "plan_only";
 }
 
 function json(body: Record<string, unknown>, status = 200): Response {
@@ -118,7 +131,7 @@ async function resolveProject(
   const { data, error } = await serviceClient
     .from("snag_projects")
     .select(
-      "id, name, slug, publishable_key, repo_url, repo_ref, model, cursor_api_key_encrypted, prompt_instructions, enabled, per_ip_hourly_limit, hourly_limit, daily_limit",
+      "id, name, slug, publishable_key, repo_url, repo_ref, model, cursor_api_key_encrypted, prompt_instructions, enabled, per_ip_hourly_limit, hourly_limit, daily_limit, agent_mode, snag_organizations(agent_mode)",
     )
     .eq("publishable_key", publishableKey)
     .eq("enabled", true)
@@ -186,12 +199,14 @@ async function handleCreate(
       : [];
 
     const webhookSecret = Deno.env.get("SNAG_WEBHOOK_SECRET");
+    const agentMode = resolveEffectiveAgentMode(project);
     const task = await provider.createTask({
       prompt: buildAgentPrompt(
         body.prompt,
         body.context,
         body.locale,
         project.prompt_instructions,
+        agentMode,
       ),
       images,
       repository: project.repo_url,
@@ -218,15 +233,16 @@ async function handleCreate(
     return json({ id: row.id, agent_url: task.url });
   } catch (error) {
     console.error("snag-relay agent launch failed:", error);
+    const message = userFacingLaunchError(error);
     await serviceClient
       .from("snag_requests")
       .update({
         status: "error",
-        error: "Agent launch failed",
+        error: message,
         updated_at: new Date().toISOString(),
       })
       .eq("id", row.id);
-    return json({ error: "Could not launch agent" }, 502);
+    return json({ error: message }, 502);
   }
 }
 
@@ -271,11 +287,12 @@ async function countSince(
 }
 
 async function resolveOptionalRequester(req: Request): Promise<string | null> {
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) return null;
-  // Host apps may pass a JWT; we store only a non-PHI opaque id if provided
-  // in a custom header in future. For now, return null to avoid storing tokens.
-  return null;
+  const raw = req.headers.get("x-snag-requester");
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed.length > MAX_REQUESTER_LENGTH) return null;
+  if (!REQUESTER_PATTERN.test(trimmed)) return null;
+  return trimmed;
 }
 
 async function listRequests(
@@ -286,7 +303,7 @@ async function listRequests(
   const { data: rows, error } = await serviceClient
     .from("snag_requests")
     .select(
-      "id, prompt, status, agent_id, agent_url, branch_name, pr_url, summary, error, created_at, updated_at",
+      "id, prompt, status, agent_id, agent_url, branch_name, pr_url, summary, error, requester, created_at, updated_at",
     )
     .eq("project_id", projectId)
     .order("created_at", { ascending: false })
@@ -335,6 +352,7 @@ async function listRequests(
     pr_url: row.pr_url,
     summary: row.summary,
     error: row.error,
+    requester: row.requester ?? null,
     created_at: row.created_at,
   }));
 }
@@ -344,6 +362,7 @@ function buildAgentPrompt(
   context: Record<string, unknown>,
   locale: string | undefined,
   promptInstructions: string,
+  agentMode: AgentMode,
 ): string {
   const sections = [
     "An internal tester filed an in-app change request via Snag while using a development/staging build. A screenshot of the exact screen is attached when available.",
@@ -361,14 +380,27 @@ function buildAgentPrompt(
     sections.push("", "## Repo orientation", promptInstructions.trim());
   }
 
-  sections.push(
-    "",
-    "## Instructions",
-    "1. PLAN FIRST: locate the exact code behind the request and write a short plan (files, edits, risks).",
-    "2. Implement only if the request is small and unambiguous. If it is vague, conflicting, or touches sensitive data, stop after the plan and list the open questions in your summary instead.",
-    "3. Respect existing conventions in the repository.",
-    "4. Keep the change minimal — no drive-by refactors.",
-  );
+  sections.push("", "## Instructions");
+
+  if (agentMode === "plan_only") {
+    sections.push(
+      "1. Locate the exact code behind this request.",
+      "2. Write a structured plan in your summary:",
+      "   - Files to change (with paths)",
+      "   - Specific edits per file",
+      "   - Risks and edge cases",
+      "   - Open questions for the developer",
+      "3. DO NOT edit files, commit changes, or open a pull request. This tenant is in plan-only mode — the development team will implement manually.",
+      "4. Respect existing conventions when describing the approach.",
+    );
+  } else {
+    sections.push(
+      "1. PLAN FIRST: locate the exact code behind the request and write a short plan (files, edits, risks).",
+      "2. Implement only if the request is small and unambiguous. If it is vague, conflicting, or touches sensitive data, stop after the plan and list the open questions in your summary instead.",
+      "3. Respect existing conventions in the repository.",
+      "4. Keep the change minimal — no drive-by refactors.",
+    );
+  }
 
   return sections.join("\n");
 }
