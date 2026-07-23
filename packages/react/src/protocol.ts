@@ -41,6 +41,8 @@ export interface SnagRequestRow {
   pr_url: string | null;
   summary: string | null;
   error: string | null;
+  /** Host-supplied display id from `getRequester`, when provided. */
+  requester: string | null;
   created_at: string;
 }
 

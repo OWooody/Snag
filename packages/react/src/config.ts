@@ -1,4 +1,5 @@
 import { defaultTheme, type SnagTheme } from "./theme";
+import { mergeContext, startConsoleErrorBuffer } from "./auto-context";
 
 export interface SnagConfig {
   /** Relay URL implementing the Snag protocol (see protocol.ts). */
@@ -15,9 +16,16 @@ export interface SnagConfig {
    */
   getAuthToken?: () => Promise<string | null>;
   /**
+   * Optional display id for who filed the request (email, username, etc.).
+   * Sent as `x-snag-requester` and stored on the request row. Keep it free of
+   * secrets — it is shown in the in-app request list.
+   */
+  getRequester?: () => Promise<string | null> | string | null;
+  /**
    * Host context attached to every request: current route, locale, app
    * version, environment name, etc. Keep it free of personal data — it is
-   * forwarded verbatim to the coding agent.
+   * forwarded verbatim to the coding agent. Merged on top of auto-captured
+   * `snag_auto` (URL, viewport, user agent, …).
    */
   getContext?: () =>
     | Promise<Record<string, unknown>>
@@ -52,15 +60,36 @@ export function resolveTheme(): SnagTheme {
 }
 
 export async function resolveContext(): Promise<Record<string, unknown>> {
-  if (!config?.getContext) return {};
-  try {
-    return await config.getContext();
-  } catch {
-    return {};
+  let host: Record<string, unknown> = {};
+  if (config?.getContext) {
+    try {
+      host = await config.getContext();
+    } catch {
+      host = {};
+    }
   }
+  return mergeContext(host);
 }
 
 export function isDebugEnabled(): boolean {
   if (config?.debug !== undefined) return config.debug;
   return false;
 }
+
+const MAX_REQUESTER_LENGTH = 128;
+
+/** Resolve and sanitize the optional host-supplied requester display id. */
+export async function resolveRequester(): Promise<string | null> {
+  if (!config?.getRequester) return null;
+  try {
+    const value = await config.getRequester();
+    if (typeof value !== "string") return null;
+    const trimmed = value.trim();
+    if (!trimmed || trimmed.length > MAX_REQUESTER_LENGTH) return null;
+    return trimmed;
+  } catch {
+    return null;
+  }
+}
+
+export { startConsoleErrorBuffer };

@@ -8,6 +8,7 @@ import {
   onSnagInit,
   resolveContext,
   resolveTheme,
+  startConsoleErrorBuffer,
 } from "../config";
 import type { SnagScreenshot } from "../protocol";
 import { captureScreenshot } from "../screenshot";
@@ -62,6 +63,11 @@ export function SnagOverlay() {
       cancelled = true;
     };
   }, [initialized]);
+
+  useEffect(() => {
+    if (!enabled) return;
+    return startConsoleErrorBuffer();
+  }, [enabled]);
 
   if (!mounted || !enabled) return null;
 

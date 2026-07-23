@@ -13,6 +13,7 @@ if (endpoint && projectKey) {
       environment: "staging",
       app_version: "0.1.0-demo",
     }),
+    getRequester: () => "demo-user",
     debug: true,
   });
 }
