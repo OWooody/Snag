@@ -39,7 +39,7 @@ export async function POST(request: Request) {
 
   const { data: org, error: orgError } = await service
     .from("snag_organizations")
-    .insert({ name: input.org_name, slug: input.org_slug })
+    .insert({ name: input.org_name, slug: input.org_slug, agent_mode: input.agent_mode })
     .select("id")
     .single();
 

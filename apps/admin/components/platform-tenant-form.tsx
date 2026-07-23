@@ -2,10 +2,10 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { platformTenantUpdateSchema } from "@snag/shared";
-import type { SnagProjectSafe } from "@snag/shared";
+import type { AgentMode, SnagProjectSafe } from "@snag/shared";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -26,12 +26,28 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { ProjectAgentModeOverrideSelect } from "@/components/agent-mode-select";
 
 type FormValues = z.infer<typeof platformTenantUpdateSchema>;
+type ProjectAgentOverride = AgentMode | "inherit";
 
-export function PlatformTenantForm({ project }: { project: SnagProjectSafe }) {
+export function PlatformTenantForm({
+  project,
+  orgAgentMode = "plan_only",
+}: {
+  project: SnagProjectSafe;
+  orgAgentMode?: AgentMode;
+}) {
   const router = useRouter();
   const [rotating, setRotating] = useState(false);
+
+  const [projectAgentOverride, setProjectAgentOverride] = useState<ProjectAgentOverride>(
+    project.agent_mode ?? "inherit",
+  );
+
+  useEffect(() => {
+    setProjectAgentOverride(project.agent_mode ?? "inherit");
+  }, [project.agent_mode]);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(platformTenantUpdateSchema),
@@ -52,6 +68,7 @@ export function PlatformTenantForm({ project }: { project: SnagProjectSafe }) {
     const { cursor_api_key, ...rest } = values;
     const payload = {
       ...rest,
+      agent_mode: projectAgentOverride === "inherit" ? null : projectAgentOverride,
       ...(cursor_api_key?.trim() ? { cursor_api_key: cursor_api_key.trim() } : {}),
     };
     const res = await fetch(`/api/platform/tenants/${project.slug}`, {
@@ -134,6 +151,14 @@ export function PlatformTenantForm({ project }: { project: SnagProjectSafe }) {
             <div className="space-y-2 sm:col-span-2">
               <Label>Prompt instructions</Label>
               <Textarea rows={4} {...form.register("prompt_instructions")} />
+            </div>
+            <div className="sm:col-span-2">
+              <ProjectAgentModeOverrideSelect
+                id="platform_project_agent_mode"
+                value={projectAgentOverride}
+                onChange={setProjectAgentOverride}
+                orgDefault={orgAgentMode}
+              />
             </div>
             <div className="space-y-2">
               <Label>Per-IP hourly</Label>

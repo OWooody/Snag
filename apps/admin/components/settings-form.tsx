@@ -1,13 +1,20 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { companyProjectUpdateSchema } from "@snag/shared";
-import type { SnagProjectSafe } from "@snag/shared";
+import {
+  AGENT_MODE_LABELS,
+  companyProjectUpdateSchema,
+  resolveEffectiveAgentMode,
+  type AgentMode,
+  type SnagOrganization,
+  type SnagProjectSafe,
+} from "@snag/shared";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import { AgentModeSelect, ProjectAgentModeOverrideSelect } from "@/components/agent-mode-select";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,14 +22,25 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 
-type FormValues = z.infer<typeof companyProjectUpdateSchema>;
+type ProjectFormValues = z.infer<typeof companyProjectUpdateSchema>;
+type ProjectAgentOverride = AgentMode | "inherit";
 
-export function SettingsForm({ project }: { project: SnagProjectSafe }) {
+export function SettingsForm({
+  project,
+  organization,
+}: {
+  project: SnagProjectSafe;
+  organization: SnagOrganization | null;
+}) {
   const router = useRouter();
   const [cursorKey, setCursorKey] = useState("");
   const [savingKey, setSavingKey] = useState(false);
+  const [orgAgentMode, setOrgAgentMode] = useState<AgentMode>(
+    organization?.agent_mode ?? "plan_only",
+  );
+  const [savingOrg, setSavingOrg] = useState(false);
 
-  const form = useForm<FormValues>({
+  const form = useForm<ProjectFormValues>({
     resolver: zodResolver(companyProjectUpdateSchema),
     defaultValues: {
       repo_url: project.repo_url,
@@ -30,14 +48,35 @@ export function SettingsForm({ project }: { project: SnagProjectSafe }) {
       model: project.model,
       prompt_instructions: project.prompt_instructions,
       enabled: project.enabled,
+      agent_mode: project.agent_mode,
     },
   });
 
-  async function onSubmit(values: FormValues) {
+  const [projectAgentOverride, setProjectAgentOverride] = useState<ProjectAgentOverride>(
+    project.agent_mode ?? "inherit",
+  );
+
+  useEffect(() => {
+    if (organization) setOrgAgentMode(organization.agent_mode);
+  }, [organization?.agent_mode]);
+
+  useEffect(() => {
+    setProjectAgentOverride(project.agent_mode ?? "inherit");
+  }, [project.agent_mode]);
+
+  const effectiveMode = resolveEffectiveAgentMode(
+    projectAgentOverride === "inherit" ? null : projectAgentOverride,
+    orgAgentMode,
+  );
+
+  async function onSubmit(values: ProjectFormValues) {
     const res = await fetch(`/api/projects/${project.slug}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(values),
+      body: JSON.stringify({
+        ...values,
+        agent_mode: projectAgentOverride === "inherit" ? null : projectAgentOverride,
+      }),
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
@@ -45,6 +84,27 @@ export function SettingsForm({ project }: { project: SnagProjectSafe }) {
       return;
     }
     toast.success("Settings saved");
+    router.refresh();
+  }
+
+  async function saveOrganizationMode() {
+    if (!organization) return;
+    setSavingOrg(true);
+    const res = await fetch("/api/organization", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        organization_id: organization.id,
+        agent_mode: orgAgentMode,
+      }),
+    });
+    setSavingOrg(false);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      toast.error(body.error ?? "Failed to save organization settings");
+      return;
+    }
+    toast.success("Organization settings saved");
     router.refresh();
   }
 
@@ -70,13 +130,43 @@ export function SettingsForm({ project }: { project: SnagProjectSafe }) {
 
   return (
     <div className="space-y-6">
+      {organization ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Organization defaults</CardTitle>
+            <CardDescription>
+              Applies to all projects in {organization.name} unless overridden below.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <AgentModeSelect
+              id="org_agent_mode"
+              value={orgAgentMode}
+              onChange={setOrgAgentMode}
+            />
+            <Button type="button" onClick={saveOrganizationMode} disabled={savingOrg}>
+              {savingOrg ? "Saving…" : "Save organization defaults"}
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
+
       <Card>
         <CardHeader>
           <CardTitle>Project settings</CardTitle>
-          <CardDescription>Repository and agent configuration for {project.name}</CardDescription>
+          <CardDescription>
+            Repository and agent configuration for {project.name}. Effective agent mode:{" "}
+            <span className="font-medium text-zinc-900">{AGENT_MODE_LABELS[effectiveMode]}</span>.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <ProjectAgentModeOverrideSelect
+              id="project_agent_mode"
+              value={projectAgentOverride}
+              onChange={setProjectAgentOverride}
+              orgDefault={orgAgentMode}
+            />
             <div className="space-y-2">
               <Label htmlFor="repo_url">Repository URL</Label>
               <Input id="repo_url" {...form.register("repo_url")} />

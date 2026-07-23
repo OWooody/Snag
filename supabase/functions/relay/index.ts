@@ -63,6 +63,15 @@ interface ProjectRow {
   per_ip_hourly_limit: number;
   hourly_limit: number;
   daily_limit: number;
+  agent_mode: "plan_only" | "execute" | null;
+  snag_organizations: { agent_mode: "plan_only" | "execute" } | null;
+}
+
+type AgentMode = "plan_only" | "execute";
+
+function resolveEffectiveAgentMode(project: ProjectRow): AgentMode {
+  const orgMode = project.snag_organizations?.agent_mode;
+  return project.agent_mode ?? orgMode ?? "plan_only";
 }
 
 function json(body: Record<string, unknown>, status = 200): Response {
@@ -122,7 +131,7 @@ async function resolveProject(
   const { data, error } = await serviceClient
     .from("snag_projects")
     .select(
-      "id, name, slug, publishable_key, repo_url, repo_ref, model, cursor_api_key_encrypted, prompt_instructions, enabled, per_ip_hourly_limit, hourly_limit, daily_limit",
+      "id, name, slug, publishable_key, repo_url, repo_ref, model, cursor_api_key_encrypted, prompt_instructions, enabled, per_ip_hourly_limit, hourly_limit, daily_limit, agent_mode, snag_organizations(agent_mode)",
     )
     .eq("publishable_key", publishableKey)
     .eq("enabled", true)
@@ -190,12 +199,14 @@ async function handleCreate(
       : [];
 
     const webhookSecret = Deno.env.get("SNAG_WEBHOOK_SECRET");
+    const agentMode = resolveEffectiveAgentMode(project);
     const task = await provider.createTask({
       prompt: buildAgentPrompt(
         body.prompt,
         body.context,
         body.locale,
         project.prompt_instructions,
+        agentMode,
       ),
       images,
       repository: project.repo_url,
@@ -351,6 +362,7 @@ function buildAgentPrompt(
   context: Record<string, unknown>,
   locale: string | undefined,
   promptInstructions: string,
+  agentMode: AgentMode,
 ): string {
   const sections = [
     "An internal tester filed an in-app change request via Snag while using a development/staging build. A screenshot of the exact screen is attached when available.",
@@ -368,14 +380,27 @@ function buildAgentPrompt(
     sections.push("", "## Repo orientation", promptInstructions.trim());
   }
 
-  sections.push(
-    "",
-    "## Instructions",
-    "1. PLAN FIRST: locate the exact code behind the request and write a short plan (files, edits, risks).",
-    "2. Implement only if the request is small and unambiguous. If it is vague, conflicting, or touches sensitive data, stop after the plan and list the open questions in your summary instead.",
-    "3. Respect existing conventions in the repository.",
-    "4. Keep the change minimal — no drive-by refactors.",
-  );
+  sections.push("", "## Instructions");
+
+  if (agentMode === "plan_only") {
+    sections.push(
+      "1. Locate the exact code behind this request.",
+      "2. Write a structured plan in your summary:",
+      "   - Files to change (with paths)",
+      "   - Specific edits per file",
+      "   - Risks and edge cases",
+      "   - Open questions for the developer",
+      "3. DO NOT edit files, commit changes, or open a pull request. This tenant is in plan-only mode — the development team will implement manually.",
+      "4. Respect existing conventions when describing the approach.",
+    );
+  } else {
+    sections.push(
+      "1. PLAN FIRST: locate the exact code behind the request and write a short plan (files, edits, risks).",
+      "2. Implement only if the request is small and unambiguous. If it is vague, conflicting, or touches sensitive data, stop after the plan and list the open questions in your summary instead.",
+      "3. Respect existing conventions in the repository.",
+      "4. Keep the change minimal — no drive-by refactors.",
+    );
+  }
 
   return sections.join("\n");
 }

@@ -23,6 +23,18 @@ export default async function PlatformTenantDetailPage({
 
   if (!project) notFound();
 
+  let orgAgentMode: "plan_only" | "execute" = "plan_only";
+  if (project.organization_id) {
+    const { data: org } = await service
+      .from("snag_organizations")
+      .select("agent_mode")
+      .eq("id", project.organization_id)
+      .single();
+    if (org?.agent_mode === "execute" || org?.agent_mode === "plan_only") {
+      orgAgentMode = org.agent_mode;
+    }
+  }
+
   const { data: auditLog } = await service
     .from("snag_audit_log")
     .select("id, action, actor_id, metadata, created_at")
@@ -39,7 +51,7 @@ export default async function PlatformTenantDetailPage({
         <h1 className="mt-2 text-2xl font-semibold">{project.name}</h1>
       </div>
 
-      <PlatformTenantForm project={project} />
+      <PlatformTenantForm project={project} orgAgentMode={orgAgentMode} />
 
       <Card>
         <CardHeader>

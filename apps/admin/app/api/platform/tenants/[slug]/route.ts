@@ -36,8 +36,11 @@ export async function PATCH(
     updated_at: new Date().toISOString(),
   };
 
-  const { cursor_api_key, ...rest } = parsed.data;
+  const { cursor_api_key, agent_mode, ...rest } = parsed.data;
   Object.assign(updates, rest);
+  if (agent_mode !== undefined) {
+    updates.agent_mode = agent_mode;
+  }
 
   if (cursor_api_key) {
     const encryptionSecret = assertEncryptionSecret(process.env.SNAG_KEY_ENCRYPTION_SECRET);

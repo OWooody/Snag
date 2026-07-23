@@ -1,3 +1,5 @@
+import type { AgentMode } from "./agent-mode";
+
 export type SnagRequestStatus = "queued" | "running" | "finished" | "error";
 
 export type OrgMemberRole = "owner" | "admin" | "viewer";
@@ -17,6 +19,7 @@ export interface SnagProjectSafe {
   hourly_limit: number;
   daily_limit: number;
   organization_id: string | null;
+  agent_mode: AgentMode | null;
   cursor_key_updated_at: string | null;
   created_at: string;
   updated_at: string;
@@ -41,6 +44,7 @@ export interface SnagOrganization {
   id: string;
   name: string;
   slug: string;
+  agent_mode: AgentMode;
   created_at: string;
   updated_at: string;
 }
@@ -65,4 +69,4 @@ export interface SnagAuditLogEntry {
 }
 
 export const SAFE_PROJECT_COLUMNS =
-  "id, name, slug, publishable_key, repo_url, repo_ref, model, prompt_instructions, enabled, per_ip_hourly_limit, hourly_limit, daily_limit, organization_id, cursor_key_updated_at, created_at, updated_at" as const;
+  "id, name, slug, publishable_key, repo_url, repo_ref, model, prompt_instructions, enabled, per_ip_hourly_limit, hourly_limit, daily_limit, organization_id, agent_mode, cursor_key_updated_at, created_at, updated_at" as const;

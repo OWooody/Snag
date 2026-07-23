@@ -88,6 +88,22 @@ export async function canReadProject(userId: string, projectSlug: string) {
   return Boolean(member);
 }
 
+export async function canManageOrganization(userId: string, organizationId: string) {
+  if (await getEffectiveImpersonationOrgId(userId)) {
+    return false;
+  }
+
+  const service = createServiceClient();
+  const { data: member } = await service
+    .from("snag_org_members")
+    .select("role")
+    .eq("organization_id", organizationId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  return member?.role === "owner" || member?.role === "admin";
+}
+
 export async function getProjectBySlug(slug: string) {
   const service = createServiceClient();
   const { data } = await service

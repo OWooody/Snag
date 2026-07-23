@@ -16,6 +16,9 @@ export default async function SettingsPage() {
 
   const canEdit = canEditProject(ctx, project);
   const readOnlyImpersonation = isImpersonating(ctx);
+  const organization = project.organization_id
+    ? (ctx.organizations.find((org) => org.id === project.organization_id) ?? null)
+    : null;
 
   return (
     <div className="space-y-6">
@@ -29,7 +32,7 @@ export default async function SettingsPage() {
           configuration.
         </p>
       ) : canEdit ? (
-        <SettingsForm project={project} />
+        <SettingsForm project={project} organization={organization} />
       ) : (
         <p className="text-sm text-zinc-500">You have viewer access. Contact an admin to make changes.</p>
       )}
