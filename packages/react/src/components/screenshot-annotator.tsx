@@ -5,7 +5,7 @@ import {
   GLASS_SURFACE,
   glassBackdropStyle,
   glassSheetStyle,
-  useSheetEnter,
+  useSheetMotion,
 } from "../sheet";
 import {
   compositeAnnotatedScreenshot,
@@ -170,7 +170,7 @@ export function ScreenshotAnnotator({
   };
 
   const hasStrokes = strokes.length > 0 || current != null;
-  const entered = useSheetEnter();
+  const { open, requestClose } = useSheetMotion(onCancel);
 
   return (
     <div
@@ -184,9 +184,10 @@ export function ScreenshotAnnotator({
         display: "flex",
         alignItems: "flex-end",
         justifyContent: "center",
-        ...glassBackdropStyle(entered, "rgba(0,0,0,0.45)"),
+        pointerEvents: open ? "auto" : "none",
+        ...glassBackdropStyle(open, "rgba(0,0,0,0.45)"),
       }}
-      onClick={onCancel}
+      onClick={requestClose}
     >
       <div
         onClick={(event) => event.stopPropagation()}
@@ -200,7 +201,7 @@ export function ScreenshotAnnotator({
           display: "flex",
           flexDirection: "column",
           gap: 12,
-          ...glassSheetStyle(entered),
+          ...glassSheetStyle(open),
         }}
       >
         <div
@@ -213,7 +214,7 @@ export function ScreenshotAnnotator({
           <h2 style={{ margin: 0, fontSize: 17, color: theme.text }}>Mark up screenshot</h2>
           <button
             type="button"
-            onClick={onCancel}
+            onClick={requestClose}
             aria-label="Cancel annotation"
             disabled={saving}
             style={{
@@ -328,7 +329,7 @@ export function ScreenshotAnnotator({
         <div style={{ display: "flex", gap: 8 }}>
           <button
             type="button"
-            onClick={onCancel}
+            onClick={requestClose}
             disabled={saving}
             style={{
               flex: 1,
