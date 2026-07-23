@@ -16,10 +16,8 @@
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const ALGORITHM = "AES-GCM";
-const IV_LENGTH = 12;
-const TAG_LENGTH = 128;
+import { assertEncryptionSecret, encryptSecret } from "../packages/shared/src/crypto.ts";
+import { generatePublishableKey } from "../packages/shared/src/keys.ts";
 
 function parseArgs(argv: string[]) {
   const args: Record<string, string> = {};
@@ -34,37 +32,6 @@ function parseArgs(argv: string[]) {
     i += 1;
   }
   return args;
-}
-
-function generatePublishableKey(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(18));
-  const token = btoa(String.fromCharCode(...bytes))
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/g, "");
-  return `snag_pk_${token}`;
-}
-
-async function encryptSecret(plaintext: string, secret: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const hash = await crypto.subtle.digest("SHA-256", encoder.encode(secret));
-  const key = await crypto.subtle.importKey(
-    "raw",
-    hash,
-    { name: ALGORITHM },
-    false,
-    ["encrypt"],
-  );
-  const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));
-  const ciphertext = await crypto.subtle.encrypt(
-    { name: ALGORITHM, iv, tagLength: TAG_LENGTH },
-    key,
-    encoder.encode(plaintext),
-  );
-  const combined = new Uint8Array(iv.length + ciphertext.byteLength);
-  combined.set(iv, 0);
-  combined.set(new Uint8Array(ciphertext), iv.length);
-  return btoa(String.fromCharCode(...combined));
 }
 
 const args = parseArgs(Deno.args);
@@ -85,17 +52,12 @@ if (!name || !slug || !repoUrl || !cursorApiKey) {
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL");
 const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-const encryptionSecret = Deno.env.get("SNAG_KEY_ENCRYPTION_SECRET");
+const encryptionSecret = assertEncryptionSecret(
+  Deno.env.get("SNAG_KEY_ENCRYPTION_SECRET"),
+);
 
-if (!supabaseUrl || !serviceRoleKey || !encryptionSecret) {
-  console.error(
-    "Set SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, and SNAG_KEY_ENCRYPTION_SECRET",
-  );
-  Deno.exit(1);
-}
-
-if (encryptionSecret.length < 32) {
-  console.error("SNAG_KEY_ENCRYPTION_SECRET must be at least 32 characters");
+if (!supabaseUrl || !serviceRoleKey) {
+  console.error("Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY");
   Deno.exit(1);
 }
 
@@ -115,6 +77,7 @@ const { data, error } = await client
     cursor_api_key_encrypted: cursorApiKeyEncrypted,
     prompt_instructions: promptInstructions,
     enabled: true,
+    cursor_key_updated_at: new Date().toISOString(),
   })
   .select("id, slug, publishable_key")
   .single();

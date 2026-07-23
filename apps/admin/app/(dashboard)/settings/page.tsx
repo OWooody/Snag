@@ -1,0 +1,33 @@
+import { SettingsForm } from "@/components/settings-form";
+import { getActiveProject, getUserContext } from "@/lib/auth";
+
+export default async function SettingsPage() {
+  const ctx = await getUserContext();
+  const project = getActiveProject(ctx.projects);
+
+  if (!project) {
+    return (
+      <div>
+        <h1 className="text-2xl font-semibold">Settings</h1>
+        <p className="mt-2 text-zinc-500">No project assigned.</p>
+      </div>
+    );
+  }
+
+  const role = project.organization_id ? ctx.orgRoles[project.organization_id] : null;
+  const canEdit = role === "owner" || role === "admin" || ctx.isPlatformAdmin;
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-semibold">Settings</h1>
+        <p className="text-sm text-zinc-500">Manage your Snag project configuration.</p>
+      </div>
+      {canEdit ? (
+        <SettingsForm project={project} />
+      ) : (
+        <p className="text-sm text-zinc-500">You have viewer access. Contact an admin to make changes.</p>
+      )}
+    </div>
+  );
+}

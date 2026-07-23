@@ -10,13 +10,16 @@ Snag is an in-app change-request tool for development and staging web apps. A fl
 |-----|-----------|
 | **Host app team** (integrating Snag into their React app) | [packages/react/README.md](packages/react/README.md) |
 | **Snag admin** (backend, tenants, deploy) | [docs/OPERATIONS.md](docs/OPERATIONS.md) |
+| **Admin panel** (web UI for operators and companies) | [docs/ADMIN.md](docs/ADMIN.md) |
 
 ## Repo layout
 
 ```
 snag/
   packages/react/     # @snag-tech/react — web SDK
+  packages/shared/    # @snag/shared — types, schemas, crypto
   apps/demo/          # Vite playground
+  apps/admin/         # Next.js admin panel
   supabase/           # multi-tenant relay
   scripts/            # tenant provisioning (create-project.ts)
   docs/               # operations guide

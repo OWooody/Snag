@@ -40,6 +40,8 @@ supabase db push
 
 Migration: `supabase/migrations/00001_snag_core.sql` → tables `snag_projects`, `snag_requests`.
 
+Migration: `supabase/migrations/00002_admin_auth.sql` → organizations, memberships, platform admins, audit log, RLS for admin panel.
+
 If policies already exist from a partial run:
 
 ```sh
@@ -80,7 +82,9 @@ Point Cursor Cloud Agents webhooks at the webhook URL above, using the same `SNA
 
 ## Onboard a new app (tenant)
 
-Run once per host application / repository.
+**Preferred:** use the [admin panel](ADMIN.md) at `/platform/tenants/new`.
+
+**CLI fallback** — run once per host application / repository.
 
 ### 1. Provision tenant
 

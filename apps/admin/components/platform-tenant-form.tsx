@@ -1,0 +1,178 @@
+"use client";
+
+import { zodResolver } from "@hookform/resolvers/zod";
+import { platformTenantUpdateSchema } from "@snag/shared";
+import type { SnagProjectSafe } from "@snag/shared";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { toast } from "sonner";
+import { z } from "zod";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+
+type FormValues = z.infer<typeof platformTenantUpdateSchema>;
+
+export function PlatformTenantForm({ project }: { project: SnagProjectSafe }) {
+  const router = useRouter();
+  const [rotating, setRotating] = useState(false);
+
+  const form = useForm<FormValues>({
+    resolver: zodResolver(platformTenantUpdateSchema),
+    defaultValues: {
+      name: project.name,
+      repo_url: project.repo_url,
+      repo_ref: project.repo_ref,
+      model: project.model,
+      prompt_instructions: project.prompt_instructions,
+      enabled: project.enabled,
+      per_ip_hourly_limit: project.per_ip_hourly_limit,
+      hourly_limit: project.hourly_limit,
+      daily_limit: project.daily_limit,
+    },
+  });
+
+  async function onSubmit(values: FormValues) {
+    const res = await fetch(`/api/platform/tenants/${project.slug}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(values),
+    });
+    if (!res.ok) {
+      toast.error("Failed to save");
+      return;
+    }
+    toast.success("Tenant updated");
+    router.refresh();
+  }
+
+  async function rotateKey() {
+    setRotating(true);
+    const res = await fetch(`/api/platform/tenants/${project.slug}/rotate-key`, {
+      method: "POST",
+    });
+    setRotating(false);
+    if (!res.ok) {
+      toast.error("Failed to rotate key");
+      return;
+    }
+    toast.success("Publishable key rotated — update host apps");
+    router.refresh();
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center gap-3">
+        <Button variant="outline" asChild>
+          <Link href={`/platform/impersonate/${project.slug}`}>View as company</Link>
+        </Button>
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button variant="destructive" disabled={rotating}>
+              Rotate publishable key
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Rotate publishable key?</AlertDialogTitle>
+              <AlertDialogDescription>
+                The current key will stop working immediately. All host apps must update their
+                projectKey.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={rotateKey}>Rotate key</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{project.slug}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2 sm:col-span-2">
+              <Label>Name</Label>
+              <Input {...form.register("name")} />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label>Repository URL</Label>
+              <Input {...form.register("repo_url")} />
+            </div>
+            <div className="space-y-2">
+              <Label>Branch</Label>
+              <Input {...form.register("repo_ref")} />
+            </div>
+            <div className="space-y-2">
+              <Label>Model</Label>
+              <Input {...form.register("model")} />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label>Prompt instructions</Label>
+              <Textarea rows={4} {...form.register("prompt_instructions")} />
+            </div>
+            <div className="space-y-2">
+              <Label>Per-IP hourly</Label>
+              <Input type="number" {...form.register("per_ip_hourly_limit", { valueAsNumber: true })} />
+            </div>
+            <div className="space-y-2">
+              <Label>Hourly</Label>
+              <Input type="number" {...form.register("hourly_limit", { valueAsNumber: true })} />
+            </div>
+            <div className="space-y-2">
+              <Label>Daily</Label>
+              <Input type="number" {...form.register("daily_limit", { valueAsNumber: true })} />
+            </div>
+            <div className="flex items-center justify-between rounded-lg border border-zinc-200 p-4 sm:col-span-2">
+              <div>
+                <p className="font-medium">Enabled</p>
+                <p className="text-sm text-zinc-500">Kill switch for this tenant</p>
+              </div>
+              <Switch
+                checked={form.watch("enabled")}
+                onCheckedChange={(v) => form.setValue("enabled", v)}
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label>New Cursor API key (optional)</Label>
+              <Input type="password" className="font-mono" {...form.register("cursor_api_key")} />
+            </div>
+            <div className="sm:col-span-2">
+              <Button type="submit" disabled={form.formState.isSubmitting}>
+                Save changes
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Publishable key</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <code className="block rounded bg-zinc-100 px-3 py-2 text-sm">{project.publishable_key}</code>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
