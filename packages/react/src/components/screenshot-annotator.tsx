@@ -2,6 +2,12 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } f
 
 import type { SnagScreenshot } from "../protocol";
 import {
+  GLASS_SURFACE,
+  glassBackdropStyle,
+  glassSheetStyle,
+  useSheetEnter,
+} from "../sheet";
+import {
   compositeAnnotatedScreenshot,
   paintStroke,
   type Stroke,
@@ -164,6 +170,7 @@ export function ScreenshotAnnotator({
   };
 
   const hasStrokes = strokes.length > 0 || current != null;
+  const entered = useSheetEnter();
 
   return (
     <div
@@ -177,7 +184,7 @@ export function ScreenshotAnnotator({
         display: "flex",
         alignItems: "flex-end",
         justifyContent: "center",
-        background: "rgba(0,0,0,0.45)",
+        ...glassBackdropStyle(entered, "rgba(0,0,0,0.45)"),
       }}
       onClick={onCancel}
     >
@@ -187,14 +194,13 @@ export function ScreenshotAnnotator({
           width: "min(560px, 100%)",
           maxHeight: "92vh",
           overflow: "auto",
-          background: theme.background,
           borderTopLeftRadius: 16,
           borderTopRightRadius: 16,
           padding: "16px 16px 24px",
-          boxShadow: "0 -8px 32px rgba(0,0,0,0.2)",
           display: "flex",
           flexDirection: "column",
           gap: 12,
+          ...glassSheetStyle(entered),
         }}
       >
         <div
@@ -214,8 +220,8 @@ export function ScreenshotAnnotator({
               width: 30,
               height: 30,
               borderRadius: 15,
-              border: "none",
-              background: theme.surface,
+              border: "1px solid rgba(255,255,255,0.55)",
+              background: GLASS_SURFACE,
               color: theme.text,
               cursor: "pointer",
               fontSize: 18,
@@ -273,7 +279,8 @@ export function ScreenshotAnnotator({
             width: "100%",
             display: "flex",
             justifyContent: "center",
-            background: theme.surface,
+            background: GLASS_SURFACE,
+            border: "1px solid rgba(255,255,255,0.4)",
             borderRadius: 12,
             padding: 8,
             boxSizing: "border-box",
@@ -327,8 +334,8 @@ export function ScreenshotAnnotator({
               flex: 1,
               padding: "12px 16px",
               borderRadius: 10,
-              border: "none",
-              background: theme.surface,
+              border: "1px solid rgba(255,255,255,0.55)",
+              background: GLASS_SURFACE,
               color: theme.text,
               fontWeight: 700,
               cursor: "pointer",
@@ -381,8 +388,8 @@ function ToolButton({
       style={{
         padding: "8px 12px",
         borderRadius: 8,
-        border: "none",
-        background: active ? theme.accent : theme.surface,
+        border: active ? "none" : "1px solid rgba(255,255,255,0.55)",
+        background: active ? theme.accent : GLASS_SURFACE,
         color: active ? "#fff" : theme.text,
         fontWeight: 700,
         fontSize: 12,

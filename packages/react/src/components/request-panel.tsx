@@ -3,6 +3,12 @@ import { useState } from "react";
 import { createSnagRequest } from "../api";
 import { resolveContext } from "../config";
 import type { SnagScreenshot } from "../protocol";
+import {
+  GLASS_SURFACE,
+  glassBackdropStyle,
+  glassSheetStyle,
+  useSheetEnter,
+} from "../sheet";
 import type { SnagTheme } from "../theme";
 import { RequestsList } from "./requests-list";
 import { ScreenshotAnnotator } from "./screenshot-annotator";
@@ -58,6 +64,8 @@ export function RequestPanel({ screenshot, theme, onClose }: RequestPanelProps) 
     }
   };
 
+  const entered = useSheetEnter();
+
   if (annotating && workingScreenshot) {
     return (
       <ScreenshotAnnotator
@@ -85,7 +93,7 @@ export function RequestPanel({ screenshot, theme, onClose }: RequestPanelProps) 
         display: "flex",
         alignItems: "flex-end",
         justifyContent: "center",
-        background: "rgba(0,0,0,0.35)",
+        ...glassBackdropStyle(entered, "rgba(0,0,0,0.35)"),
       }}
       onClick={onClose}
     >
@@ -95,11 +103,10 @@ export function RequestPanel({ screenshot, theme, onClose }: RequestPanelProps) 
           width: "min(560px, 100%)",
           maxHeight: "85vh",
           overflow: "auto",
-          background: theme.background,
           borderTopLeftRadius: 16,
           borderTopRightRadius: 16,
           padding: "20px 20px 28px",
-          boxShadow: "0 -8px 32px rgba(0,0,0,0.15)",
+          ...glassSheetStyle(entered),
         }}
       >
         <div
@@ -119,8 +126,8 @@ export function RequestPanel({ screenshot, theme, onClose }: RequestPanelProps) 
               width: 30,
               height: 30,
               borderRadius: 15,
-              border: "none",
-              background: theme.surface,
+              border: "1px solid rgba(255,255,255,0.55)",
+              background: GLASS_SURFACE,
               color: theme.text,
               cursor: "pointer",
               fontSize: 18,
@@ -215,8 +222,8 @@ export function RequestPanel({ screenshot, theme, onClose }: RequestPanelProps) 
                 width: "100%",
                 boxSizing: "border-box",
                 borderRadius: 12,
-                border: `1px solid ${theme.surface}`,
-                background: theme.surface,
+                border: "1px solid rgba(255,255,255,0.55)",
+                background: GLASS_SURFACE,
                 color: theme.text,
                 padding: 12,
                 fontSize: 14,
@@ -230,7 +237,8 @@ export function RequestPanel({ screenshot, theme, onClose }: RequestPanelProps) 
                 style={{
                   marginTop: 16,
                   borderRadius: 12,
-                  background: theme.surface,
+                  background: GLASS_SURFACE,
+                  border: "1px solid rgba(255,255,255,0.4)",
                   padding: 12,
                 }}
               >
@@ -350,8 +358,8 @@ function TabButton({
         flex: 1,
         padding: "10px 12px",
         borderRadius: 10,
-        border: "none",
-        background: active ? theme.accent : theme.surface,
+        border: active ? "none" : "1px solid rgba(255,255,255,0.55)",
+        background: active ? theme.accent : GLASS_SURFACE,
         color: active ? "#fff" : theme.text,
         fontWeight: 700,
         fontSize: 13,

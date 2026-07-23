@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { fetchRelayState } from "../api";
 import { resolveRequester } from "../config";
 import type { SnagRequestRow, SnagRequestStatus } from "../protocol";
+import { GLASS_SURFACE } from "../sheet";
 import type { SnagTheme } from "../theme";
 
 const POLL_INTERVAL_MS = 20_000;
@@ -125,7 +126,8 @@ function RequestCard({ row, theme }: { row: SnagRequestRow; theme: SnagTheme }) 
         borderRadius: 12,
         padding: 12,
         marginBottom: 10,
-        background: theme.surface,
+        background: GLASS_SURFACE,
+        border: "1px solid rgba(255,255,255,0.4)",
       }}
     >
       <div
