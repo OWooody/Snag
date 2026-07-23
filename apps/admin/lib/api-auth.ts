@@ -1,8 +1,5 @@
 import { NextResponse } from "next/server";
-import {
-  getEffectiveImpersonationOrgId,
-  projectBelongsToOrg,
-} from "@/lib/impersonation";
+import { getEffectiveImpersonationOrgId } from "@/lib/impersonation";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/service";
 
@@ -33,9 +30,8 @@ export async function isPlatformAdminUser(userId: string) {
 }
 
 export async function canManageProject(userId: string, projectSlug: string) {
-  const impersonatingOrgId = await getEffectiveImpersonationOrgId(userId);
-  if (impersonatingOrgId && (await projectBelongsToOrg(projectSlug, impersonatingOrgId))) {
-    return true;
+  if (await getEffectiveImpersonationOrgId(userId)) {
+    return false;
   }
 
   const service = createServiceClient();
@@ -58,6 +54,17 @@ export async function canManageProject(userId: string, projectSlug: string) {
 }
 
 export async function canReadProject(userId: string, projectSlug: string) {
+  const impersonatingOrgId = await getEffectiveImpersonationOrgId(userId);
+  if (impersonatingOrgId) {
+    const service = createServiceClient();
+    const { data: project } = await service
+      .from("snag_projects")
+      .select("organization_id")
+      .eq("slug", projectSlug)
+      .single();
+    return project?.organization_id === impersonatingOrgId;
+  }
+
   if (await canManageProject(userId, projectSlug)) {
     return true;
   }

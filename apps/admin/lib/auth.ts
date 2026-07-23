@@ -104,15 +104,19 @@ export function getActiveProject(
   return projects[0];
 }
 
-/** True when user may edit a project (org admin/owner, or platform admin impersonating that org). */
+/** True when user may edit a project (org admin/owner). Never while impersonating. */
 export function canEditProject(
   ctx: UserContext,
   project: SnagProjectSafe,
 ): boolean {
-  if (ctx.impersonatingOrgId && ctx.isPlatformAdmin) {
-    return project.organization_id === ctx.impersonatingOrgId;
+  if (ctx.impersonatingOrgId) {
+    return false;
   }
   if (ctx.isPlatformAdmin) return true;
   const role = project.organization_id ? ctx.orgRoles[project.organization_id] : null;
   return role === "owner" || role === "admin";
+}
+
+export function isImpersonating(ctx: UserContext): boolean {
+  return Boolean(ctx.impersonatingOrgId);
 }

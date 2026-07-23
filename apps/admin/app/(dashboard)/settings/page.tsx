@@ -1,5 +1,5 @@
 import { SettingsForm } from "@/components/settings-form";
-import { canEditProject, getActiveProject, getUserContext } from "@/lib/auth";
+import { canEditProject, getActiveProject, getUserContext, isImpersonating } from "@/lib/auth";
 
 export default async function SettingsPage() {
   const ctx = await getUserContext();
@@ -15,6 +15,7 @@ export default async function SettingsPage() {
   }
 
   const canEdit = canEditProject(ctx, project);
+  const readOnlyImpersonation = isImpersonating(ctx);
 
   return (
     <div className="space-y-6">
@@ -22,7 +23,12 @@ export default async function SettingsPage() {
         <h1 className="text-2xl font-semibold">Settings</h1>
         <p className="text-sm text-zinc-500">Manage your Snag project configuration.</p>
       </div>
-      {canEdit ? (
+      {readOnlyImpersonation ? (
+        <p className="text-sm text-zinc-500">
+          Read-only while impersonating. Exit impersonation or use Platform → Tenants to edit
+          configuration.
+        </p>
+      ) : canEdit ? (
         <SettingsForm project={project} />
       ) : (
         <p className="text-sm text-zinc-500">You have viewer access. Contact an admin to make changes.</p>

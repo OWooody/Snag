@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { writeAuditLog } from "@/lib/audit";
 import { requirePlatformAdmin } from "@/lib/auth";
 import { IMPERSONATE_COOKIE } from "@/lib/impersonation";
 import { createServiceClient } from "@/lib/service";
@@ -7,13 +8,13 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ slug: string }> },
 ) {
-  await requirePlatformAdmin();
+  const ctx = await requirePlatformAdmin();
   const { slug } = await params;
 
   const service = createServiceClient();
   const { data: project } = await service
     .from("snag_projects")
-    .select("organization_id")
+    .select("id, organization_id")
     .eq("slug", slug)
     .single();
 
@@ -22,6 +23,14 @@ export async function GET(
   if (!project?.organization_id) {
     return NextResponse.redirect(`${base}/platform/tenants`);
   }
+
+  await writeAuditLog({
+    actorId: ctx.userId,
+    action: "impersonation.start",
+    targetType: "snag_organizations",
+    targetId: project.organization_id,
+    metadata: { project_slug: slug, project_id: project.id },
+  });
 
   const response = NextResponse.redirect(`${base}/dashboard`);
   response.cookies.set(IMPERSONATE_COOKIE, project.organization_id, {

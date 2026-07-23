@@ -47,17 +47,20 @@ ON CONFLICT DO NOTHING;
 
 ## Deploy (Vercel)
 
-1. Create a Vercel project with root directory `apps/admin`
-2. Set all environment variables above
-3. In Supabase Dashboard → Authentication → URL Configuration:
+1. Create a Vercel project with **Root Directory** set to `apps/admin`
+2. The included [`apps/admin/vercel.json`](../apps/admin/vercel.json) installs and builds from the monorepo root so `@snag/shared` resolves correctly
+3. Set all environment variables above
+4. In Supabase Dashboard → Authentication → URL Configuration:
    - Site URL: your Vercel domain
    - Redirect URLs: `https://your-domain.vercel.app/auth/callback`
+
+If the build fails with `Can't resolve '@snag/shared'`, confirm Root Directory is `apps/admin` (not repo root) and that `vercel.json` is present — it runs `npm install` from the repository root before building.
 
 ## Roles
 
 | Role | Access |
 |------|--------|
-| Platform admin | All tenants, create/edit/disable, global requests, impersonation |
+| Platform admin | All tenants, create/edit/disable, global requests, read-only impersonation |
 | Company owner/admin | Their org's project: settings, cursor key, requests, integration |
 | Company viewer | Read-only dashboard, requests, integration |
 
@@ -66,3 +69,4 @@ ON CONFLICT DO NOTHING;
 - Service role and encryption secret are server-only — never expose to the browser
 - Cursor API keys are write-only in the UI; stored AES-256-GCM encrypted
 - Publishable key rotation is platform-admin only in v1
+- Impersonation is read-only; start/stop events are written to `snag_audit_log`
