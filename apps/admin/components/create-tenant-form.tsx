@@ -13,13 +13,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { AgentModeSelect } from "@/components/agent-mode-select";
-import { AllowedOriginsField } from "@/components/allowed-origins-field";
+import { AllowedOriginsField, DEFAULT_ORIGINS_TEXTAREA } from "@/components/allowed-origins-field";
 
 type FormValues = z.infer<typeof createTenantSchema>;
 
 export function CreateTenantForm() {
   const router = useRouter();
-  const [allowedOriginsText, setAllowedOriginsText] = useState("");
+  const [allowedOriginsText, setAllowedOriginsText] = useState(DEFAULT_ORIGINS_TEXTAREA);
   const form = useForm<FormValues>({
     resolver: zodResolver(createTenantSchema),
     defaultValues: {

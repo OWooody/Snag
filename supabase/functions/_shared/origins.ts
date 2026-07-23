@@ -43,7 +43,7 @@ function matchesAllowedOrigin(
   requestOrigin: string,
   allowed: string[],
 ): boolean {
-  if (allowed.length === 0) return true;
+  if (allowed.length === 0) return false;
   const normalized = normalizeOrigin(requestOrigin);
   if (!normalized) return false;
   return allowed.some((entry) => normalizeOrigin(entry) === normalized);
@@ -54,7 +54,7 @@ export function checkOriginAllowlist(
   refererHeader: string | null,
   allowed: string[],
 ): "origin_not_allowed" | null {
-  if (allowed.length === 0) return null;
+  if (allowed.length === 0) return "origin_not_allowed";
 
   const requestOrigin = resolveRequestOrigin(originHeader, refererHeader);
   if (!requestOrigin || !matchesAllowedOrigin(requestOrigin, allowed)) {
@@ -68,7 +68,7 @@ export function corsAllowOrigin(
   refererHeader: string | null,
   allowed: string[],
 ): string | null {
-  if (allowed.length === 0) return "*";
+  if (allowed.length === 0) return null;
 
   const requestOrigin = resolveRequestOrigin(originHeader, refererHeader);
   if (!requestOrigin || !matchesAllowedOrigin(requestOrigin, allowed)) {

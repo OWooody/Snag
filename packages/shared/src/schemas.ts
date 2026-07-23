@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { AGENT_MODES } from "./agent-mode";
-import { normalizeOrigin } from "./origins";
+import { DEFAULT_DEV_ORIGINS, normalizeOrigin } from "./origins";
 
 export const slugSchema = z
   .string()
@@ -74,7 +74,7 @@ export const createTenantSchema = z.object({
   hourly_limit: rateLimitSchema.default(10),
   daily_limit: rateLimitSchema.default(30),
   agent_mode: agentModeSchema.default("plan_only"),
-  allowed_origins: allowedOriginsSchema.default([]),
+  allowed_origins: allowedOriginsSchema.default([...DEFAULT_DEV_ORIGINS]),
 });
 
 export const platformTenantUpdateSchema = z.object({

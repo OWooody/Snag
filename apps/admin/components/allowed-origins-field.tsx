@@ -5,11 +5,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
 const HELPER =
-  "One origin per line (scheme://host[:port]). Leave empty to allow all origins.";
+  "One origin per line (scheme://host[:port]). Snag is blocked until at least one origin is listed.";
 
 const PLACEHOLDER = `http://localhost:3000
 http://localhost:5173
 https://staging.example.com`;
+
+export const DEFAULT_ORIGINS_TEXTAREA = PLACEHOLDER;
 
 export function AllowedOriginsField({
   id,

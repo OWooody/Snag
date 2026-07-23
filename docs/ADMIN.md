@@ -69,6 +69,6 @@ If the build fails with `Can't resolve '@snag/shared'`, confirm Root Directory i
 - Service role and encryption secret are server-only — never expose to the browser
 - Cursor API keys are write-only in the UI; stored AES-256-GCM encrypted
 - Publishable key rotation is platform-admin only in v1
-- **Allowed origins** — company admins (Settings) and platform admins (tenant edit) manage per-project origin allowlists; empty list allows all origins
+- **Allowed origins** — company admins (Settings) and platform admins (tenant edit) manage per-project origin allowlists; **empty list blocks all origins** until configured
 - **Rate limits** — platform admins set per-IP/hourly/daily caps when creating or editing a tenant
 - Impersonation is read-only; start/stop events are written to `snag_audit_log`

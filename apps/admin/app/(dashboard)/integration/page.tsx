@@ -71,7 +71,12 @@ initSnag({
                 Snag only accepts requests from these origins. Configure more in Settings.
               </p>
             </div>
-          ) : null}
+          ) : (
+            <p className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              No allowed origins configured — Snag is blocked in all host apps until you add at
+              least one origin in Settings.
+            </p>
+          )}
         </CardContent>
       </Card>
 

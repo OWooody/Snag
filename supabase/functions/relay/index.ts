@@ -103,26 +103,37 @@ function json(
 }
 
 Deno.serve(async (req) => {
-  const preflightCors = buildCorsHeaders(req, []);
-
   if (req.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: preflightCors });
+    const publishableKey = req.headers.get("x-snag-key");
+    if (publishableKey) {
+      try {
+        const serviceClient = createServiceClient();
+        const project = await resolveProject(serviceClient, publishableKey);
+        if (project) {
+          const corsHeaders = buildCorsHeaders(req, project.allowed_origins ?? []);
+          return new Response(null, { status: 204, headers: corsHeaders });
+        }
+      } catch {
+        // fall through to base headers
+      }
+    }
+    return new Response(null, { status: 204, headers: CORS_BASE_HEADERS });
   }
 
   if (req.method !== "GET" && req.method !== "POST") {
-    return json({ error: "Method not allowed" }, 405, preflightCors);
+    return json({ error: "Method not allowed" }, 405);
   }
 
   const publishableKey = req.headers.get("x-snag-key");
   if (!publishableKey) {
-    return json({ enabled: false }, 403, preflightCors);
+    return json({ enabled: false }, 403);
   }
 
   try {
     const serviceClient = createServiceClient();
     const project = await resolveProject(serviceClient, publishableKey);
     if (!project) {
-      return json({ enabled: false }, 403, preflightCors);
+      return json({ enabled: false }, 403);
     }
 
     const corsHeaders = buildCorsHeaders(req, project.allowed_origins ?? []);
@@ -154,10 +165,10 @@ Deno.serve(async (req) => {
   } catch (error) {
     if (error instanceof z.ZodError) {
       console.warn("snag-relay rejected: validation");
-      return json({ error: "Invalid request" }, 422, preflightCors);
+      return json({ error: "Invalid request" }, 422);
     }
     console.error("snag-relay error:", error);
-    return json({ error: "Internal server error" }, 500, preflightCors);
+    return json({ error: "Internal server error" }, 500);
   }
 });
 

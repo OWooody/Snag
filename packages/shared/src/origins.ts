@@ -1,3 +1,9 @@
+/** Sensible defaults when provisioning a new tenant for local dev. */
+export const DEFAULT_DEV_ORIGINS = [
+  "http://localhost:3000",
+  "http://localhost:5173",
+] as const;
+
 /** Normalize to scheme://host[:port] — no path, no trailing slash. */
 export function normalizeOrigin(input: string): string | null {
   const trimmed = input.trim();
@@ -64,19 +70,19 @@ export function matchesAllowedOrigin(
   requestOrigin: string,
   allowed: string[],
 ): boolean {
-  if (allowed.length === 0) return true;
+  if (allowed.length === 0) return false;
   const normalized = normalizeOrigin(requestOrigin);
   if (!normalized) return false;
   return allowed.some((entry) => normalizeOrigin(entry) === normalized);
 }
 
-/** Returns null if allowed; otherwise a rejection reason. */
+/** Returns null if allowed; otherwise a rejection reason. Empty allowlist denies all. */
 export function checkOriginAllowlist(
   originHeader: string | null,
   refererHeader: string | null,
   allowed: string[],
 ): "origin_not_allowed" | null {
-  if (allowed.length === 0) return null;
+  if (allowed.length === 0) return "origin_not_allowed";
 
   const requestOrigin = resolveRequestOrigin(originHeader, refererHeader);
   if (!requestOrigin || !matchesAllowedOrigin(requestOrigin, allowed)) {
