@@ -3,23 +3,14 @@
 import { useQuery } from "@tanstack/react-query";
 import type { SnagRequestRow } from "@snag/shared";
 import { StatusBadge } from "@/components/status-badge";
-import { createClient } from "@/lib/supabase/client";
 
-function RequestsTable({ projectId }: { projectId: string }) {
+function RequestsTable({ projectSlug }: { projectSlug: string }) {
   const { data: requests = [], isLoading } = useQuery({
-    queryKey: ["requests", projectId],
+    queryKey: ["requests", projectSlug],
     queryFn: async () => {
-      const supabase = createClient();
-      const { data, error } = await supabase
-        .from("snag_requests")
-        .select(
-          "id, project_id, requester, prompt, status, agent_url, branch_name, pr_url, summary, error, created_at, updated_at",
-        )
-        .eq("project_id", projectId)
-        .order("created_at", { ascending: false })
-        .limit(100);
-      if (error) throw error;
-      return (data ?? []) as SnagRequestRow[];
+      const res = await fetch(`/api/projects/${projectSlug}/requests`);
+      if (!res.ok) throw new Error("Failed to load requests");
+      return (await res.json()) as SnagRequestRow[];
     },
     refetchInterval: (query) => {
       const rows = query.state.data ?? [];

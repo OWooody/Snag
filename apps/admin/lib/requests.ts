@@ -1,13 +1,19 @@
-import { createClient } from "@/lib/supabase/server";
 import type { SnagRequestRow } from "@snag/shared";
+import { createServiceClient } from "@/lib/service";
+import { createClient } from "@/lib/supabase/server";
 
-export async function fetchProjectRequests(projectId: string, limit = 50) {
-  const supabase = await createClient();
-  const { data } = await supabase
+const REQUEST_COLUMNS =
+  "id, project_id, requester, prompt, status, agent_url, branch_name, pr_url, summary, error, created_at, updated_at";
+
+export async function fetchProjectRequests(
+  projectId: string,
+  limit = 50,
+  opts?: { useServiceRole?: boolean },
+) {
+  const client = opts?.useServiceRole ? createServiceClient() : await createClient();
+  const { data } = await client
     .from("snag_requests")
-    .select(
-      "id, project_id, requester, prompt, status, agent_url, branch_name, pr_url, summary, error, created_at, updated_at",
-    )
+    .select(REQUEST_COLUMNS)
     .eq("project_id", projectId)
     .order("created_at", { ascending: false })
     .limit(limit);

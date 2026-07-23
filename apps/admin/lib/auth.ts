@@ -1,6 +1,7 @@
 import { SAFE_PROJECT_COLUMNS, type SnagOrganization, type SnagProjectSafe } from "@snag/shared";
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { getEffectiveImpersonationOrgId } from "@/lib/impersonation";
+import { createServiceClient } from "@/lib/service";
 import { createClient } from "@/lib/supabase/server";
 
 export interface UserContext {
@@ -24,10 +25,9 @@ export async function getUserContext(): Promise<UserContext> {
     redirect("/login");
   }
 
-  const cookieStore = await cookies();
-  const impersonatingOrgId = cookieStore.get("snag_impersonate_org")?.value ?? null;
-
   const { data: isPlatformAdmin } = await supabase.rpc("is_platform_admin");
+  const platformAdmin = Boolean(isPlatformAdmin);
+  const impersonatingOrgId = await getEffectiveImpersonationOrgId(user.id);
 
   const { data: orgMembers } = await supabase
     .from("snag_org_members")
@@ -41,29 +41,43 @@ export async function getUserContext(): Promise<UserContext> {
     }
   }
 
-  const organizations =
+  let organizations =
     orgMembers
       ?.map((m) => m.snag_organizations as unknown as SnagOrganization)
       .filter(Boolean) ?? [];
 
-  const orgIds = impersonatingOrgId
-    ? [impersonatingOrgId]
-    : organizations.map((o) => o.id);
-
   let projects: SnagProjectSafe[] = [];
-  if (orgIds.length > 0) {
-    const { data } = await supabase
-      .from("snag_projects")
-      .select(SAFE_PROJECT_COLUMNS)
-      .in("organization_id", orgIds)
-      .order("created_at", { ascending: false });
-    projects = (data ?? []) as SnagProjectSafe[];
+
+  if (impersonatingOrgId) {
+    const service = createServiceClient();
+    const [{ data: impersonatedOrg }, { data: impersonatedProjects }] = await Promise.all([
+      service.from("snag_organizations").select("*").eq("id", impersonatingOrgId).single(),
+      service
+        .from("snag_projects")
+        .select(SAFE_PROJECT_COLUMNS)
+        .eq("organization_id", impersonatingOrgId)
+        .order("created_at", { ascending: false }),
+    ]);
+    if (impersonatedOrg) {
+      organizations = [impersonatedOrg as SnagOrganization];
+    }
+    projects = (impersonatedProjects ?? []) as SnagProjectSafe[];
+  } else {
+    const orgIds = organizations.map((o) => o.id);
+    if (orgIds.length > 0) {
+      const { data } = await supabase
+        .from("snag_projects")
+        .select(SAFE_PROJECT_COLUMNS)
+        .in("organization_id", orgIds)
+        .order("created_at", { ascending: false });
+      projects = (data ?? []) as SnagProjectSafe[];
+    }
   }
 
   return {
     userId: user.id,
     email: user.email ?? "",
-    isPlatformAdmin: Boolean(isPlatformAdmin),
+    isPlatformAdmin: platformAdmin,
     organizations,
     projects,
     impersonatingOrgId,
@@ -88,4 +102,17 @@ export function getActiveProject(
     return projects.find((p) => p.slug === slug) ?? projects[0];
   }
   return projects[0];
+}
+
+/** True when user may edit a project (org admin/owner, or platform admin impersonating that org). */
+export function canEditProject(
+  ctx: UserContext,
+  project: SnagProjectSafe,
+): boolean {
+  if (ctx.impersonatingOrgId && ctx.isPlatformAdmin) {
+    return project.organization_id === ctx.impersonatingOrgId;
+  }
+  if (ctx.isPlatformAdmin) return true;
+  const role = project.organization_id ? ctx.orgRoles[project.organization_id] : null;
+  return role === "owner" || role === "admin";
 }

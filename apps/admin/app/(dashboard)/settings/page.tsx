@@ -1,5 +1,5 @@
 import { SettingsForm } from "@/components/settings-form";
-import { getActiveProject, getUserContext } from "@/lib/auth";
+import { canEditProject, getActiveProject, getUserContext } from "@/lib/auth";
 
 export default async function SettingsPage() {
   const ctx = await getUserContext();
@@ -14,8 +14,7 @@ export default async function SettingsPage() {
     );
   }
 
-  const role = project.organization_id ? ctx.orgRoles[project.organization_id] : null;
-  const canEdit = role === "owner" || role === "admin" || ctx.isPlatformAdmin;
+  const canEdit = canEditProject(ctx, project);
 
   return (
     <div className="space-y-6">

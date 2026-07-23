@@ -19,8 +19,14 @@ export default async function DashboardPage() {
     );
   }
 
-  const requests = await fetchProjectRequests(project.id, 10);
-  const stats = computeUsageStats(await fetchProjectRequests(project.id, 200));
+  const requests = await fetchProjectRequests(project.id, 10, {
+    useServiceRole: Boolean(ctx.impersonatingOrgId),
+  });
+  const stats = computeUsageStats(
+    await fetchProjectRequests(project.id, 200, {
+      useServiceRole: Boolean(ctx.impersonatingOrgId),
+    }),
+  );
 
   return (
     <div className="space-y-6">

@@ -22,7 +22,7 @@ export default async function RequestsPage() {
           Change requests filed from {project.name}. Auto-refreshes while agents are running.
         </p>
       </div>
-      <RequestsTable projectId={project.id} />
+      <RequestsTable projectSlug={project.slug} />
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requirePlatformAdmin } from "@/lib/auth";
+import { IMPERSONATE_COOKIE } from "@/lib/impersonation";
 import { createServiceClient } from "@/lib/service";
 
 export async function GET(
@@ -23,7 +24,7 @@ export async function GET(
   }
 
   const response = NextResponse.redirect(`${base}/dashboard`);
-  response.cookies.set("snag_impersonate_org", project.organization_id, {
+  response.cookies.set(IMPERSONATE_COOKIE, project.organization_id, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
