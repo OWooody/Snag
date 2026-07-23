@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { fetchRelayState } from "../api";
 import type { SnagRequestRow, SnagRequestStatus } from "../protocol";
+import { GLASS_SURFACE } from "../sheet";
 import type { SnagTheme } from "../theme";
 
 interface RequestsListProps {
@@ -61,7 +62,8 @@ function RequestCard({ row, theme }: { row: SnagRequestRow; theme: SnagTheme }) 
         borderRadius: 12,
         padding: 12,
         marginBottom: 10,
-        background: theme.surface,
+        background: GLASS_SURFACE,
+        border: "1px solid rgba(255,255,255,0.4)",
       }}
     >
       <div
