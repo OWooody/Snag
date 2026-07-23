@@ -255,8 +255,9 @@ SELECT slug, name, publishable_key, enabled, repo_url, repo_ref FROM snag_projec
 |---------|-----|
 | Probe `enabled: false` | Wrong/missing key, no tenant row, or `enabled = false` |
 | Relay **500** | `SNAG_KEY_ENCRYPTION_SECRET` mismatch vs tenant creation; check relay logs |
-| Agent launch: branch not found | Wrong `repo_ref`, repo not on GitHub, or no commits on branch |
-| Agent launch: repo access | Cursor key can’t see private repo — link GitHub in Cursor |
+| Agent launch: branch not found | Wrong `repo_ref`, repo not on GitHub, or no commits on branch — UI shows a specific message |
+| Agent launch: repo access | Cursor key can’t see private repo — link GitHub in Cursor — UI shows a specific message |
+| Agent launch: rate limited | Wait and retry; Cursor returned 429 |
 | Webhook silent | `SNAG_WEBHOOK_SECRET` unset; GET polling still works |
 | `db push` policy exists | `supabase migration repair 00001 --status applied` |
 

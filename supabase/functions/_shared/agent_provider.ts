@@ -49,6 +49,53 @@ interface CursorAgentResponse {
   summary?: string;
 }
 
+/** Safe, user-facing launch failure — never includes raw API bodies or secrets. */
+export class AgentLaunchError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "AgentLaunchError";
+    this.status = status;
+  }
+}
+
+/**
+ * Map Cursor API failures to short messages safe to show in the Snag UI and
+ * store on `snag_requests.error`. Never echo the raw response body.
+ */
+export function classifyCursorLaunchError(
+  status: number,
+  body: string,
+): string {
+  const lower = body.toLowerCase();
+  if (status === 401 || status === 403) {
+    return "Cursor API key cannot access this repository. Check the key and GitHub link in Cursor.";
+  }
+  if (status === 429) {
+    return "Cursor rate limit — try again shortly.";
+  }
+  if (status === 404) {
+    return "Cursor could not find that repository or branch.";
+  }
+  if (
+    /branch|ref|not found|does not exist|unknown revision|invalid ref/.test(
+      lower,
+    )
+  ) {
+    return "Repository branch not found. Ask your Snag admin to check repo_ref.";
+  }
+  if (/repositor|repo|access|permission|unauthorized|forbidden/.test(lower)) {
+    return "Cursor API key cannot access this repository. Check the key and GitHub link in Cursor.";
+  }
+  return "Could not launch agent. Your Snag admin can check relay logs.";
+}
+
+export function userFacingLaunchError(error: unknown): string {
+  if (error instanceof AgentLaunchError) return error.message;
+  return "Could not launch agent. Your Snag admin can check relay logs.";
+}
+
 export function cursorProvider(options: { apiKey: string }): AgentProvider {
   const authHeader = `Basic ${btoa(`${options.apiKey}:`)}`;
 
@@ -66,8 +113,13 @@ export function cursorProvider(options: { apiKey: string }): AgentProvider {
     });
     if (!response.ok) {
       const body = await response.text().catch(() => "");
-      throw new Error(
-        `Cursor API ${init.method ?? "GET"} ${path} failed (${response.status}): ${body.slice(0, 300)}`,
+      // Log status + truncated body for admins; never return body to clients.
+      console.error(
+        `cursor API ${init.method ?? "GET"} ${path} failed (${response.status}): ${body.slice(0, 300)}`,
+      );
+      throw new AgentLaunchError(
+        classifyCursorLaunchError(response.status, body),
+        response.status,
       );
     }
     return (await response.json()) as CursorAgentResponse;

@@ -63,6 +63,7 @@ initSnag({
     route: window.location.pathname,
     environment: "staging",
   }),
+  getRequester: () => "demo-user",
 });
 
 export function App() {
@@ -91,7 +92,8 @@ export function App() {
 
 | Option | What it does |
 |--------|----------------|
-| `getContext` | Attach route, version, environment to every request |
+| `getContext` | Attach route, version, environment to every request (merged on top of auto-captured `snag_auto`) |
+| `getRequester` | Display id for who filed the request — shown in the list; enables a **Mine** filter |
 | `getAuthToken` | Send `Authorization: Bearer` when the user is logged in |
 | `theme` | Override button/panel colors |
 | `debug: true` | Log probe/request details to the console |
@@ -110,4 +112,4 @@ export function App() {
 
 ## Security note
 
-`projectKey` is visible in your JS bundle (like an analytics write key). Only use Snag on **non-production** builds with **non-sensitive** data — screenshots capture the real screen.
+`projectKey` is visible in your JS bundle (like an analytics write key). Only use Snag on **non-production** builds with **non-sensitive** data — screenshots capture the real screen. Do not put secrets or PII in `getContext` or `getRequester`.
