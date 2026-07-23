@@ -7,7 +7,7 @@ import {
   GLASS_SURFACE,
   glassBackdropStyle,
   glassSheetStyle,
-  useSheetEnter,
+  useSheetMotion,
 } from "../sheet";
 import type { SnagTheme } from "../theme";
 import { RequestsList } from "./requests-list";
@@ -62,7 +62,7 @@ export function RequestPanel({ screenshot, theme, onClose }: RequestPanelProps) 
     }
   };
 
-  const entered = useSheetEnter();
+  const { open, requestClose } = useSheetMotion(onClose);
 
   if (annotating && workingScreenshot) {
     return (
@@ -91,9 +91,11 @@ export function RequestPanel({ screenshot, theme, onClose }: RequestPanelProps) 
         display: "flex",
         alignItems: "flex-end",
         justifyContent: "center",
-        ...glassBackdropStyle(entered, "rgba(0,0,0,0.35)"),
+        // Keep clicks off the page while collapsing.
+        pointerEvents: open ? "auto" : "none",
+        ...glassBackdropStyle(open, "rgba(0,0,0,0.35)"),
       }}
-      onClick={onClose}
+      onClick={requestClose}
     >
       <div
         onClick={(event) => event.stopPropagation()}
@@ -104,7 +106,7 @@ export function RequestPanel({ screenshot, theme, onClose }: RequestPanelProps) 
           borderTopLeftRadius: 16,
           borderTopRightRadius: 16,
           padding: "20px 20px 28px",
-          ...glassSheetStyle(entered),
+          ...glassSheetStyle(open),
         }}
       >
         <div
@@ -118,7 +120,7 @@ export function RequestPanel({ screenshot, theme, onClose }: RequestPanelProps) 
           <h2 style={{ margin: 0, fontSize: 18, color: theme.text }}>Snag</h2>
           <button
             type="button"
-            onClick={onClose}
+            onClick={requestClose}
             aria-label="Close"
             style={{
               width: 30,
@@ -176,7 +178,7 @@ export function RequestPanel({ screenshot, theme, onClose }: RequestPanelProps) 
             ) : null}
             <button
               type="button"
-              onClick={onClose}
+              onClick={requestClose}
               style={{
                 display: "block",
                 marginTop: 20,
