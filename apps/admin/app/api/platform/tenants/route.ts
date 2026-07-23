@@ -65,6 +65,7 @@ export async function POST(request: Request) {
       per_ip_hourly_limit: input.per_ip_hourly_limit,
       hourly_limit: input.hourly_limit,
       daily_limit: input.daily_limit,
+      allowed_origins: input.allowed_origins,
       cursor_key_updated_at: new Date().toISOString(),
       enabled: true,
     })

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { AGENT_MODES } from "./agent-mode";
+import { normalizeOrigin } from "./origins";
 
 export const slugSchema = z
   .string()
@@ -24,6 +25,21 @@ export const agentModeSchema = z.enum(AGENT_MODES);
 
 export const projectAgentModeOverrideSchema = agentModeSchema.nullable();
 
+export const allowedOriginSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(256)
+  .refine((value) => normalizeOrigin(value) !== null, {
+    message: "Must be a valid origin (e.g. https://staging.example.com)",
+  })
+  .transform((value) => normalizeOrigin(value)!);
+
+export const allowedOriginsSchema = z
+  .array(allowedOriginSchema)
+  .max(20)
+  .default([]);
+
 export const companyProjectUpdateSchema = z.object({
   repo_url: repoUrlSchema,
   repo_ref: z.string().trim().min(1).max(256),
@@ -31,6 +47,7 @@ export const companyProjectUpdateSchema = z.object({
   prompt_instructions: promptInstructionsSchema,
   enabled: z.boolean(),
   agent_mode: projectAgentModeOverrideSchema.optional(),
+  allowed_origins: allowedOriginsSchema.optional(),
 });
 
 export const companyOrganizationUpdateSchema = z.object({
@@ -57,6 +74,7 @@ export const createTenantSchema = z.object({
   hourly_limit: rateLimitSchema.default(10),
   daily_limit: rateLimitSchema.default(30),
   agent_mode: agentModeSchema.default("plan_only"),
+  allowed_origins: allowedOriginsSchema.default([]),
 });
 
 export const platformTenantUpdateSchema = z.object({
@@ -74,4 +92,5 @@ export const platformTenantUpdateSchema = z.object({
     (val) => (typeof val === "string" && val.trim() === "" ? undefined : val),
     z.string().trim().min(1).max(512).optional(),
   ),
+  allowed_origins: allowedOriginsSchema.optional(),
 });

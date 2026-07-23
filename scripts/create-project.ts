@@ -12,12 +12,28 @@
  *     --cursor-api-key key_xxx \
  *     [--ref main] \
  *     [--model claude-sonnet] \
- *     [--prompt-instructions "Repo orientation text..."]
+ *     [--prompt-instructions "Repo orientation text..."] \
+ *     [--allowed-origins "https://staging.example.com,http://localhost:3000"]
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { assertEncryptionSecret, encryptSecret } from "../packages/shared/src/crypto.ts";
 import { generatePublishableKey } from "../packages/shared/src/keys.ts";
+import { normalizeOrigin } from "../packages/shared/src/origins.ts";
+
+function parseAllowedOriginsArg(raw: string | undefined): string[] {
+  if (!raw) return [];
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const part of raw.split(",")) {
+    const normalized = normalizeOrigin(part);
+    if (normalized && !seen.has(normalized)) {
+      seen.add(normalized);
+      result.push(normalized);
+    }
+  }
+  return result;
+}
 
 function parseArgs(argv: string[]) {
   const args: Record<string, string> = {};
@@ -42,10 +58,11 @@ const cursorApiKey = args["cursor-api-key"];
 const repoRef = args.ref ?? "main";
 const model = args.model ?? null;
 const promptInstructions = args["prompt-instructions"] ?? "";
+const allowedOrigins = parseAllowedOriginsArg(args["allowed-origins"]);
 
 if (!name || !slug || !repoUrl || !cursorApiKey) {
   console.error(
-    "Required: --name --slug --repo-url --cursor-api-key\nOptional: --ref --model --prompt-instructions",
+    "Required: --name --slug --repo-url --cursor-api-key\nOptional: --ref --model --prompt-instructions --allowed-origins",
   );
   Deno.exit(1);
 }
@@ -76,6 +93,7 @@ const { data, error } = await client
     model,
     cursor_api_key_encrypted: cursorApiKeyEncrypted,
     prompt_instructions: promptInstructions,
+    allowed_origins: allowedOrigins,
     enabled: true,
     cursor_key_updated_at: new Date().toISOString(),
   })

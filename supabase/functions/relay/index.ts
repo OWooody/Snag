@@ -2,7 +2,7 @@
  * snag-relay — multi-tenant backend for the Snag web SDK.
  *
  * Public (no JWT verification): host apps may be reachable logged-out.
- * Security boundary = project key resolution + per-project rate limits.
+ * Security boundary = project key resolution + per-project rate limits + origin allowlist.
  *
  * GET  → { enabled, requests? } — SDK visibility probe + request list
  * POST → validate + rate-limit → insert snag_requests row → launch agent
@@ -19,6 +19,7 @@ import {
   type AgentProvider,
 } from "../_shared/agent_provider.ts";
 import { decryptSecret, getEncryptionSecret } from "../_shared/crypto.ts";
+import { checkOriginAllowlist, corsAllowOrigin } from "../_shared/origins.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 
 const LIST_LIMIT = 20;
@@ -26,12 +27,27 @@ const STALE_RUNNING_MS = 30 * 1000;
 const MAX_CONTEXT_JSON_LENGTH = 4000;
 const MAX_SCREENSHOT_BASE64_LENGTH = 2_800_000;
 
-const CORS_HEADERS: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
+const CORS_BASE_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers":
     "authorization, content-type, x-snag-key, x-snag-requester",
 };
+
+function buildCorsHeaders(req: Request, allowedOrigins: string[]): Record<string, string> {
+  const allowOrigin = corsAllowOrigin(
+    req.headers.get("origin"),
+    req.headers.get("referer"),
+    allowedOrigins,
+  );
+  const headers = { ...CORS_BASE_HEADERS };
+  if (allowOrigin) {
+    headers["Access-Control-Allow-Origin"] = allowOrigin;
+    if (allowOrigin !== "*") {
+      headers["Vary"] = "Origin";
+    }
+  }
+  return headers;
+}
 
 const MAX_REQUESTER_LENGTH = 128;
 const REQUESTER_PATTERN = /^[\x20-\x7E]+$/;
@@ -63,6 +79,7 @@ interface ProjectRow {
   per_ip_hourly_limit: number;
   hourly_limit: number;
   daily_limit: number;
+  allowed_origins: string[];
   agent_mode: "plan_only" | "execute" | null;
   snag_organizations: { agent_mode: "plan_only" | "execute" } | null;
 }
@@ -74,32 +91,52 @@ function resolveEffectiveAgentMode(project: ProjectRow): AgentMode {
   return project.agent_mode ?? orgMode ?? "plan_only";
 }
 
-function json(body: Record<string, unknown>, status = 200): Response {
+function json(
+  body: Record<string, unknown>,
+  status = 200,
+  corsHeaders: Record<string, string> = CORS_BASE_HEADERS,
+): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json", ...CORS_HEADERS },
+    headers: { "Content-Type": "application/json", ...corsHeaders },
   });
 }
 
 Deno.serve(async (req) => {
+  const preflightCors = buildCorsHeaders(req, []);
+
   if (req.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: CORS_HEADERS });
+    return new Response(null, { status: 204, headers: preflightCors });
   }
 
   if (req.method !== "GET" && req.method !== "POST") {
-    return json({ error: "Method not allowed" }, 405);
+    return json({ error: "Method not allowed" }, 405, preflightCors);
   }
 
   const publishableKey = req.headers.get("x-snag-key");
   if (!publishableKey) {
-    return json({ enabled: false }, 403);
+    return json({ enabled: false }, 403, preflightCors);
   }
 
   try {
     const serviceClient = createServiceClient();
     const project = await resolveProject(serviceClient, publishableKey);
     if (!project) {
-      return json({ enabled: false }, 403);
+      return json({ enabled: false }, 403, preflightCors);
+    }
+
+    const corsHeaders = buildCorsHeaders(req, project.allowed_origins ?? []);
+    const originRejected = checkOriginAllowlist(
+      req.headers.get("origin"),
+      req.headers.get("referer"),
+      project.allowed_origins ?? [],
+    );
+    if (originRejected) {
+      console.warn(`snag-relay rejected: ${originRejected} project=${project.id}`);
+      if (req.method === "GET") {
+        return json({ enabled: false }, 403, corsHeaders);
+      }
+      return json({ error: "Origin not allowed" }, 403, corsHeaders);
     }
 
     const cursorApiKey = await decryptSecret(
@@ -110,17 +147,17 @@ Deno.serve(async (req) => {
 
     if (req.method === "GET") {
       const requests = await listRequests(serviceClient, provider, project.id);
-      return json({ enabled: true, requests });
+      return json({ enabled: true, requests }, 200, corsHeaders);
     }
 
-    return await handleCreate(req, serviceClient, provider, project);
+    return await handleCreate(req, serviceClient, provider, project, corsHeaders);
   } catch (error) {
     if (error instanceof z.ZodError) {
       console.warn("snag-relay rejected: validation");
-      return json({ error: "Invalid request" }, 422);
+      return json({ error: "Invalid request" }, 422, preflightCors);
     }
     console.error("snag-relay error:", error);
-    return json({ error: "Internal server error" }, 500);
+    return json({ error: "Internal server error" }, 500, preflightCors);
   }
 });
 
@@ -131,7 +168,7 @@ async function resolveProject(
   const { data, error } = await serviceClient
     .from("snag_projects")
     .select(
-      "id, name, slug, publishable_key, repo_url, repo_ref, model, cursor_api_key_encrypted, prompt_instructions, enabled, per_ip_hourly_limit, hourly_limit, daily_limit, agent_mode, snag_organizations(agent_mode)",
+      "id, name, slug, publishable_key, repo_url, repo_ref, model, cursor_api_key_encrypted, prompt_instructions, enabled, per_ip_hourly_limit, hourly_limit, daily_limit, allowed_origins, agent_mode, snag_organizations(agent_mode)",
     )
     .eq("publishable_key", publishableKey)
     .eq("enabled", true)
@@ -149,12 +186,13 @@ async function handleCreate(
   serviceClient: SupabaseClient,
   provider: AgentProvider,
   project: ProjectRow,
+  corsHeaders: Record<string, string>,
 ): Promise<Response> {
   const body = createSchema.parse(await req.json());
 
   if (JSON.stringify(body.context).length > MAX_CONTEXT_JSON_LENGTH) {
     console.warn("snag-relay rejected: context_too_large");
-    return json({ error: "Context too large" }, 422);
+    return json({ error: "Context too large" }, 422, corsHeaders);
   }
 
   const ip =
@@ -163,7 +201,7 @@ async function handleCreate(
   const limited = await checkRateLimits(serviceClient, project, ip);
   if (limited) {
     console.warn(`snag-relay rejected: ${limited} project=${project.id}`);
-    return json({ error: "Rate limited" }, 429);
+    return json({ error: "Rate limited" }, 429, corsHeaders);
   }
 
   const requester = await resolveOptionalRequester(req);
@@ -184,7 +222,7 @@ async function handleCreate(
 
   if (insertError || !row) {
     console.error("snag-relay insert failed:", insertError);
-    return json({ error: "Could not save request" }, 500);
+    return json({ error: "Could not save request" }, 500, corsHeaders);
   }
 
   try {
@@ -230,7 +268,7 @@ async function handleCreate(
       })
       .eq("id", row.id);
 
-    return json({ id: row.id, agent_url: task.url });
+    return json({ id: row.id, agent_url: task.url }, 200, corsHeaders);
   } catch (error) {
     console.error("snag-relay agent launch failed:", error);
     const message = userFacingLaunchError(error);
@@ -242,7 +280,7 @@ async function handleCreate(
         updated_at: new Date().toISOString(),
       })
       .eq("id", row.id);
-    return json({ error: message }, 502);
+    return json({ error: message }, 502, corsHeaders);
   }
 }
 

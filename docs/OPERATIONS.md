@@ -274,7 +274,18 @@ SELECT slug, name, publishable_key, enabled, repo_url, repo_ref FROM snag_projec
 ## Security
 
 - **Never** commit `service_role`, Cursor API keys, or `SNAG_KEY_ENCRYPTION_SECRET`.
-- `snag_pk_...` is public in the host app bundle — rate limits and `enabled` flag are the guardrails.
+- `snag_pk_...` is public in the host app bundle — treat it like a Sentry DSN, not a secret.
+- **Origin allowlist** (`allowed_origins` on `snag_projects`): empty = allow all; non-empty restricts browser requests to listed origins (`scheme://host[:port]`). Configure in the [admin panel](ADMIN.md) (Settings) or via SQL. Blocks other sites embedding your key; does not stop `curl` with a forged `Origin` header.
+- **Rate limits** (defaults: 10/IP/hour, 10/project/hour, 30/project/day) — enforced in the relay before agent launch. Platform admins edit limits per tenant in the admin panel.
+- **`enabled` flag** — remote kill switch; SDK probe returns `{ enabled: false }`.
 - Cursor keys are AES-256-GCM encrypted at rest in `cursor_api_key_encrypted`.
 - Relay logs entity IDs only — not prompts or screenshots.
 - Only enable Snag on staging/internal builds with non-sensitive data.
+
+Example — set allowed origins via SQL:
+
+```sql
+UPDATE snag_projects
+SET allowed_origins = ARRAY['http://localhost:3000', 'https://staging.example.com']
+WHERE slug = 'acme-web';
+```

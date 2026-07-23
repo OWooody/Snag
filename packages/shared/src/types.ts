@@ -18,6 +18,7 @@ export interface SnagProjectSafe {
   per_ip_hourly_limit: number;
   hourly_limit: number;
   daily_limit: number;
+  allowed_origins: string[];
   organization_id: string | null;
   agent_mode: AgentMode | null;
   cursor_key_updated_at: string | null;
@@ -69,4 +70,4 @@ export interface SnagAuditLogEntry {
 }
 
 export const SAFE_PROJECT_COLUMNS =
-  "id, name, slug, publishable_key, repo_url, repo_ref, model, prompt_instructions, enabled, per_ip_hourly_limit, hourly_limit, daily_limit, organization_id, agent_mode, cursor_key_updated_at, created_at, updated_at" as const;
+  "id, name, slug, publishable_key, repo_url, repo_ref, model, prompt_instructions, enabled, per_ip_hourly_limit, hourly_limit, daily_limit, allowed_origins, organization_id, agent_mode, cursor_key_updated_at, created_at, updated_at" as const;

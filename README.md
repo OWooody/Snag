@@ -44,6 +44,8 @@ npm run dev
 ## Security
 
 - The **publishable key** (`snag_pk_...`) is visible in the JS bundle — treat it like a Segment write key, not a secret.
+- **Origin allowlist** — per-project `allowed_origins` restricts which browser origins can call the relay (managed in the admin panel).
+- **Rate limits** — per-IP, hourly, and daily caps enforced server-side before launching an agent.
 - **Visibility gating** is server-side: disable a project (`enabled = false`) or delete it and the button disappears everywhere.
 - **Cursor API keys** are encrypted at rest (AES-256-GCM) with `SNAG_KEY_ENCRYPTION_SECRET`.
 - **Screenshots** show real screen content — only enable Snag in environments with non-sensitive/seeded data.

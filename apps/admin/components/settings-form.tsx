@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import {
   AGENT_MODE_LABELS,
   companyProjectUpdateSchema,
+  parseOriginsTextarea,
   resolveEffectiveAgentMode,
   type AgentMode,
   type SnagOrganization,
@@ -15,6 +16,7 @@ import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 import { AgentModeSelect, ProjectAgentModeOverrideSelect } from "@/components/agent-mode-select";
+import { AllowedOriginsField, originsToTextarea } from "@/components/allowed-origins-field";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -39,6 +41,9 @@ export function SettingsForm({
     organization?.agent_mode ?? "plan_only",
   );
   const [savingOrg, setSavingOrg] = useState(false);
+  const [allowedOriginsText, setAllowedOriginsText] = useState(() =>
+    originsToTextarea(project.allowed_origins),
+  );
 
   const form = useForm<ProjectFormValues>({
     resolver: zodResolver(companyProjectUpdateSchema),
@@ -61,6 +66,10 @@ export function SettingsForm({
   }, [organization?.agent_mode]);
 
   useEffect(() => {
+    setAllowedOriginsText(originsToTextarea(project.allowed_origins));
+  }, [project.allowed_origins]);
+
+  useEffect(() => {
     setProjectAgentOverride(project.agent_mode ?? "inherit");
   }, [project.agent_mode]);
 
@@ -76,6 +85,7 @@ export function SettingsForm({
       body: JSON.stringify({
         ...values,
         agent_mode: projectAgentOverride === "inherit" ? null : projectAgentOverride,
+        allowed_origins: parseOriginsTextarea(allowedOriginsText),
       }),
     });
     if (!res.ok) {
@@ -190,6 +200,11 @@ export function SettingsForm({
                 {...form.register("prompt_instructions")}
               />
             </div>
+            <AllowedOriginsField
+              id="allowed_origins"
+              value={allowedOriginsText}
+              onChange={setAllowedOriginsText}
+            />
             <div className="flex items-center justify-between rounded-lg border border-zinc-200 p-4">
               <div>
                 <p className="font-medium">Snag enabled</p>

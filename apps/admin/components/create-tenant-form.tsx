@@ -1,9 +1,10 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { createTenantSchema } from "@snag/shared";
+import { createTenantSchema, parseOriginsTextarea } from "@snag/shared";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
+import { useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
@@ -12,11 +13,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { AgentModeSelect } from "@/components/agent-mode-select";
+import { AllowedOriginsField } from "@/components/allowed-origins-field";
 
 type FormValues = z.infer<typeof createTenantSchema>;
 
 export function CreateTenantForm() {
   const router = useRouter();
+  const [allowedOriginsText, setAllowedOriginsText] = useState("");
   const form = useForm<FormValues>({
     resolver: zodResolver(createTenantSchema),
     defaultValues: {
@@ -40,7 +43,10 @@ export function CreateTenantForm() {
     const res = await fetch("/api/platform/tenants", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(values),
+      body: JSON.stringify({
+        ...values,
+        allowed_origins: parseOriginsTextarea(allowedOriginsText),
+      }),
     });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -94,6 +100,13 @@ export function CreateTenantForm() {
           <div className="space-y-2 sm:col-span-2">
             <Label>Prompt instructions</Label>
             <Textarea rows={4} {...form.register("prompt_instructions")} />
+          </div>
+          <div className="sm:col-span-2">
+            <AllowedOriginsField
+              id="create_allowed_origins"
+              value={allowedOriginsText}
+              onChange={setAllowedOriginsText}
+            />
           </div>
           <div className="sm:col-span-2">
             <AgentModeSelect

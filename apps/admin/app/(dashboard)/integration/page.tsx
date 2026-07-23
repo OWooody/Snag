@@ -57,6 +57,21 @@ initSnag({
               <CopyButton value={project.publishable_key} label="Project key" />
             </div>
           </div>
+          {project.allowed_origins?.length ? (
+            <div className="space-y-1">
+              <p className="text-xs font-medium uppercase text-zinc-400">Allowed origins</p>
+              <ul className="rounded bg-zinc-100 px-3 py-2 text-sm">
+                {project.allowed_origins.map((origin) => (
+                  <li key={origin}>
+                    <code>{origin}</code>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-xs text-zinc-500">
+                Snag only accepts requests from these origins. Configure more in Settings.
+              </p>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 

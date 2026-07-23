@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { platformTenantUpdateSchema } from "@snag/shared";
+import { platformTenantUpdateSchema, parseOriginsTextarea } from "@snag/shared";
 import type { AgentMode, SnagProjectSafe } from "@snag/shared";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -27,6 +27,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { ProjectAgentModeOverrideSelect } from "@/components/agent-mode-select";
+import { AllowedOriginsField, originsToTextarea } from "@/components/allowed-origins-field";
 
 type FormValues = z.infer<typeof platformTenantUpdateSchema>;
 type ProjectAgentOverride = AgentMode | "inherit";
@@ -40,6 +41,9 @@ export function PlatformTenantForm({
 }) {
   const router = useRouter();
   const [rotating, setRotating] = useState(false);
+  const [allowedOriginsText, setAllowedOriginsText] = useState(() =>
+    originsToTextarea(project.allowed_origins),
+  );
 
   const [projectAgentOverride, setProjectAgentOverride] = useState<ProjectAgentOverride>(
     project.agent_mode ?? "inherit",
@@ -48,6 +52,10 @@ export function PlatformTenantForm({
   useEffect(() => {
     setProjectAgentOverride(project.agent_mode ?? "inherit");
   }, [project.agent_mode]);
+
+  useEffect(() => {
+    setAllowedOriginsText(originsToTextarea(project.allowed_origins));
+  }, [project.allowed_origins]);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(platformTenantUpdateSchema),
@@ -69,6 +77,7 @@ export function PlatformTenantForm({
     const payload = {
       ...rest,
       agent_mode: projectAgentOverride === "inherit" ? null : projectAgentOverride,
+      allowed_origins: parseOriginsTextarea(allowedOriginsText),
       ...(cursor_api_key?.trim() ? { cursor_api_key: cursor_api_key.trim() } : {}),
     };
     const res = await fetch(`/api/platform/tenants/${project.slug}`, {
@@ -151,6 +160,13 @@ export function PlatformTenantForm({
             <div className="space-y-2 sm:col-span-2">
               <Label>Prompt instructions</Label>
               <Textarea rows={4} {...form.register("prompt_instructions")} />
+            </div>
+            <div className="sm:col-span-2">
+              <AllowedOriginsField
+                id="platform_allowed_origins"
+                value={allowedOriginsText}
+                onChange={setAllowedOriginsText}
+              />
             </div>
             <div className="sm:col-span-2">
               <ProjectAgentModeOverrideSelect
