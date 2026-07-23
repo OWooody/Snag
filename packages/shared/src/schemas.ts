@@ -57,5 +57,8 @@ export const platformTenantUpdateSchema = z.object({
   per_ip_hourly_limit: rateLimitSchema.optional(),
   hourly_limit: rateLimitSchema.optional(),
   daily_limit: rateLimitSchema.optional(),
-  cursor_api_key: z.string().trim().min(1).max(512).optional(),
+  cursor_api_key: z.preprocess(
+    (val) => (typeof val === "string" && val.trim() === "" ? undefined : val),
+    z.string().trim().min(1).max(512).optional(),
+  ),
 });

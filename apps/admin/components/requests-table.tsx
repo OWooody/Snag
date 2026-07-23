@@ -45,6 +45,7 @@ function RequestsTable({ projectId }: { projectId: string }) {
             <th className="px-4 py-3 font-medium">Status</th>
             <th className="px-4 py-3 font-medium">Requester</th>
             <th className="px-4 py-3 font-medium">Branch</th>
+            <th className="px-4 py-3 font-medium">Agent</th>
             <th className="px-4 py-3 font-medium">PR</th>
             <th className="px-4 py-3 font-medium">Created</th>
           </tr>
@@ -60,6 +61,20 @@ function RequestsTable({ projectId }: { projectId: string }) {
               </td>
               <td className="px-4 py-3 text-zinc-500">{req.requester ?? "—"}</td>
               <td className="px-4 py-3 font-mono text-xs">{req.branch_name ?? "—"}</td>
+              <td className="px-4 py-3">
+                {req.agent_url ? (
+                  <a
+                    href={req.agent_url}
+                    className="text-blue-600 underline"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Open
+                  </a>
+                ) : (
+                  "—"
+                )}
+              </td>
               <td className="px-4 py-3">
                 {req.pr_url ? (
                   <a href={req.pr_url} className="text-blue-600 underline" target="_blank" rel="noreferrer">

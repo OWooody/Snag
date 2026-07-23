@@ -10,7 +10,7 @@ export default async function PlatformRequestsPage() {
   const { data: requests } = await service
     .from("snag_requests")
     .select(
-      "id, prompt, status, requester, branch_name, pr_url, error, created_at, snag_projects(slug, name)",
+      "id, prompt, status, requester, branch_name, agent_url, pr_url, error, created_at, snag_projects(slug, name)",
     )
     .order("created_at", { ascending: false })
     .limit(100);
@@ -29,6 +29,7 @@ export default async function PlatformRequestsPage() {
               <th className="px-4 py-3 font-medium">Tenant</th>
               <th className="px-4 py-3 font-medium">Prompt</th>
               <th className="px-4 py-3 font-medium">Status</th>
+              <th className="px-4 py-3 font-medium">Agent</th>
               <th className="px-4 py-3 font-medium">PR</th>
               <th className="px-4 py-3 font-medium">Created</th>
             </tr>
@@ -48,6 +49,20 @@ export default async function PlatformRequestsPage() {
                   </td>
                   <td className="px-4 py-3">
                     <StatusBadge status={req.status as SnagRequestStatus} />
+                  </td>
+                  <td className="px-4 py-3">
+                    {req.agent_url ? (
+                      <a
+                        href={req.agent_url}
+                        className="text-blue-600 underline"
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Open
+                      </a>
+                    ) : (
+                      "—"
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     {req.pr_url ? (

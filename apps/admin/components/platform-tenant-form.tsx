@@ -49,10 +49,15 @@ export function PlatformTenantForm({ project }: { project: SnagProjectSafe }) {
   });
 
   async function onSubmit(values: FormValues) {
+    const { cursor_api_key, ...rest } = values;
+    const payload = {
+      ...rest,
+      ...(cursor_api_key?.trim() ? { cursor_api_key: cursor_api_key.trim() } : {}),
+    };
     const res = await fetch(`/api/platform/tenants/${project.slug}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(values),
+      body: JSON.stringify(payload),
     });
     if (!res.ok) {
       toast.error("Failed to save");
