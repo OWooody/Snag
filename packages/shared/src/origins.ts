@@ -76,6 +76,14 @@ export function matchesAllowedOrigin(
   return allowed.some((entry) => normalizeOrigin(entry) === normalized);
 }
 
+/** Echo Origin/Referer for OPTIONS preflight. Allowlist is enforced on GET/POST only. */
+export function corsPreflightAllowOrigin(
+  originHeader: string | null,
+  refererHeader: string | null,
+): string | null {
+  return resolveRequestOrigin(originHeader, refererHeader);
+}
+
 /** Returns null if allowed; otherwise a rejection reason. Empty allowlist denies all. */
 export function checkOriginAllowlist(
   originHeader: string | null,

@@ -19,7 +19,7 @@ import {
   type AgentProvider,
 } from "../_shared/agent_provider.ts";
 import { decryptSecret, getEncryptionSecret } from "../_shared/crypto.ts";
-import { checkOriginAllowlist, corsAllowOrigin } from "../_shared/origins.ts";
+import { checkOriginAllowlist, corsAllowOrigin, corsPreflightAllowOrigin } from "../_shared/origins.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 
 const LIST_LIMIT = 20;
@@ -32,6 +32,19 @@ const CORS_BASE_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Headers":
     "authorization, content-type, x-snag-key, x-snag-requester",
 };
+
+function buildPreflightCorsHeaders(req: Request): Record<string, string> {
+  const headers = { ...CORS_BASE_HEADERS };
+  const allowOrigin = corsPreflightAllowOrigin(
+    req.headers.get("origin"),
+    req.headers.get("referer"),
+  );
+  if (allowOrigin) {
+    headers["Access-Control-Allow-Origin"] = allowOrigin;
+    headers["Vary"] = "Origin";
+  }
+  return headers;
+}
 
 function buildCorsHeaders(req: Request, allowedOrigins: string[]): Record<string, string> {
   const allowOrigin = corsAllowOrigin(
@@ -104,20 +117,10 @@ function json(
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    const publishableKey = req.headers.get("x-snag-key");
-    if (publishableKey) {
-      try {
-        const serviceClient = createServiceClient();
-        const project = await resolveProject(serviceClient, publishableKey);
-        if (project) {
-          const corsHeaders = buildCorsHeaders(req, project.allowed_origins ?? []);
-          return new Response(null, { status: 204, headers: corsHeaders });
-        }
-      } catch {
-        // fall through to base headers
-      }
-    }
-    return new Response(null, { status: 204, headers: CORS_BASE_HEADERS });
+    return new Response(null, {
+      status: 204,
+      headers: buildPreflightCorsHeaders(req),
+    });
   }
 
   if (req.method !== "GET" && req.method !== "POST") {

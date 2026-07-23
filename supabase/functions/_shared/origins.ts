@@ -39,6 +39,14 @@ function resolveRequestOrigin(
   return originFromReferer(refererHeader);
 }
 
+/** Echo Origin/Referer for OPTIONS preflight. Allowlist is enforced on GET/POST only. */
+export function corsPreflightAllowOrigin(
+  originHeader: string | null,
+  refererHeader: string | null,
+): string | null {
+  return resolveRequestOrigin(originHeader, refererHeader);
+}
+
 function matchesAllowedOrigin(
   requestOrigin: string,
   allowed: string[],
