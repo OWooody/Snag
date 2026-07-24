@@ -275,7 +275,7 @@ SELECT slug, name, publishable_key, enabled, repo_url, repo_ref FROM snag_projec
 
 - **Never** commit `service_role`, Cursor API keys, or `SNAG_KEY_ENCRYPTION_SECRET`.
 - `snag_pk_...` is public in the host app bundle — treat it like a Sentry DSN, not a secret.
-- **Origin allowlist** (`allowed_origins` on `snag_projects`): **empty = deny all**; list one or more origins (`scheme://host[:port]`) to enable Snag from those hosts only. Configure in the [admin panel](ADMIN.md) (Settings) or via SQL. Blocks other sites embedding your key; does not stop `curl` with a forged `Origin` header.
+- **Origin allowlist** (`allowed_origins` on `snag_projects`): **empty = deny all**; list one or more entries to enable Snag from those clients only. Web origins are `scheme://host[:port]` (matched against `Origin`/`Referer`); native apps are `app://<bundle-id>` (matched against the `x-snag-app-id` header sent by the iOS SDK). Configure in the [admin panel](ADMIN.md) (Settings) or via SQL. Blocks other sites embedding your key; does not stop `curl` with a forged `Origin` or `x-snag-app-id` header.
 - **Rate limits** (defaults: 10/IP/hour, 10/project/hour, 30/project/day) — enforced in the relay before agent launch. Platform admins edit limits per tenant in the admin panel.
 - **`enabled` flag** — remote kill switch; SDK probe returns `{ enabled: false }`.
 - Cursor keys are AES-256-GCM encrypted at rest in `cursor_api_key_encrypted`.
@@ -286,7 +286,7 @@ Example — set allowed origins via SQL:
 
 ```sql
 UPDATE snag_projects
-SET allowed_origins = ARRAY['http://localhost:3000', 'https://staging.example.com']
+SET allowed_origins = ARRAY['http://localhost:3000', 'https://staging.example.com', 'app://com.example.myapp']
 WHERE slug = 'acme-web';
 ```
 

@@ -13,20 +13,20 @@
  *     [--ref main] \
  *     [--model claude-sonnet] \
  *     [--prompt-instructions "Repo orientation text..."] \
- *     [--allowed-origins "https://staging.example.com,http://localhost:3000"]
+ *     [--allowed-origins "https://staging.example.com,http://localhost:3000,app://com.example.app"]
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { assertEncryptionSecret, encryptSecret } from "../packages/shared/src/crypto.ts";
 import { generatePublishableKey } from "../packages/shared/src/keys.ts";
-import { normalizeOrigin } from "../packages/shared/src/origins.ts";
+import { normalizeAllowedEntry } from "../packages/shared/src/origins.ts";
 
 function parseAllowedOriginsArg(raw: string | undefined): string[] {
   if (!raw) return [];
   const seen = new Set<string>();
   const result: string[] = [];
   for (const part of raw.split(",")) {
-    const normalized = normalizeOrigin(part);
+    const normalized = normalizeAllowedEntry(part);
     if (normalized && !seen.has(normalized)) {
       seen.add(normalized);
       result.push(normalized);

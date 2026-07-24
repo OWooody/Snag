@@ -5,11 +5,12 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
 const HELPER =
-  "One origin per line (scheme://host[:port]). Snag is blocked until at least one origin is listed.";
+  "One entry per line: web origin (scheme://host[:port]) or native app (app://bundle-id). Snag is blocked until at least one entry is listed.";
 
 const PLACEHOLDER = `http://localhost:3000
 http://localhost:5173
-https://staging.example.com`;
+https://staging.example.com
+app://com.example.app`;
 
 export const DEFAULT_ORIGINS_TEXTAREA = PLACEHOLDER;
 

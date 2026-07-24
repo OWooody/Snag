@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { AGENT_MODES } from "./agent-mode";
-import { DEFAULT_DEV_ORIGINS, normalizeOrigin } from "./origins";
+import { DEFAULT_DEV_ORIGINS, normalizeAllowedEntry } from "./origins";
 
 export const slugSchema = z
   .string()
@@ -30,10 +30,11 @@ export const allowedOriginSchema = z
   .trim()
   .min(1)
   .max(256)
-  .refine((value) => normalizeOrigin(value) !== null, {
-    message: "Must be a valid origin (e.g. https://staging.example.com)",
+  .refine((value) => normalizeAllowedEntry(value) !== null, {
+    message:
+      "Must be a valid origin (e.g. https://staging.example.com) or app id (e.g. app://com.example.app)",
   })
-  .transform((value) => normalizeOrigin(value)!);
+  .transform((value) => normalizeAllowedEntry(value)!);
 
 export const allowedOriginsSchema = z
   .array(allowedOriginSchema)

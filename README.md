@@ -9,6 +9,7 @@ Snag is an in-app change-request tool for development and staging web apps. A fl
 | Who | Read this |
 |-----|-----------|
 | **Host app team** (integrating Snag into their React app) | [packages/react/README.md](packages/react/README.md) |
+| **Host app team** (integrating Snag into their iOS app) | [packages/ios/README.md](packages/ios/README.md) |
 | **Snag admin** (backend, tenants, deploy) | [docs/OPERATIONS.md](docs/OPERATIONS.md) |
 | **Admin panel** (web UI for operators and companies) | [docs/ADMIN.md](docs/ADMIN.md) |
 
@@ -17,6 +18,7 @@ Snag is an in-app change-request tool for development and staging web apps. A fl
 ```
 snag/
   packages/react/     # @snag-tech/react — web SDK
+  packages/ios/       # SnagKit — native iOS SDK (manifest at root Package.swift)
   packages/shared/    # @snag/shared — types, schemas, crypto
   apps/demo/          # Vite playground
   apps/admin/         # Next.js admin panel
@@ -43,8 +45,8 @@ npm run dev
 
 ## Security
 
-- The **publishable key** (`snag_pk_...`) is visible in the JS bundle — treat it like a Segment write key, not a secret.
-- **Origin allowlist** — per-project `allowed_origins`; empty denies all, listed origins only are accepted (managed in the admin panel).
+- The **publishable key** (`snag_pk_...`) is visible in the JS bundle / app binary — treat it like a Segment write key, not a secret.
+- **Origin allowlist** — per-project `allowed_origins`; empty denies all. Web clients are matched by `Origin`/`Referer`; native apps send their bundle ID as `x-snag-app-id` and are matched against `app://<bundle-id>` entries (managed in the admin panel).
 - **Rate limits** — per-IP, hourly, and daily caps enforced server-side before launching an agent.
 - **Visibility gating** is server-side: disable a project (`enabled = false`) or delete it and the button disappears everywhere.
 - **Cursor API keys** are encrypted at rest (AES-256-GCM) with `SNAG_KEY_ENCRYPTION_SECRET`.

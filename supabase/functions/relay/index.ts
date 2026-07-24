@@ -30,7 +30,7 @@ const MAX_SCREENSHOT_BASE64_LENGTH = 2_800_000;
 const CORS_BASE_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers":
-    "authorization, content-type, x-snag-key, x-snag-requester",
+    "authorization, content-type, x-snag-key, x-snag-requester, x-snag-app-id",
 };
 
 function buildPreflightCorsHeaders(req: Request): Record<string, string> {
@@ -143,6 +143,7 @@ Deno.serve(async (req) => {
     const originRejected = checkOriginAllowlist(
       req.headers.get("origin"),
       req.headers.get("referer"),
+      req.headers.get("x-snag-app-id"),
       project.allowed_origins ?? [],
     );
     if (originRejected) {
