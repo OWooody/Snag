@@ -8,3 +8,5 @@ supabase/.temp/
 supabase/.branches/
 .env.supabase.local
 packages/react/*.tgz
+.build/
+.swiftpm/
