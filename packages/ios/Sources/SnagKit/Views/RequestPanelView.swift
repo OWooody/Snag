@@ -8,6 +8,7 @@ struct RequestPanelView: View {
     @ObservedObject private var overlay: OverlayModel
     @StateObject private var model: PanelModel
     @Environment(\.dismiss) private var dismiss
+    @FocusState private var promptFocused: Bool
 
     private static let maxPromptLength = 2000
 
@@ -110,6 +111,13 @@ struct RequestPanelView: View {
                     .disabled(model.phase == .submitting)
                     .snagClearTextEditorBackground()
                     .padding(8)
+                    .focused($promptFocused)
+                    .task {
+                        // Focus after the sheet's presentation settles; asking
+                        // for first responder mid-transition is dropped.
+                        try? await Task.sleep(nanoseconds: 500_000_000)
+                        promptFocused = true
+                    }
                 if model.prompt.isEmpty {
                     Text("What should change on this screen?")
                         .font(.system(size: 14))
