@@ -13,10 +13,12 @@ struct OverlayRootView: View {
                 FloatingButtonView(
                     theme: model.theme,
                     environmentLabel: model.environmentLabel,
-                    containerSize: geometry.size
-                ) {
-                    model.openPanel()
-                }
+                    containerSize: geometry.size,
+                    onTap: { model.openPanel() },
+                    // Keeps SnagPassthroughWindow.hitTest in sync with where
+                    // the button is drawn. Not @Published — see OverlayModel.
+                    onFrameChange: { model.buttonFrame = $0 }
+                )
             }
         }
         .ignoresSafeArea()
@@ -33,10 +35,15 @@ struct FloatingButtonView: View {
     let environmentLabel: String
     let containerSize: CGSize
     let onTap: () -> Void
+    /// Reports the button's frame (window coordinates) whenever it moves.
+    let onFrameChange: (CGRect) -> Void
 
     private static let buttonSize: CGFloat = 52
     private static let edge: CGFloat = 12
     private static let bottomInset: CGFloat = 80
+    /// Movement below this fires a tap instead of a drag — matches
+    /// TAP_SLOP in the web SDK's floating-button.tsx.
+    private static let tapSlop: CGFloat = 10
 
     @State private var anchor: CGPoint?
     @GestureState private var translation: CGSize = .zero
@@ -59,9 +66,15 @@ struct FloatingButtonView: View {
         }
         .frame(width: Self.buttonSize, height: Self.buttonSize)
         .shadow(color: Color.black.opacity(0.18), radius: 6, x: 0, y: 4)
+        // Make the whole 52pt square hit-testable, matching the frame the
+        // passthrough window checks.
+        .contentShape(Rectangle())
         .position(position)
+        // Single gesture for both tap and drag (like the web SDK's pointer
+        // handlers): the button follows the finger, and releasing within the
+        // slop counts as a tap.
         .gesture(
-            DragGesture()
+            DragGesture(minimumDistance: 0)
                 .updating($translation) { value, state, _ in
                     state = value.translation
                 }
@@ -73,9 +86,19 @@ struct FloatingButtonView: View {
                         ),
                         in: containerSize
                     )
+                    let moved = abs(value.translation.width) > Self.tapSlop
+                        || abs(value.translation.height) > Self.tapSlop
+                    if !moved {
+                        onTap()
+                    }
                 }
         )
-        .onTapGesture(perform: onTap)
+        .onAppear {
+            onFrameChange(frame(centeredAt: position))
+        }
+        .onChange(of: position) { newPosition in
+            onFrameChange(frame(centeredAt: newPosition))
+        }
         .onChange(of: containerSize) { newSize in
             if let current = anchor {
                 anchor = clamp(current, in: newSize)
@@ -85,6 +108,18 @@ struct FloatingButtonView: View {
             "Snag (\(environmentLabel)): request a change on this screen"
         )
         .accessibilityAddTraits(.isButton)
+        .accessibilityAction {
+            onTap()
+        }
+    }
+
+    private func frame(centeredAt position: CGPoint) -> CGRect {
+        CGRect(
+            x: position.x - Self.buttonSize / 2,
+            y: position.y - Self.buttonSize / 2,
+            width: Self.buttonSize,
+            height: Self.buttonSize
+        )
     }
 
     private func defaultPosition(in size: CGSize) -> CGPoint {

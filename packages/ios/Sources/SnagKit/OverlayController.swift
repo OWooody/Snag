@@ -4,11 +4,27 @@ import UIKit
 
 /// A window that only intercepts touches on Snag's own controls. Taps on
 /// empty overlay area fall through to the host app.
+///
+/// The decision is point-based: SwiftUI renders the whole overlay inside a
+/// single `_UIHostingView` (gestures are recognizers on that view, not
+/// subviews), so `hitTest` cannot distinguish the floating button from empty
+/// space by view identity. Instead the window asks `interactiveFrame` — set
+/// by `OverlayController` to the button's current frame in window
+/// coordinates — and swallows only touches inside it.
 final class SnagPassthroughWindow: UIWindow {
+    /// Region the overlay should receive touches in, in window coordinates.
+    /// Return nil to pass everything through (e.g. while the panel sheet is
+    /// presented — presentation views are separate subviews and unaffected).
+    var interactiveFrame: @MainActor () -> CGRect? = { nil }
+
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
         guard let view = super.hitTest(point, with: event) else { return nil }
         if view === self || view === rootViewController?.view {
-            return nil
+            guard let frame = interactiveFrame(), frame.contains(point) else {
+                return nil
+            }
+            // Return the hosting view so its gesture recognizers get the touch.
+            return view
         }
         return view
     }
@@ -89,6 +105,11 @@ final class OverlayController {
         window.windowLevel = UIWindow.Level(rawValue: UIWindow.Level.alert.rawValue + 1)
         window.rootViewController = host
         window.isHidden = false
+        window.interactiveFrame = { [weak model] in
+            guard let model, !model.panelVisible else { return nil }
+            // Slightly inflated for finger-friendliness.
+            return model.buttonFrame?.insetBy(dx: -8, dy: -8)
+        }
         self.window = window
         model.overlayWindow = window
     }
@@ -112,6 +133,11 @@ final class OverlayController {
 final class OverlayModel: ObservableObject {
     @Published var panelVisible = false
     @Published var screenshot: SnagScreenshot?
+    /// Floating button frame in window coordinates, kept current by
+    /// `FloatingButtonView` and read by `SnagPassthroughWindow.hitTest`.
+    /// Deliberately not `@Published`: it changes every frame during a drag
+    /// and must not trigger view invalidation.
+    var buttonFrame: CGRect?
 
     let configuration: SnagConfiguration
     let client: RelayClient
