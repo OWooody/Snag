@@ -4,11 +4,13 @@ How to run the Snag backend and onboard new apps (tenants). Host-app teams only 
 
 **Architecture:** one Supabase project, one relay. Each host app is a row in `snag_projects` with its own `snag_pk_...` key, repo URL, and agent config.
 
-| Item | Value (Snag instance) |
-|------|------------------------|
-| Project ref | `lsssxrpkecgapxbfqgcj` |
-| Relay URL | `https://lsssxrpkecgapxbfqgcj.supabase.co/functions/v1/relay` |
+
+| Item        | Value (Snag instance)                                           |
+| ----------- | --------------------------------------------------------------- |
+| Project ref | `lsssxrpkecgapxbfqgcj`                                          |
+| Relay URL   | `https://lsssxrpkecgapxbfqgcj.supabase.co/functions/v1/relay`   |
 | Webhook URL | `https://lsssxrpkecgapxbfqgcj.supabase.co/functions/v1/webhook` |
+
 
 ---
 
@@ -32,6 +34,8 @@ supabase login               # or rely on PAT above
 supabase link --project-ref lsssxrpkecgapxbfqgcj
 ```
 
+
+
 ### 2. Push schema
 
 ```sh
@@ -47,6 +51,8 @@ If policies already exist from a partial run:
 ```sh
 supabase migration repair 00001 --status applied
 ```
+
+
 
 ### 3. Set Edge Function secrets
 
@@ -80,6 +86,8 @@ Point Cursor Cloud Agents webhooks at the webhook URL above, using the same `SNA
 
 ---
 
+
+
 ## Onboard a new app (tenant)
 
 **Preferred:** use the [admin panel](ADMIN.md) at `/platform/tenants/new`.
@@ -111,14 +119,18 @@ The script prints JSON with `publishable_key` (`snag_pk_...`).
 - `repo-url` and `repo-ref` must match GitHub (branch must exist with commits).
 - Cursor API key must have access to the repo (connect GitHub in Cursor for private repos).
 
+
+
 ### 2. Hand off to the host team
 
 Send them:
 
-| Value | Example |
-|-------|---------|
-| `endpoint` | `https://lsssxrpkecgapxbfqgcj.supabase.co/functions/v1/relay` |
-| `projectKey` | `snag_pk_...` from provisioning |
+
+| Value        | Example                                                       |
+| ------------ | ------------------------------------------------------------- |
+| `endpoint`   | `https://lsssxrpkecgapxbfqgcj.supabase.co/functions/v1/relay` |
+| `projectKey` | `snag_pk_...` from provisioning                               |
+
 
 They follow [packages/react/README.md](../packages/react/README.md).
 
@@ -133,18 +145,24 @@ Expected: `{"enabled":true,"requests":[]}`
 
 ---
 
+
+
 ## Publish SDK to npm
 
-Package: **`@snag-tech/react`** (public scoped package, npm org `snag-tech`).
+Package: `@snag-tech/react` (public scoped package, npm org `snag-tech`).
 
-- **npm:** https://www.npmjs.com/package/@snag-tech/react
+- **npm:** [https://www.npmjs.com/package/@snag-tech/react](https://www.npmjs.com/package/@snag-tech/react)
 - **Source:** `packages/react/`
+
+
 
 ### Prerequisites
 
 1. [npm account](https://www.npmjs.com/signup) with **2FA enabled** (Authorization and writes)
-2. Member of the **`snag-tech`** org on npm
+2. Member of the `snag-tech` org on npm
 3. Logged in: `npm login` → `npm whoami` should print your username
+
+
 
 ### First publish (one-time)
 
@@ -177,7 +195,8 @@ This updates `package.json` and creates a git tag. Commit the version bump if yo
 **3. Publish to npm:**
 
 ```sh
-npm publish --access public --otp=<6-digit-code>
+npm login
+npm publish --access public
 ```
 
 Get `<6-digit-code>` from your authenticator app. Codes expire quickly — run publish right after generating one.
@@ -197,6 +216,8 @@ npm install @snag-tech/react@latest
 # or pin: npm install @snag-tech/react@0.1.1
 ```
 
+
+
 ### Host app install
 
 ```sh
@@ -206,6 +227,8 @@ npm install @snag-tech/react
 ```tsx
 import { initSnag, SnagOverlay } from "@snag-tech/react";
 ```
+
+
 
 ### Local tarball (private handoff, no npm)
 
@@ -219,7 +242,11 @@ npm install /path/to/snag/packages/react/snag-tech-react-0.1.0.tgz
 
 ---
 
+
+
 ## Day-2 operations
+
+
 
 ### Kill switch (disable one app)
 
@@ -237,6 +264,8 @@ SET repo_url = 'https://github.com/org/repo', repo_ref = 'main'
 WHERE slug = 'acme-web';
 ```
 
+
+
 ### Rate limits
 
 ```sql
@@ -244,6 +273,8 @@ UPDATE snag_projects
 SET per_ip_hourly_limit = 10, hourly_limit = 10, daily_limit = 30
 WHERE slug = 'acme-web';
 ```
+
+
 
 ### List tenants
 
@@ -253,23 +284,31 @@ SELECT slug, name, publishable_key, enabled, repo_url, repo_ref FROM snag_projec
 
 ---
 
+
+
 ## Troubleshooting
 
-| Symptom | Fix |
-|---------|-----|
-| Probe `enabled: false` | Wrong/missing key, no tenant row, or `enabled = false` |
-| Relay **500** | `SNAG_KEY_ENCRYPTION_SECRET` mismatch vs tenant creation; check relay logs |
+
+| Symptom                        | Fix                                                                                         |
+| ------------------------------ | ------------------------------------------------------------------------------------------- |
+| Probe `enabled: false`         | Wrong/missing key, no tenant row, or `enabled = false`                                      |
+| Relay **500**                  | `SNAG_KEY_ENCRYPTION_SECRET` mismatch vs tenant creation; check relay logs                  |
 | Agent launch: branch not found | Wrong `repo_ref`, repo not on GitHub, or no commits on branch — UI shows a specific message |
-| Agent launch: repo access | Cursor key can’t see private repo — link GitHub in Cursor — UI shows a specific message |
-| Agent launch: rate limited | Wait and retry; Cursor returned 429 |
-| Webhook silent | `SNAG_WEBHOOK_SECRET` unset; GET polling still works |
-| `db push` policy exists | `supabase migration repair 00001 --status applied` |
+| Agent launch: repo access      | Cursor key can’t see private repo — link GitHub in Cursor — UI shows a specific message     |
+| Agent launch: rate limited     | Wait and retry; Cursor returned 429                                                         |
+| Webhook silent                 | `SNAG_WEBHOOK_SECRET` unset; GET polling still works                                        |
+| `db push` policy exists        | `supabase migration repair 00001 --status applied`                                          |
+
+
+
 
 ### Relay logs
 
 **Dashboard → Edge Functions → relay → Logs** — look for `snag-relay error:`.
 
 ---
+
+
 
 ## Security
 
@@ -278,7 +317,7 @@ SELECT slug, name, publishable_key, enabled, repo_url, repo_ref FROM snag_projec
 - **Origin allowlist** (`allowed_origins` on `snag_projects`): **empty = deny all**; list one or more entries to enable Snag from those clients only. Web origins are `scheme://host[:port]` (matched against `Origin`/`Referer`); native apps are `app://<bundle-id>` (matched against the `x-snag-app-id` header sent by the iOS SDK). Configure in the [admin panel](ADMIN.md) (Settings) or via SQL. Blocks other sites embedding your key; does not stop `curl` with a forged `Origin` or `x-snag-app-id` header.
 - **Rate limits** (defaults: 10/IP/hour, 10/project/hour, 30/project/day) — enforced in the relay before agent launch. Platform admins edit limits per tenant in the admin panel.
 - **Requester follow-ups** (org default on; optional project override) — when enabled, agent summaries may include `## Questions for requester`; those requests become `needs_input` and requesters can reply in-app via Cursor follow-up on the same agent.
-- **`enabled` flag** — remote kill switch; SDK probe returns `{ enabled: false }`.
+- `enabled` **flag** — remote kill switch; SDK probe returns `{ enabled: false }`.
 - Cursor keys are AES-256-GCM encrypted at rest in `cursor_api_key_encrypted`.
 - Relay logs entity IDs only — not prompts or screenshots.
 - Only enable Snag on staging/internal builds with non-sensitive data.
