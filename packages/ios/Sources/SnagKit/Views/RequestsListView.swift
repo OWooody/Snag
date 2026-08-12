@@ -31,22 +31,17 @@ struct RequestsListView: View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
                 Spacer()
+                if followupsEnabled {
+                    filterToggle(
+                        label: "Needs reply",
+                        isOn: model.needsAttentionOnly
+                    ) {
+                        model.needsAttentionOnly.toggle()
+                    }
+                }
                 if model.currentRequester != nil {
-                    Button {
+                    filterToggle(label: "Mine", isOn: model.mineOnly) {
                         model.mineOnly.toggle()
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(
-                                systemName: model.mineOnly
-                                    ? "checkmark.square.fill" : "square"
-                            )
-                            .foregroundColor(
-                                model.mineOnly ? theme.accent : theme.textMuted
-                            )
-                            Text("Mine")
-                                .font(.system(size: 13))
-                                .foregroundColor(theme.text)
-                        }
                     }
                 }
                 Button {
@@ -60,19 +55,15 @@ struct RequestsListView: View {
             }
             .padding(.bottom, 12)
 
-            if model.visibleRows.isEmpty {
-                Text(
-                    model.mineOnly
-                        ? "No requests from you yet."
-                        : "No requests yet. Tap the button on any screen to file one."
-                )
-                .font(.system(size: 14))
-                .foregroundColor(theme.textMuted)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity)
-                .padding(.top, 32)
+            if model.visibleRows(followupsEnabled: followupsEnabled).isEmpty {
+                Text(emptyMessage)
+                    .font(.system(size: 14))
+                    .foregroundColor(theme.textMuted)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 32)
             } else {
-                ForEach(model.visibleRows) { row in
+                ForEach(model.visibleRows(followupsEnabled: followupsEnabled)) { row in
                     RequestCardView(
                         row: row,
                         theme: theme,
@@ -97,6 +88,35 @@ struct RequestsListView: View {
             }
         }
     }
+
+    private var emptyMessage: String {
+        if followupsEnabled && model.needsAttentionOnly && model.mineOnly {
+            return "Nothing needs your reply right now."
+        }
+        if followupsEnabled && model.needsAttentionOnly {
+            return "Nothing needs a reply right now. Uncheck Needs reply to see all."
+        }
+        if model.mineOnly {
+            return "No requests from you yet."
+        }
+        return "No requests yet. Tap the button on any screen to file one."
+    }
+
+    private func filterToggle(
+        label: String,
+        isOn: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: isOn ? "checkmark.square.fill" : "square")
+                    .foregroundColor(isOn ? theme.accent : theme.textMuted)
+                Text(label)
+                    .font(.system(size: 13))
+                    .foregroundColor(theme.text)
+            }
+        }
+    }
 }
 
 @MainActor
@@ -105,6 +125,7 @@ final class RequestsListModel: ObservableObject {
     @Published var refreshing = false
     @Published var currentRequester: String?
     @Published var mineOnly = false
+    @Published var needsAttentionOnly = true
 
     private let overlay: OverlayModel
 
@@ -116,9 +137,16 @@ final class RequestsListModel: ObservableObject {
         self.overlay = overlay
     }
 
-    var visibleRows: [SnagRequestRow] {
-        guard mineOnly, let currentRequester else { return rows }
-        return rows.filter { $0.requester == currentRequester }
+    func visibleRows(followupsEnabled: Bool) -> [SnagRequestRow] {
+        rows.filter { row in
+            if followupsEnabled && needsAttentionOnly && row.status != .needsInput {
+                return false
+            }
+            if mineOnly, let currentRequester, row.requester != currentRequester {
+                return false
+            }
+            return true
+        }
     }
 
     func load() async {
@@ -146,6 +174,10 @@ struct RequestCardView: View {
         followupsEnabled && row.status == .needsInput
     }
 
+    private var summaryText: String? {
+        RequesterQuestions.displaySummary(status: row.status, summary: row.summary)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
@@ -166,8 +198,8 @@ struct RequestCardView: View {
                     .font(.system(size: 12))
                     .foregroundColor(theme.textMuted)
             }
-            if let summary = row.summary {
-                Text(summary)
+            if let summaryText {
+                Text(summaryText)
                     .font(.system(size: 12))
                     .foregroundColor(theme.textMuted)
             }

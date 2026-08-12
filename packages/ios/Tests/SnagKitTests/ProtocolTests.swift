@@ -92,4 +92,28 @@ final class ProtocolTests: XCTestCase {
         XCTAssertNotNil(SnagDates.parse("2026-07-24T14:20:33Z"))
         XCTAssertNil(SnagDates.parse("not a date"))
     }
+
+    func testExtractsRequesterQuestionsSection() {
+        let summary = """
+        Plan text above
+        ## Questions for requester
+        - Which shade of blue?
+        - Keep it on home only?
+
+        ## Notes for developers
+        - Check ThemeProvider
+        """
+        XCTAssertEqual(
+            RequesterQuestions.extractSection(from: summary),
+            "- Which shade of blue?\n- Keep it on home only?"
+        )
+        XCTAssertEqual(
+            RequesterQuestions.displaySummary(status: .needsInput, summary: summary),
+            "- Which shade of blue?\n- Keep it on home only?"
+        )
+        XCTAssertEqual(
+            RequesterQuestions.displaySummary(status: .finished, summary: summary),
+            summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+    }
 }

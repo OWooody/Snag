@@ -100,7 +100,7 @@ export function SnagOverlay() {
   }, [initialized, refreshBadge]);
 
   useEffect(() => {
-    if (!enabled || !followupsEnabled || panelVisible) return;
+    if (!enabled || !followupsEnabled) return;
     const tick = () => {
       if (document.hidden) return;
       void refreshBadge();
@@ -114,7 +114,7 @@ export function SnagOverlay() {
       window.clearInterval(id);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [enabled, followupsEnabled, panelVisible, refreshBadge]);
+  }, [enabled, followupsEnabled, refreshBadge]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -148,6 +148,7 @@ export function SnagOverlay() {
           theme={theme}
           initialTab={initialTab}
           followupsEnabled={followupsEnabled}
+          badgeCount={badgeCount}
           onClose={() => {
             setPanelVisible(false);
             void refreshBadge();

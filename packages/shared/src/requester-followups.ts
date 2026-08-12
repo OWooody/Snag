@@ -15,18 +15,29 @@ export function resolveEffectiveRequesterFollowups(
 }
 
 /**
- * True when the agent summary includes a non-empty "## Questions for requester" section.
+ * Body of the "## Questions for requester" section (heading stripped), or null
+ * when the heading is missing / the section is empty.
  */
-export function summaryHasRequesterQuestions(summary: string | null | undefined): boolean {
-  if (!summary) return false;
+export function extractRequesterQuestionsSection(
+  summary: string | null | undefined,
+): string | null {
+  if (!summary) return null;
   const headingIndex = summary.indexOf(REQUESTER_QUESTIONS_HEADING);
-  if (headingIndex < 0) return false;
+  if (headingIndex < 0) return null;
 
   const afterHeading = summary.slice(headingIndex + REQUESTER_QUESTIONS_HEADING.length);
   const nextHeadingMatch = afterHeading.match(/\n##\s/);
   const sectionBody = nextHeadingMatch
     ? afterHeading.slice(0, nextHeadingMatch.index)
     : afterHeading;
+  const trimmed = sectionBody.trim();
+  if (!trimmed || trimmed.replace(/[\s#*-]/g, "").length === 0) return null;
+  return trimmed;
+}
 
-  return sectionBody.replace(/[\s#*-]/g, "").length > 0;
+/**
+ * True when the agent summary includes a non-empty "## Questions for requester" section.
+ */
+export function summaryHasRequesterQuestions(summary: string | null | undefined): boolean {
+  return extractRequesterQuestionsSection(summary) != null;
 }

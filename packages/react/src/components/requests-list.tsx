@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { fetchRelayState, replyToSnagRequest } from "../api";
 import { resolveRequester } from "../config";
 import type { SnagRequestRow, SnagRequestStatus } from "../protocol";
+import { displaySummaryForRequest } from "../requester-questions";
 import { GLASS_SURFACE } from "../sheet";
 import type { SnagTheme } from "../theme";
 
@@ -25,6 +26,8 @@ export function RequestsList({
   const [refreshing, setRefreshing] = useState(false);
   const [currentRequester, setCurrentRequester] = useState<string | null>(null);
   const [mineOnly, setMineOnly] = useState(false);
+  // Default on: show needs_input first; user can uncheck to see all.
+  const [needsAttentionOnly, setNeedsAttentionOnly] = useState(true);
 
   const load = useCallback(async () => {
     setRefreshing(true);
@@ -57,10 +60,30 @@ export function RequestsList({
     };
   }, [load]);
 
-  const visibleRows =
-    mineOnly && currentRequester
-      ? rows.filter((row) => row.requester === currentRequester)
-      : rows;
+  const visibleRows = rows.filter((row) => {
+    if (
+      followupsEnabled &&
+      needsAttentionOnly &&
+      row.status !== "needs_input"
+    ) {
+      return false;
+    }
+    if (mineOnly && currentRequester && row.requester !== currentRequester) {
+      return false;
+    }
+    return true;
+  });
+
+  const emptyMessage = () => {
+    if (followupsEnabled && needsAttentionOnly && mineOnly) {
+      return "Nothing needs your reply right now.";
+    }
+    if (followupsEnabled && needsAttentionOnly) {
+      return "Nothing needs a reply right now. Uncheck Needs reply to see all.";
+    }
+    if (mineOnly) return "No requests from you yet.";
+    return "No requests yet. Tap the button on any screen to file one.";
+  };
 
   return (
     <div>
@@ -71,8 +94,29 @@ export function RequestsList({
           alignItems: "center",
           gap: 12,
           marginBottom: 12,
+          flexWrap: "wrap",
         }}
       >
+        {followupsEnabled ? (
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: 13,
+              color: theme.text,
+              cursor: "pointer",
+              userSelect: "none",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={needsAttentionOnly}
+              onChange={(event) => setNeedsAttentionOnly(event.target.checked)}
+            />
+            Needs reply
+          </label>
+        ) : null}
         {currentRequester ? (
           <label
             style={{
@@ -111,9 +155,7 @@ export function RequestsList({
       </div>
       {visibleRows.length === 0 ? (
         <p style={{ textAlign: "center", color: theme.textMuted, fontSize: 14, marginTop: 32 }}>
-          {mineOnly
-            ? "No requests from you yet."
-            : "No requests yet. Tap the button on any screen to file one."}
+          {emptyMessage()}
         </p>
       ) : (
         visibleRows.map((row) => (
@@ -146,6 +188,7 @@ function RequestCard({
   const [sending, setSending] = useState(false);
   const [replyError, setReplyError] = useState<string | null>(null);
   const canReply = followupsEnabled && row.status === "needs_input";
+  const summaryText = displaySummaryForRequest(row.status, row.summary);
 
   const submitReply = async () => {
     const trimmed = reply.trim();
@@ -205,7 +248,7 @@ function RequestCard({
           {row.requester}
         </p>
       ) : null}
-      {row.summary ? (
+      {summaryText ? (
         <p
           style={{
             fontSize: 12,
@@ -215,7 +258,7 @@ function RequestCard({
             whiteSpace: "pre-wrap",
           }}
         >
-          {row.summary}
+          {summaryText}
         </p>
       ) : null}
       {row.error ? (

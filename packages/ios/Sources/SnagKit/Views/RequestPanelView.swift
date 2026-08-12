@@ -73,14 +73,18 @@ struct RequestPanelView: View {
 
     private var tabs: some View {
         HStack(spacing: 8) {
-            tabButton(label: "New request", tab: .new)
-            tabButton(label: "Requests", tab: .list)
+            tabButton(label: "New request", tab: .new, badgeCount: 0)
+            tabButton(
+                label: "Requests",
+                tab: .list,
+                badgeCount: overlay.badgeCount
+            )
         }
         .padding(.horizontal, 20)
         .padding(.bottom, 4)
     }
 
-    private func tabButton(label: String, tab: PanelModel.Tab) -> some View {
+    private func tabButton(label: String, tab: PanelModel.Tab, badgeCount: Int) -> some View {
         let active = model.tab == tab
         return Button {
             withAnimation(.easeInOut(duration: 0.2)) {
@@ -96,7 +100,23 @@ struct RequestPanelView: View {
                         .fill(active ? overlay.theme.accent : overlay.theme.surface)
                 )
                 .foregroundColor(active ? .white : overlay.theme.text)
+                .overlay(alignment: .topTrailing) {
+                    if badgeCount > 0 {
+                        Text(badgeCount > 9 ? "9+" : "\(badgeCount)")
+                            .font(.system(size: 11, weight: .heavy))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 5)
+                            .frame(minWidth: 18, minHeight: 18)
+                            .background(Capsule().fill(overlay.theme.danger))
+                            .offset(x: 6, y: -6)
+                    }
+                }
         }
+        .accessibilityLabel(
+            badgeCount > 0
+                ? "\(label). \(badgeCount) awaiting your reply"
+                : label
+        )
     }
 
     private var composeBody: some View {

@@ -6,12 +6,17 @@
 
 export const REQUESTER_QUESTIONS_HEADING = "## Questions for requester";
 
-export function summaryHasRequesterQuestions(
+/**
+ * Body of the "## Questions for requester" section (heading stripped), or null
+ * when the heading is missing / the section is empty.
+ * Mirrored in packages/shared/src/requester-followups.ts.
+ */
+export function extractRequesterQuestionsSection(
   summary: string | null | undefined,
-): boolean {
-  if (!summary) return false;
+): string | null {
+  if (!summary) return null;
   const headingIndex = summary.indexOf(REQUESTER_QUESTIONS_HEADING);
-  if (headingIndex < 0) return false;
+  if (headingIndex < 0) return null;
 
   const afterHeading = summary.slice(
     headingIndex + REQUESTER_QUESTIONS_HEADING.length,
@@ -20,8 +25,15 @@ export function summaryHasRequesterQuestions(
   const sectionBody = nextHeadingMatch
     ? afterHeading.slice(0, nextHeadingMatch.index)
     : afterHeading;
+  const trimmed = sectionBody.trim();
+  if (!trimmed || trimmed.replace(/[\s#*-]/g, "").length === 0) return null;
+  return trimmed;
+}
 
-  return sectionBody.replace(/[\s#*-]/g, "").length > 0;
+export function summaryHasRequesterQuestions(
+  summary: string | null | undefined,
+): boolean {
+  return extractRequesterQuestionsSection(summary) != null;
 }
 
 export type TerminalRequestStatus = "finished" | "needs_input" | "error";

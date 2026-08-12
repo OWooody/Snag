@@ -31,6 +31,8 @@ interface RequestPanelProps {
   onClose: () => void;
   initialTab?: Tab;
   followupsEnabled?: boolean;
+  /** Pending needs_input count for the Requests tab badge. */
+  badgeCount?: number;
 }
 
 export function RequestPanel({
@@ -39,6 +41,7 @@ export function RequestPanel({
   onClose,
   initialTab = "new",
   followupsEnabled = false,
+  badgeCount = 0,
 }: RequestPanelProps) {
   const [tab, setTab] = useState<Tab>(initialTab);
   const [phase, setPhase] = useState<Phase>("editing");
@@ -172,6 +175,7 @@ export function RequestPanel({
             active={tab === "list"}
             label="Requests"
             theme={theme}
+            badgeCount={badgeCount}
             onClick={() => setTab("list")}
           />
         </div>
@@ -452,17 +456,24 @@ function TabButton({
   label,
   theme,
   onClick,
+  badgeCount = 0,
 }: {
   active: boolean;
   label: string;
   theme: SnagTheme;
   onClick: () => void;
+  badgeCount?: number;
 }) {
+  const badgeLabel = badgeCount > 9 ? "9+" : String(badgeCount);
   return (
     <button
       type="button"
       onClick={onClick}
+      aria-label={
+        badgeCount > 0 ? `${label}. ${badgeCount} awaiting your reply` : label
+      }
       style={{
+        position: "relative",
         flex: 1,
         padding: "10px 12px",
         borderRadius: 10,
@@ -475,6 +486,29 @@ function TabButton({
       }}
     >
       {label}
+      {badgeCount > 0 ? (
+        <span
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            top: -6,
+            right: -4,
+            minWidth: 18,
+            height: 18,
+            padding: "0 5px",
+            borderRadius: 9,
+            background: theme.danger,
+            color: "#fff",
+            fontSize: 11,
+            fontWeight: 800,
+            lineHeight: "18px",
+            textAlign: "center",
+            boxSizing: "border-box",
+          }}
+        >
+          {badgeLabel}
+        </span>
+      ) : null}
     </button>
   );
 }
