@@ -169,15 +169,18 @@ export function LightMarkdown({
             key={blockIndex}
             style={{
               ...base,
-              paddingLeft: 18,
+              // Keep list markers — `display: flex` on ol/ul hides numbering.
+              paddingLeft: 22,
               margin: 0,
-              display: "flex",
-              flexDirection: "column",
-              gap: 4,
+              listStyleType: block.type === "ol" ? "decimal" : "disc",
+              listStylePosition: "outside",
             }}
           >
             {block.items.map((item, itemIndex) => (
-              <li key={itemIndex} style={{ margin: 0 }}>
+              <li
+                key={itemIndex}
+                style={{ margin: 0, marginBottom: itemIndex < block.items.length - 1 ? 4 : 0 }}
+              >
                 {renderInline(item, `l${blockIndex}-${itemIndex}`)}
               </li>
             ))}
