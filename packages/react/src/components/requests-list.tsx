@@ -4,6 +4,7 @@ import { fetchRelayState, replyToSnagRequest } from "../api";
 import { resolveRequester } from "../config";
 import type { SnagRequestRow, SnagRequestStatus } from "../protocol";
 import { displaySummaryForRequest } from "../requester-questions";
+import { LightMarkdown } from "../light-markdown";
 import { GLASS_SURFACE } from "../sheet";
 import type { SnagTheme } from "../theme";
 
@@ -25,7 +26,7 @@ export function RequestsList({
   const [rows, setRows] = useState<SnagRequestRow[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [currentRequester, setCurrentRequester] = useState<string | null>(null);
-  const [mineOnly, setMineOnly] = useState(false);
+  const [mineOnly, setMineOnly] = useState(true);
   // Default on: show needs_input first; user can uncheck to see all.
   const [needsAttentionOnly, setNeedsAttentionOnly] = useState(true);
 
@@ -249,17 +250,9 @@ function RequestCard({
         </p>
       ) : null}
       {summaryText ? (
-        <p
-          style={{
-            fontSize: 12,
-            color: theme.textMuted,
-            marginTop: 6,
-            marginBottom: 0,
-            whiteSpace: "pre-wrap",
-          }}
-        >
-          {summaryText}
-        </p>
+        <div style={{ marginTop: 6 }}>
+          <LightMarkdown text={summaryText} color={theme.textMuted} fontSize={12} />
+        </div>
       ) : null}
       {row.error ? (
         <p style={{ fontSize: 12, color: theme.danger, marginTop: 6, marginBottom: 0 }}>

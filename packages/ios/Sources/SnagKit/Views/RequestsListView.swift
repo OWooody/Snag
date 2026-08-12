@@ -124,7 +124,7 @@ final class RequestsListModel: ObservableObject {
     @Published var rows: [SnagRequestRow] = []
     @Published var refreshing = false
     @Published var currentRequester: String?
-    @Published var mineOnly = false
+    @Published var mineOnly = true
     @Published var needsAttentionOnly = true
 
     private let overlay: OverlayModel
@@ -199,9 +199,7 @@ struct RequestCardView: View {
                     .foregroundColor(theme.textMuted)
             }
             if let summaryText {
-                Text(summaryText)
-                    .font(.system(size: 12))
-                    .foregroundColor(theme.textMuted)
+                SummaryMarkdownView(text: summaryText, color: theme.textMuted)
             }
             if let error = row.error {
                 Text(error)
@@ -305,6 +303,31 @@ struct RequestCardView: View {
             replyError = (error as? SnagRelayError)?.message ?? "Reply failed"
         }
         sending = false
+    }
+}
+
+/// Renders agent summaries with Markdown (bold/lists); falls back to plain text.
+private struct SummaryMarkdownView: View {
+    let text: String
+    let color: Color
+
+    var body: some View {
+        Group {
+            if let attributed = try? AttributedString(
+                markdown: text,
+                options: AttributedString.MarkdownParsingOptions(
+                    interpretedSyntax: .full
+                )
+            ) {
+                Text(attributed)
+            } else {
+                Text(text)
+            }
+        }
+        .font(.system(size: 12))
+        .foregroundColor(color)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
     }
 }
 #endif

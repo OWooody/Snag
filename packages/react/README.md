@@ -93,7 +93,7 @@ export function App() {
 | Option | What it does |
 |--------|----------------|
 | `getContext` | Attach route, version, environment to every request (merged on top of auto-captured `snag_auto`) |
-| `getRequester` | Display id for who filed the request — shown in the list; enables a **Mine** filter. When follow-ups are on, **Needs reply** defaults to showing only `needs_input` requests |
+| `getRequester` | Display id for who filed the request — shown in the list; **Mine** defaults on when set. When follow-ups are on, **Needs reply** also defaults on (only `needs_input`) |
 | `getAuthToken` | Send `Authorization: Bearer` when the user is logged in |
 | `theme` | Override button/panel colors |
 | `debug: true` | Log probe/request details to the console |

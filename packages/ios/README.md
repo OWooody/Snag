@@ -90,7 +90,7 @@ No view code needed — SnagKit attaches its own passthrough window above your a
 | Option | What it does |
 |--------|----------------|
 | `context` | Async closure attaching environment, feature flags, etc. to every request (merged on top of auto-captured `snag_auto`: app version, device, OS, screen, locale, current view controller) |
-| `requester` | Async closure returning a display id for who filed the request — shown in the list; enables a **Mine** filter. When follow-ups are on, **Needs reply** defaults to showing only `needs_input` requests |
+| `requester` | Async closure returning a display id for who filed the request — shown in the list; **Mine** defaults on when set. When follow-ups are on, **Needs reply** also defaults on (only `needs_input`) |
 | `theme` | Override button/panel colors (`SnagTheme`) |
 | `debug: true` | Log probe/request details to the console |
 
