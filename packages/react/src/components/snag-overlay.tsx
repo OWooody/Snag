@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { fetchRelayState } from "../api";
@@ -7,6 +7,7 @@ import {
   isDebugEnabled,
   onSnagInit,
   resolveContext,
+  resolveRequester,
   resolveTheme,
   startConsoleErrorBuffer,
 } from "../config";
@@ -14,6 +15,8 @@ import type { SnagScreenshot } from "../protocol";
 import { captureScreenshot } from "../screenshot";
 import { FloatingButton } from "./floating-button";
 import { RequestPanel } from "./request-panel";
+
+const BADGE_POLL_MS = 30_000;
 
 /**
  * Mount once at the app root. Renders nothing until `initSnag` has run AND
@@ -23,8 +26,11 @@ import { RequestPanel } from "./request-panel";
 export function SnagOverlay() {
   const [initialized, setInitialized] = useState(() => getSnagConfig() != null);
   const [enabled, setEnabled] = useState(false);
+  const [followupsEnabled, setFollowupsEnabled] = useState(false);
+  const [badgeCount, setBadgeCount] = useState(0);
   const [environmentLabel, setEnvironmentLabel] = useState("");
   const [panelVisible, setPanelVisible] = useState(false);
+  const [initialTab, setInitialTab] = useState<"new" | "list">("new");
   const [screenshot, setScreenshot] = useState<SnagScreenshot | null>(null);
   const [mounted, setMounted] = useState(false);
 
@@ -36,6 +42,33 @@ export function SnagOverlay() {
     if (initialized) return;
     return onSnagInit(() => setInitialized(true));
   }, [initialized]);
+
+  const refreshBadge = useCallback(async () => {
+    const [state, requester] = await Promise.all([
+      fetchRelayState(),
+      resolveRequester(),
+    ]);
+    if (!state.enabled) {
+      setEnabled(false);
+      setBadgeCount(0);
+      setFollowupsEnabled(false);
+      return;
+    }
+    setEnabled(true);
+    const followups = state.requester_followups_enabled === true;
+    setFollowupsEnabled(followups);
+    if (!followups) {
+      setBadgeCount(0);
+      return;
+    }
+    const rows = state.requests ?? [];
+    const count = rows.filter((row) => {
+      if (row.status !== "needs_input") return false;
+      if (requester && row.requester) return row.requester === requester;
+      return true;
+    }).length;
+    setBadgeCount(count);
+  }, []);
 
   useEffect(() => {
     if (!initialized) return;
@@ -55,14 +88,33 @@ export function SnagOverlay() {
         typeof context.environment === "string" ? context.environment : "dev",
       );
       setEnabled(true);
+      setFollowupsEnabled(state.requester_followups_enabled === true);
       if (isDebugEnabled()) {
         console.log("[Snag] overlay enabled");
       }
+      if (!cancelled) await refreshBadge();
     })();
     return () => {
       cancelled = true;
     };
-  }, [initialized]);
+  }, [initialized, refreshBadge]);
+
+  useEffect(() => {
+    if (!enabled || !followupsEnabled || panelVisible) return;
+    const tick = () => {
+      if (document.hidden) return;
+      void refreshBadge();
+    };
+    const id = window.setInterval(tick, BADGE_POLL_MS);
+    const onVisibility = () => {
+      if (!document.hidden) void refreshBadge();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [enabled, followupsEnabled, panelVisible, refreshBadge]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -73,7 +125,8 @@ export function SnagOverlay() {
 
   const theme = resolveTheme();
 
-  const openPanel = async () => {
+  const openPanel = async (tab: "new" | "list" = "new") => {
+    setInitialTab(tab);
     // Capture BEFORE the panel mounts so it never appears in the screenshot.
     setScreenshot(await captureScreenshot());
     setPanelVisible(true);
@@ -85,14 +138,20 @@ export function SnagOverlay() {
         <FloatingButton
           environmentLabel={environmentLabel}
           theme={theme}
-          onPress={() => void openPanel()}
+          badgeCount={badgeCount}
+          onPress={() => void openPanel(badgeCount > 0 ? "list" : "new")}
         />
       ) : null}
       {panelVisible ? (
         <RequestPanel
           screenshot={screenshot}
           theme={theme}
-          onClose={() => setPanelVisible(false)}
+          initialTab={initialTab}
+          followupsEnabled={followupsEnabled}
+          onClose={() => {
+            setPanelVisible(false);
+            void refreshBadge();
+          }}
         />
       ) : null}
     </div>,

@@ -4,8 +4,9 @@
  * Public (no JWT verification): host apps may be reachable logged-out.
  * Security boundary = project key resolution + per-project rate limits + origin allowlist.
  *
- * GET  → { enabled, requests? } — SDK visibility probe + request list
- * POST → validate + rate-limit → insert snag_requests row → launch agent
+ * GET  → { enabled, requester_followups_enabled, requests? }
+ * POST create → { prompt, context, … } — insert + launch agent
+ * POST reply  → { request_id, reply } — follow-up on existing agent
  *
  * Never log prompt or screenshot contents — log entity ids and reasons only.
  */
@@ -20,6 +21,10 @@ import {
 } from "../_shared/agent_provider.ts";
 import { decryptSecret, getEncryptionSecret } from "../_shared/crypto.ts";
 import { checkOriginAllowlist, corsAllowOrigin, corsPreflightAllowOrigin } from "../_shared/origins.ts";
+import {
+  mapTerminalRequestStatus,
+  resolveEffectiveRequesterFollowups,
+} from "../_shared/requester_questions.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 
 const LIST_LIMIT = 20;
@@ -78,6 +83,11 @@ const createSchema = z.object({
   locale: z.string().max(10).optional(),
 });
 
+const replySchema = z.object({
+  request_id: z.string().uuid(),
+  reply: z.string().trim().min(1).max(2000),
+});
+
 interface ProjectRow {
   id: string;
   name: string;
@@ -94,7 +104,11 @@ interface ProjectRow {
   daily_limit: number;
   allowed_origins: string[];
   agent_mode: "plan_only" | "execute" | null;
-  snag_organizations: { agent_mode: "plan_only" | "execute" } | null;
+  requester_followups_enabled: boolean | null;
+  snag_organizations: {
+    agent_mode: "plan_only" | "execute";
+    requester_followups_enabled: boolean;
+  } | null;
 }
 
 type AgentMode = "plan_only" | "execute";
@@ -102,6 +116,13 @@ type AgentMode = "plan_only" | "execute";
 function resolveEffectiveAgentMode(project: ProjectRow): AgentMode {
   const orgMode = project.snag_organizations?.agent_mode;
   return project.agent_mode ?? orgMode ?? "plan_only";
+}
+
+function projectFollowupsEnabled(project: ProjectRow): boolean {
+  return resolveEffectiveRequesterFollowups(
+    project.requester_followups_enabled,
+    project.snag_organizations?.requester_followups_enabled,
+  );
 }
 
 function json(
@@ -159,13 +180,46 @@ Deno.serve(async (req) => {
       getEncryptionSecret(),
     );
     const provider = cursorProvider({ apiKey: cursorApiKey });
+    const followupsEnabled = projectFollowupsEnabled(project);
 
     if (req.method === "GET") {
-      const requests = await listRequests(serviceClient, provider, project.id);
-      return json({ enabled: true, requests }, 200, corsHeaders);
+      const requests = await listRequests(
+        serviceClient,
+        provider,
+        project.id,
+        followupsEnabled,
+      );
+      return json(
+        {
+          enabled: true,
+          requester_followups_enabled: followupsEnabled,
+          requests,
+        },
+        200,
+        corsHeaders,
+      );
     }
 
-    return await handleCreate(req, serviceClient, provider, project, corsHeaders);
+    const rawBody = await req.json();
+    if (rawBody && typeof rawBody === "object" && "request_id" in rawBody) {
+      return await handleReply(
+        req,
+        replySchema.parse(rawBody),
+        serviceClient,
+        provider,
+        project,
+        corsHeaders,
+      );
+    }
+
+    return await handleCreate(
+      req,
+      createSchema.parse(rawBody),
+      serviceClient,
+      provider,
+      project,
+      corsHeaders,
+    );
   } catch (error) {
     if (error instanceof z.ZodError) {
       console.warn("snag-relay rejected: validation");
@@ -183,7 +237,7 @@ async function resolveProject(
   const { data, error } = await serviceClient
     .from("snag_projects")
     .select(
-      "id, name, slug, publishable_key, repo_url, repo_ref, model, cursor_api_key_encrypted, prompt_instructions, enabled, per_ip_hourly_limit, hourly_limit, daily_limit, allowed_origins, agent_mode, snag_organizations(agent_mode)",
+      "id, name, slug, publishable_key, repo_url, repo_ref, model, cursor_api_key_encrypted, prompt_instructions, enabled, per_ip_hourly_limit, hourly_limit, daily_limit, allowed_origins, agent_mode, requester_followups_enabled, snag_organizations(agent_mode, requester_followups_enabled)",
     )
     .eq("publishable_key", publishableKey)
     .eq("enabled", true)
@@ -198,13 +252,12 @@ async function resolveProject(
 
 async function handleCreate(
   req: Request,
+  body: z.infer<typeof createSchema>,
   serviceClient: SupabaseClient,
   provider: AgentProvider,
   project: ProjectRow,
   corsHeaders: Record<string, string>,
 ): Promise<Response> {
-  const body = createSchema.parse(await req.json());
-
   if (JSON.stringify(body.context).length > MAX_CONTEXT_JSON_LENGTH) {
     console.warn("snag-relay rejected: context_too_large");
     return json({ error: "Context too large" }, 422, corsHeaders);
@@ -220,6 +273,7 @@ async function handleCreate(
   }
 
   const requester = await resolveOptionalRequester(req);
+  const followupsEnabled = projectFollowupsEnabled(project);
 
   const { data: row, error: insertError } = await serviceClient
     .from("snag_requests")
@@ -260,6 +314,7 @@ async function handleCreate(
         body.locale,
         project.prompt_instructions,
         agentMode,
+        followupsEnabled,
       ),
       images,
       repository: project.repo_url,
@@ -297,6 +352,86 @@ async function handleCreate(
       .eq("id", row.id);
     return json({ error: message }, 502, corsHeaders);
   }
+}
+
+async function handleReply(
+  req: Request,
+  body: z.infer<typeof replySchema>,
+  serviceClient: SupabaseClient,
+  provider: AgentProvider,
+  project: ProjectRow,
+  corsHeaders: Record<string, string>,
+): Promise<Response> {
+  if (!projectFollowupsEnabled(project)) {
+    return json({ error: "Requester follow-ups are disabled" }, 403, corsHeaders);
+  }
+
+  const ip =
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+
+  const limited = await checkRateLimits(serviceClient, project, ip);
+  if (limited) {
+    console.warn(`snag-relay reply rejected: ${limited} project=${project.id}`);
+    return json({ error: "Rate limited" }, 429, corsHeaders);
+  }
+
+  const { data: row, error: loadError } = await serviceClient
+    .from("snag_requests")
+    .select("id, agent_id, status, requester, requester_ip")
+    .eq("id", body.request_id)
+    .eq("project_id", project.id)
+    .maybeSingle();
+
+  if (loadError || !row) {
+    return json({ error: "Request not found" }, 404, corsHeaders);
+  }
+
+  if (row.status !== "needs_input") {
+    return json({ error: "Request is not waiting for a reply" }, 409, corsHeaders);
+  }
+
+  if (!row.agent_id) {
+    return json({ error: "Request has no agent" }, 409, corsHeaders);
+  }
+
+  const headerRequester = await resolveOptionalRequester(req);
+  if (row.requester) {
+    if (!headerRequester || headerRequester !== row.requester) {
+      return json({ error: "Forbidden" }, 403, corsHeaders);
+    }
+  } else if (row.requester_ip && row.requester_ip !== ip) {
+    return json({ error: "Forbidden" }, 403, corsHeaders);
+  }
+
+  const wrappedReply = [
+    "The original requester answered your open questions via Snag:",
+    "",
+    body.reply,
+    "",
+    "Continue with this clarification.",
+    'If you are still blocked on product/UX/scope decisions, list remaining questions under "## Questions for requester" at the top of your summary.',
+    'Put technical notes under "## Notes for developers".',
+    "If no further requester questions remain, omit the requester heading.",
+  ].join("\n");
+
+  try {
+    await provider.followUp(row.agent_id as string, wrappedReply);
+  } catch (error) {
+    console.error("snag-relay follow-up failed:", error);
+    const message = userFacingLaunchError(error);
+    return json({ error: message }, 502, corsHeaders);
+  }
+
+  await serviceClient
+    .from("snag_requests")
+    .update({
+      status: "running",
+      error: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", row.id);
+
+  return json({ id: row.id, status: "running" }, 200, corsHeaders);
 }
 
 async function checkRateLimits(
@@ -352,6 +487,7 @@ async function listRequests(
   serviceClient: SupabaseClient,
   provider: AgentProvider,
   projectId: string,
+  followupsEnabled: boolean,
 ) {
   const { data: rows, error } = await serviceClient
     .from("snag_requests")
@@ -380,7 +516,12 @@ async function listRequests(
       updated_at: new Date().toISOString(),
     };
     if (task) {
-      update.status = task.status === "queued" ? "running" : task.status;
+      const summary = task.summary ?? (row.summary as string | null);
+      update.status = mapTerminalRequestStatus(
+        task.status,
+        summary,
+        followupsEnabled,
+      );
       if (task.url) update.agent_url = task.url;
       if (task.branchName) update.branch_name = task.branchName;
       if (task.prUrl) update.pr_url = task.prUrl;
@@ -416,6 +557,7 @@ function buildAgentPrompt(
   locale: string | undefined,
   promptInstructions: string,
   agentMode: AgentMode,
+  followupsEnabled: boolean,
 ): string {
   const sections = [
     "An internal tester filed an in-app change request via Snag while using a development/staging build. A screenshot of the exact screen is attached when available.",
@@ -442,16 +584,42 @@ function buildAgentPrompt(
       "   - Files to change (with paths)",
       "   - Specific edits per file",
       "   - Risks and edge cases",
+    );
+  } else {
+    sections.push(
+      "1. PLAN FIRST: locate the exact code behind the request and write a short plan (files, edits, risks).",
+      "2. Implement only if the request is small and unambiguous. If it is vague, conflicting, or touches sensitive data, stop after the plan.",
+      "3. Respect existing conventions in the repository.",
+      "4. Keep the change minimal — no drive-by refactors.",
+    );
+  }
+
+  if (followupsEnabled) {
+    sections.push(
+      "",
+      "When listing open questions, separate them in your summary as follows:",
+      "- Put product/UX/scope decisions only the requester can answer FIRST under exactly this heading:",
+      "  ## Questions for requester",
+      "  (copy, intent, which variant, edge-case preference). Omit this heading entirely if there are none.",
+      "- Put technical open questions under:",
+      "  ## Notes for developers",
+      "  (architecture, data model, risks, implementation). Do not put these in the requester section.",
+    );
+    if (agentMode === "plan_only") {
+      sections.push(
+        "3. DO NOT edit files, commit changes, or open a pull request. This tenant is in plan-only mode — the development team will implement manually.",
+        "4. Respect existing conventions when describing the approach.",
+      );
+    }
+  } else if (agentMode === "plan_only") {
+    sections.push(
       "   - Open questions for the developer",
       "3. DO NOT edit files, commit changes, or open a pull request. This tenant is in plan-only mode — the development team will implement manually.",
       "4. Respect existing conventions when describing the approach.",
     );
   } else {
     sections.push(
-      "1. PLAN FIRST: locate the exact code behind the request and write a short plan (files, edits, risks).",
-      "2. Implement only if the request is small and unambiguous. If it is vague, conflicting, or touches sensitive data, stop after the plan and list the open questions in your summary instead.",
-      "3. Respect existing conventions in the repository.",
-      "4. Keep the change minimal — no drive-by refactors.",
+      "If blocked, list open questions for the developer in your summary instead of implementing.",
     );
   }
 

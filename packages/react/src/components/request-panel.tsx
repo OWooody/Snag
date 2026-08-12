@@ -29,10 +29,18 @@ interface RequestPanelProps {
   screenshot: SnagScreenshot | null;
   theme: SnagTheme;
   onClose: () => void;
+  initialTab?: Tab;
+  followupsEnabled?: boolean;
 }
 
-export function RequestPanel({ screenshot, theme, onClose }: RequestPanelProps) {
-  const [tab, setTab] = useState<Tab>("new");
+export function RequestPanel({
+  screenshot,
+  theme,
+  onClose,
+  initialTab = "new",
+  followupsEnabled = false,
+}: RequestPanelProps) {
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [phase, setPhase] = useState<Phase>("editing");
   const [prompt, setPrompt] = useState("");
   const [includeScreenshot, setIncludeScreenshot] = useState(true);
@@ -171,7 +179,11 @@ export function RequestPanel({ screenshot, theme, onClose }: RequestPanelProps) 
         <AnimatedTabBody tab={tab}>
           {(activeTab) =>
             activeTab === "list" ? (
-              <RequestsList theme={theme} refreshKey={listRefreshKey} />
+              <RequestsList
+                theme={theme}
+                refreshKey={listRefreshKey}
+                followupsEnabled={followupsEnabled}
+              />
             ) : phase === "done" ? (
               <div>
                 <p style={{ color: theme.text, fontSize: 15 }}>

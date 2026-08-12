@@ -36,10 +36,13 @@ export async function PATCH(
     updated_at: new Date().toISOString(),
   };
 
-  const { cursor_api_key, agent_mode, ...rest } = parsed.data;
+  const { cursor_api_key, agent_mode, requester_followups_enabled, ...rest } = parsed.data;
   Object.assign(updates, rest);
   if (agent_mode !== undefined) {
     updates.agent_mode = agent_mode;
+  }
+  if (requester_followups_enabled !== undefined) {
+    updates.requester_followups_enabled = requester_followups_enabled;
   }
 
   if (cursor_api_key) {

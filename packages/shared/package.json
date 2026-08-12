@@ -20,7 +20,8 @@
   },
   "scripts": {
     "build": "tsup",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "npm run build && node --test test/requester-followups.test.mjs"
   },
   "dependencies": {
     "zod": "^3.24.1"

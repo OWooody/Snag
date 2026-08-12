@@ -6,6 +6,7 @@ import {
   companyProjectUpdateSchema,
   parseOriginsTextarea,
   resolveEffectiveAgentMode,
+  resolveEffectiveRequesterFollowups,
   type AgentMode,
   type SnagOrganization,
   type SnagProjectSafe,
@@ -17,6 +18,10 @@ import { toast } from "sonner";
 import { z } from "zod";
 import { AgentModeSelect, ProjectAgentModeOverrideSelect } from "@/components/agent-mode-select";
 import { AllowedOriginsField, originsToTextarea } from "@/components/allowed-origins-field";
+import {
+  ProjectRequesterFollowupsOverrideSelect,
+  RequesterFollowupsSwitch,
+} from "@/components/requester-followups-select";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -26,6 +31,7 @@ import { Textarea } from "@/components/ui/textarea";
 
 type ProjectFormValues = z.infer<typeof companyProjectUpdateSchema>;
 type ProjectAgentOverride = AgentMode | "inherit";
+type ProjectFollowupsOverride = boolean | "inherit";
 
 export function SettingsForm({
   project,
@@ -39,6 +45,9 @@ export function SettingsForm({
   const [savingKey, setSavingKey] = useState(false);
   const [orgAgentMode, setOrgAgentMode] = useState<AgentMode>(
     organization?.agent_mode ?? "plan_only",
+  );
+  const [orgFollowupsEnabled, setOrgFollowupsEnabled] = useState(
+    organization?.requester_followups_enabled ?? true,
   );
   const [savingOrg, setSavingOrg] = useState(false);
   const [allowedOriginsText, setAllowedOriginsText] = useState(() =>
@@ -54,16 +63,26 @@ export function SettingsForm({
       prompt_instructions: project.prompt_instructions,
       enabled: project.enabled,
       agent_mode: project.agent_mode,
+      requester_followups_enabled: project.requester_followups_enabled,
     },
   });
 
   const [projectAgentOverride, setProjectAgentOverride] = useState<ProjectAgentOverride>(
     project.agent_mode ?? "inherit",
   );
+  const [projectFollowupsOverride, setProjectFollowupsOverride] =
+    useState<ProjectFollowupsOverride>(
+      typeof project.requester_followups_enabled === "boolean"
+        ? project.requester_followups_enabled
+        : "inherit",
+    );
 
   useEffect(() => {
-    if (organization) setOrgAgentMode(organization.agent_mode);
-  }, [organization?.agent_mode]);
+    if (organization) {
+      setOrgAgentMode(organization.agent_mode);
+      setOrgFollowupsEnabled(organization.requester_followups_enabled);
+    }
+  }, [organization?.agent_mode, organization?.requester_followups_enabled]);
 
   useEffect(() => {
     setAllowedOriginsText(originsToTextarea(project.allowed_origins));
@@ -73,9 +92,21 @@ export function SettingsForm({
     setProjectAgentOverride(project.agent_mode ?? "inherit");
   }, [project.agent_mode]);
 
+  useEffect(() => {
+    setProjectFollowupsOverride(
+      typeof project.requester_followups_enabled === "boolean"
+        ? project.requester_followups_enabled
+        : "inherit",
+    );
+  }, [project.requester_followups_enabled]);
+
   const effectiveMode = resolveEffectiveAgentMode(
     projectAgentOverride === "inherit" ? null : projectAgentOverride,
     orgAgentMode,
+  );
+  const effectiveFollowups = resolveEffectiveRequesterFollowups(
+    projectFollowupsOverride === "inherit" ? null : projectFollowupsOverride,
+    orgFollowupsEnabled,
   );
 
   async function onSubmit(values: ProjectFormValues) {
@@ -85,6 +116,8 @@ export function SettingsForm({
       body: JSON.stringify({
         ...values,
         agent_mode: projectAgentOverride === "inherit" ? null : projectAgentOverride,
+        requester_followups_enabled:
+          projectFollowupsOverride === "inherit" ? null : projectFollowupsOverride,
         allowed_origins: parseOriginsTextarea(allowedOriginsText),
       }),
     });
@@ -106,6 +139,7 @@ export function SettingsForm({
       body: JSON.stringify({
         organization_id: organization.id,
         agent_mode: orgAgentMode,
+        requester_followups_enabled: orgFollowupsEnabled,
       }),
     });
     setSavingOrg(false);
@@ -154,6 +188,11 @@ export function SettingsForm({
               value={orgAgentMode}
               onChange={setOrgAgentMode}
             />
+            <RequesterFollowupsSwitch
+              id="org_requester_followups"
+              checked={orgFollowupsEnabled}
+              onCheckedChange={setOrgFollowupsEnabled}
+            />
             <Button type="button" onClick={saveOrganizationMode} disabled={savingOrg}>
               {savingOrg ? "Saving…" : "Save organization defaults"}
             </Button>
@@ -166,7 +205,12 @@ export function SettingsForm({
           <CardTitle>Project settings</CardTitle>
           <CardDescription>
             Repository and agent configuration for {project.name}. Effective agent mode:{" "}
-            <span className="font-medium text-zinc-900">{AGENT_MODE_LABELS[effectiveMode]}</span>.
+            <span className="font-medium text-zinc-900">{AGENT_MODE_LABELS[effectiveMode]}</span>
+            . Requester follow-ups:{" "}
+            <span className="font-medium text-zinc-900">
+              {effectiveFollowups ? "On" : "Off"}
+            </span>
+            .
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -176,6 +220,12 @@ export function SettingsForm({
               value={projectAgentOverride}
               onChange={setProjectAgentOverride}
               orgDefault={orgAgentMode}
+            />
+            <ProjectRequesterFollowupsOverrideSelect
+              id="project_requester_followups"
+              value={projectFollowupsOverride}
+              onChange={setProjectFollowupsOverride}
+              orgDefault={orgFollowupsEnabled}
             />
             <div className="space-y-2">
               <Label htmlFor="repo_url">Repository URL</Label>

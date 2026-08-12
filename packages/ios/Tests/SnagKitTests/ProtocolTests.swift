@@ -6,6 +6,7 @@ final class ProtocolTests: XCTestCase {
         let json = """
         {
           "enabled": true,
+          "requester_followups_enabled": true,
           "requests": [
             {
               "id": "6f1d9d7e-9b1f-4f7e-8a3c-2f4b8f0f2b11",
@@ -27,12 +28,41 @@ final class ProtocolTests: XCTestCase {
             from: Data(json.utf8)
         )
         XCTAssertTrue(state.enabled)
+        XCTAssertEqual(state.requesterFollowupsEnabled, true)
         let row = try XCTUnwrap(state.requests?.first)
         XCTAssertEqual(row.status, .running)
         XCTAssertEqual(row.agentUrl, "https://cursor.com/agents?id=abc")
         XCTAssertEqual(row.branchName, "cursor/header-blue-01a2")
         XCTAssertNil(row.prUrl)
         XCTAssertEqual(row.requester, "dev@example.com")
+    }
+
+    func testDecodesNeedsInputStatus() throws {
+        let json = """
+        {
+          "enabled": true,
+          "requester_followups_enabled": true,
+          "requests": [
+            {
+              "id": "6f1d9d7e-9b1f-4f7e-8a3c-2f4b8f0f2b11",
+              "prompt": "Make the header blue",
+              "status": "needs_input",
+              "agent_url": null,
+              "branch_name": null,
+              "pr_url": null,
+              "summary": "## Questions for requester\\n- Which blue?",
+              "error": null,
+              "requester": null,
+              "created_at": "2026-07-24T14:20:33.123456+00:00"
+            }
+          ]
+        }
+        """
+        let state = try JSONDecoder().decode(
+            RelayStateResponse.self,
+            from: Data(json.utf8)
+        )
+        XCTAssertEqual(state.requests?.first?.status, .needsInput)
     }
 
     func testDecodesDisabledStateWithoutRequests() throws {

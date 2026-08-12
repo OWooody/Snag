@@ -6,6 +6,8 @@ export type {
   CreateSnagRequestBody,
   CreateSnagRequestResponse,
   RelayStateResponse,
+  ReplySnagRequestBody,
+  ReplySnagRequestResponse,
   SnagRequestRow,
   SnagRequestStatus,
   SnagScreenshot,

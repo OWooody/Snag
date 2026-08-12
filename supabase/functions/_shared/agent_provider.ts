@@ -34,6 +34,11 @@ export interface AgentTask {
 export interface AgentProvider {
   createTask(input: CreateAgentTaskInput): Promise<AgentTask>;
   getStatus(taskId: string): Promise<AgentTask | null>;
+  followUp(
+    taskId: string,
+    prompt: string,
+    images?: AgentImage[],
+  ): Promise<void>;
 }
 
 const CURSOR_API_BASE = "https://api.cursor.com/v0";
@@ -161,6 +166,30 @@ export function cursorProvider(options: { apiKey: string }): AgentProvider {
         console.warn("cursor getStatus failed:", error);
         return null;
       }
+    },
+
+    async followUp(
+      taskId: string,
+      prompt: string,
+      images?: AgentImage[],
+    ): Promise<void> {
+      const payload: Record<string, unknown> = {
+        prompt: {
+          text: prompt,
+          ...(images?.length
+            ? {
+                images: images.map((image) => ({
+                  data: image.base64,
+                  dimension: { width: image.width, height: image.height },
+                })),
+              }
+            : {}),
+        },
+      };
+      await request(`/agents/${encodeURIComponent(taskId)}/followup`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
     },
   };
 }

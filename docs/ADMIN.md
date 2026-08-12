@@ -5,7 +5,7 @@ Web admin for Snag platform operators and company admins.
 ## Prerequisites
 
 - Node.js 18+
-- Supabase project with migrations applied (`00001_snag_core.sql`, `00002_admin_auth.sql`)
+- Supabase project with migrations applied (`00001`–`00005`, including admin auth and requester follow-ups)
 - Same `SNAG_KEY_ENCRYPTION_SECRET` as Edge Functions
 
 ## Local setup
@@ -71,4 +71,5 @@ If the build fails with `Can't resolve '@snag/shared'`, confirm Root Directory i
 - Publishable key rotation is platform-admin only in v1
 - **Allowed origins** — company admins (Settings) and platform admins (tenant edit) manage per-project origin allowlists; **empty list blocks all origins** until configured
 - **Rate limits** — platform admins set per-IP/hourly/daily caps when creating or editing a tenant
+- **Requester follow-ups** — org default (on by default) with optional project override. When on, agents may ask product questions under `## Questions for requester`; requests enter `needs_input` and the in-app bubble shows a badge until the requester replies
 - Impersonation is read-only; start/stop events are written to `snag_audit_log`

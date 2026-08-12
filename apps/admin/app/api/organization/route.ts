@@ -24,10 +24,13 @@ export async function PATCH(request: Request) {
     .from("snag_organizations")
     .update({
       agent_mode: parsed.data.agent_mode,
+      requester_followups_enabled: parsed.data.requester_followups_enabled,
       updated_at: new Date().toISOString(),
     })
     .eq("id", parsed.data.organization_id)
-    .select("id, name, slug, agent_mode, created_at, updated_at")
+    .select(
+      "id, name, slug, agent_mode, requester_followups_enabled, created_at, updated_at",
+    )
     .single();
 
   if (updateError || !data) {
@@ -39,7 +42,7 @@ export async function PATCH(request: Request) {
     action: "organization.update",
     targetType: "snag_organizations",
     targetId: data.id,
-    metadata: { fields: ["agent_mode"] },
+    metadata: { fields: ["agent_mode", "requester_followups_enabled"] },
   });
 
   return NextResponse.json(data);

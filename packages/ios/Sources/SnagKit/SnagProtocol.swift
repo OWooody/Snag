@@ -10,6 +10,7 @@ public enum SnagRequestStatus: String, Codable, Sendable {
     case running
     case finished
     case error
+    case needsInput = "needs_input"
 }
 
 /// JPEG image data, base64-encoded (no data-URI prefix).
@@ -25,7 +26,7 @@ public struct SnagScreenshot: Codable, Equatable, Sendable {
     }
 }
 
-/// Response to `POST <endpoint>`.
+/// Response to `POST <endpoint>` create.
 public struct CreateSnagRequestResponse: Decodable, Sendable {
     public let id: String
     /// Link to the launched agent task, when the provider returns one.
@@ -35,6 +36,12 @@ public struct CreateSnagRequestResponse: Decodable, Sendable {
         case id
         case agentUrl = "agent_url"
     }
+}
+
+/// Response to `POST <endpoint>` reply.
+public struct ReplySnagRequestResponse: Decodable, Sendable {
+    public let id: String
+    public let status: String
 }
 
 public struct SnagRequestRow: Decodable, Identifiable, Sendable {
@@ -69,17 +76,24 @@ public struct SnagRequestRow: Decodable, Identifiable, Sendable {
 /// shows the button.
 public struct RelayStateResponse: Decodable, Sendable {
     public let enabled: Bool
+    public let requesterFollowupsEnabled: Bool?
     public let requests: [SnagRequestRow]?
 
-    public static let disabled = RelayStateResponse(enabled: false, requests: nil)
+    public static let disabled = RelayStateResponse(
+        enabled: false,
+        requesterFollowupsEnabled: nil,
+        requests: nil
+    )
 
-    init(enabled: Bool, requests: [SnagRequestRow]?) {
+    init(enabled: Bool, requesterFollowupsEnabled: Bool?, requests: [SnagRequestRow]?) {
         self.enabled = enabled
+        self.requesterFollowupsEnabled = requesterFollowupsEnabled
         self.requests = requests
     }
 
     enum CodingKeys: String, CodingKey {
         case enabled
+        case requesterFollowupsEnabled = "requester_followups_enabled"
         case requests
     }
 }

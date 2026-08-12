@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { AgentModeSelect } from "@/components/agent-mode-select";
 import { AllowedOriginsField, DEFAULT_ORIGINS_TEXTAREA } from "@/components/allowed-origins-field";
+import { RequesterFollowupsSwitch } from "@/components/requester-followups-select";
 
 type FormValues = z.infer<typeof createTenantSchema>;
 
@@ -36,6 +37,7 @@ export function CreateTenantForm() {
       hourly_limit: 10,
       daily_limit: 30,
       agent_mode: "plan_only",
+      requester_followups_enabled: true,
     },
   });
 
@@ -113,6 +115,15 @@ export function CreateTenantForm() {
               id="create_tenant_agent_mode"
               value={form.watch("agent_mode")}
               onChange={(mode) => form.setValue("agent_mode", mode)}
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <RequesterFollowupsSwitch
+              id="create_tenant_requester_followups"
+              checked={form.watch("requester_followups_enabled")}
+              onCheckedChange={(value) =>
+                form.setValue("requester_followups_enabled", value)
+              }
             />
           </div>
           <div className="space-y-2">

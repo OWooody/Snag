@@ -30,6 +30,7 @@ export async function PATCH(
       ...parsed.data,
       model: parsed.data.model ?? null,
       agent_mode: parsed.data.agent_mode ?? null,
+      requester_followups_enabled: parsed.data.requester_followups_enabled ?? null,
       updated_at: new Date().toISOString(),
     })
     .eq("slug", slug)

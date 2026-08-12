@@ -1,6 +1,11 @@
 import type { AgentMode } from "./agent-mode";
 
-export type SnagRequestStatus = "queued" | "running" | "finished" | "error";
+export type SnagRequestStatus =
+  | "queued"
+  | "running"
+  | "finished"
+  | "error"
+  | "needs_input";
 
 export type OrgMemberRole = "owner" | "admin" | "viewer";
 
@@ -21,6 +26,7 @@ export interface SnagProjectSafe {
   allowed_origins: string[];
   organization_id: string | null;
   agent_mode: AgentMode | null;
+  requester_followups_enabled: boolean | null;
   cursor_key_updated_at: string | null;
   created_at: string;
   updated_at: string;
@@ -46,6 +52,7 @@ export interface SnagOrganization {
   name: string;
   slug: string;
   agent_mode: AgentMode;
+  requester_followups_enabled: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -70,4 +77,4 @@ export interface SnagAuditLogEntry {
 }
 
 export const SAFE_PROJECT_COLUMNS =
-  "id, name, slug, publishable_key, repo_url, repo_ref, model, prompt_instructions, enabled, per_ip_hourly_limit, hourly_limit, daily_limit, allowed_origins, organization_id, agent_mode, cursor_key_updated_at, created_at, updated_at" as const;
+  "id, name, slug, publishable_key, repo_url, repo_ref, model, prompt_instructions, enabled, per_ip_hourly_limit, hourly_limit, daily_limit, allowed_origins, organization_id, agent_mode, requester_followups_enabled, cursor_key_updated_at, created_at, updated_at" as const;

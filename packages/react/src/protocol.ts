@@ -7,7 +7,12 @@
  * branch, PR).
  */
 
-export type SnagRequestStatus = "queued" | "running" | "finished" | "error";
+export type SnagRequestStatus =
+  | "queued"
+  | "running"
+  | "finished"
+  | "error"
+  | "needs_input";
 
 export interface SnagScreenshot {
   /** JPEG image data, base64-encoded (no data-URI prefix). */
@@ -16,7 +21,7 @@ export interface SnagScreenshot {
   height: number;
 }
 
-/** POST <endpoint> */
+/** POST <endpoint> — create */
 export interface CreateSnagRequestBody {
   /** The user's change request, free text. */
   prompt: string;
@@ -30,6 +35,17 @@ export interface CreateSnagRequestResponse {
   id: string;
   /** Link to the launched agent task, when the provider returns one. */
   agent_url: string | null;
+}
+
+/** POST <endpoint> — reply to needs_input */
+export interface ReplySnagRequestBody {
+  request_id: string;
+  reply: string;
+}
+
+export interface ReplySnagRequestResponse {
+  id: string;
+  status: "running";
 }
 
 export interface SnagRequestRow {
@@ -53,5 +69,6 @@ export interface SnagRequestRow {
  */
 export interface RelayStateResponse {
   enabled: boolean;
+  requester_followups_enabled?: boolean;
   requests?: SnagRequestRow[];
 }

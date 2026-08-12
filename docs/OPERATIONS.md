@@ -277,6 +277,7 @@ SELECT slug, name, publishable_key, enabled, repo_url, repo_ref FROM snag_projec
 - `snag_pk_...` is public in the host app bundle — treat it like a Sentry DSN, not a secret.
 - **Origin allowlist** (`allowed_origins` on `snag_projects`): **empty = deny all**; list one or more entries to enable Snag from those clients only. Web origins are `scheme://host[:port]` (matched against `Origin`/`Referer`); native apps are `app://<bundle-id>` (matched against the `x-snag-app-id` header sent by the iOS SDK). Configure in the [admin panel](ADMIN.md) (Settings) or via SQL. Blocks other sites embedding your key; does not stop `curl` with a forged `Origin` or `x-snag-app-id` header.
 - **Rate limits** (defaults: 10/IP/hour, 10/project/hour, 30/project/day) — enforced in the relay before agent launch. Platform admins edit limits per tenant in the admin panel.
+- **Requester follow-ups** (org default on; optional project override) — when enabled, agent summaries may include `## Questions for requester`; those requests become `needs_input` and requesters can reply in-app via Cursor follow-up on the same agent.
 - **`enabled` flag** — remote kill switch; SDK probe returns `{ enabled: false }`.
 - Cursor keys are AES-256-GCM encrypted at rest in `cursor_api_key_encrypted`.
 - Relay logs entity IDs only — not prompts or screenshots.

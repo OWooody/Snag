@@ -28,7 +28,8 @@ struct RequestPanelView: View {
                         RequestsListView(
                             overlay: overlay,
                             theme: overlay.theme,
-                            refreshKey: model.listRefreshKey
+                            refreshKey: model.listRefreshKey,
+                            followupsEnabled: overlay.followupsEnabled
                         )
                     case .new:
                         if model.phase == .done {
@@ -43,6 +44,9 @@ struct RequestPanelView: View {
         }
         .background(overlay.theme.background.ignoresSafeArea())
         .snagPresentationDetents()
+        .onAppear {
+            model.applyInitialTab()
+        }
     }
 
     private var header: some View {
@@ -242,6 +246,13 @@ final class PanelModel: ObservableObject {
     /// MainActor-isolated) can construct the model for `@StateObject`.
     nonisolated init(overlay: OverlayModel) {
         self.overlay = overlay
+    }
+
+    @MainActor
+    func applyInitialTab() {
+        if overlay.preferListTab {
+            tab = .list
+        }
     }
 
     func submit() async {

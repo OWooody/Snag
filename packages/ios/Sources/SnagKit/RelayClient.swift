@@ -100,6 +100,31 @@ final class RelayClient: @unchecked Sendable {
         )
     }
 
+    func reply(requestId: String, message: String) async throws -> ReplySnagRequestResponse {
+        let body: [String: Any] = [
+            "request_id": requestId,
+            "reply": message,
+        ]
+
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        await applyHeaders(to: &request)
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response) = try await send(request)
+        if response.statusCode == 200,
+           let payload = try? JSONDecoder().decode(ReplySnagRequestResponse.self, from: data) {
+            return payload
+        }
+
+        debugLog("reply failed", String(response.statusCode))
+        let serverMessage =
+            ((try? JSONSerialization.jsonObject(with: data)) as? [String: Any])?["error"] as? String
+        throw SnagRelayError(
+            message: serverMessage ?? "Reply failed (\(response.statusCode))"
+        )
+    }
+
     private func applyHeaders(to request: inout URLRequest) async {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(projectKey, forHTTPHeaderField: "x-snag-key")

@@ -24,14 +24,18 @@ export default async function PlatformTenantDetailPage({
   if (!project) notFound();
 
   let orgAgentMode: "plan_only" | "execute" = "plan_only";
+  let orgFollowupsEnabled = true;
   if (project.organization_id) {
     const { data: org } = await service
       .from("snag_organizations")
-      .select("agent_mode")
+      .select("agent_mode, requester_followups_enabled")
       .eq("id", project.organization_id)
       .single();
     if (org?.agent_mode === "execute" || org?.agent_mode === "plan_only") {
       orgAgentMode = org.agent_mode;
+    }
+    if (typeof org?.requester_followups_enabled === "boolean") {
+      orgFollowupsEnabled = org.requester_followups_enabled;
     }
   }
 
@@ -51,7 +55,11 @@ export default async function PlatformTenantDetailPage({
         <h1 className="mt-2 text-2xl font-semibold">{project.name}</h1>
       </div>
 
-      <PlatformTenantForm project={project} orgAgentMode={orgAgentMode} />
+      <PlatformTenantForm
+        project={project}
+        orgAgentMode={orgAgentMode}
+        orgFollowupsEnabled={orgFollowupsEnabled}
+      />
 
       <Card>
         <CardHeader>

@@ -3,6 +3,7 @@ import type {
   CreateSnagRequestBody,
   CreateSnagRequestResponse,
   RelayStateResponse,
+  ReplySnagRequestResponse,
 } from "./protocol";
 
 function debugLog(...args: unknown[]): void {
@@ -87,6 +88,27 @@ export async function createSnagRequest(
   if (!response.ok || !payload?.id) {
     debugLog("create request failed", response.status, payload);
     throw new Error(payload?.error ?? `Request failed (${response.status})`);
+  }
+  return payload;
+}
+
+export async function replyToSnagRequest(
+  requestId: string,
+  reply: string,
+): Promise<ReplySnagRequestResponse> {
+  const config = getSnagConfig();
+  if (!config) throw new Error("Snag is not initialized");
+  const response = await fetch(config.endpoint, {
+    method: "POST",
+    headers: await buildHeaders(),
+    body: JSON.stringify({ request_id: requestId, reply }),
+  });
+  const payload = (await response.json().catch(() => null)) as
+    | (ReplySnagRequestResponse & { error?: string })
+    | null;
+  if (!response.ok || !payload?.id) {
+    debugLog("reply failed", response.status, payload);
+    throw new Error(payload?.error ?? `Reply failed (${response.status})`);
   }
   return payload;
 }

@@ -43,9 +43,12 @@ final class SnagFloatingButtonView: UIView {
 
     private let onTap: () -> Void
     private var panStartCenter: CGPoint = .zero
+    private let badgeLabel = UILabel()
+    private var environmentLabel: String
 
     init(theme: SnagTheme, environmentLabel: String, onTap: @escaping () -> Void) {
         self.onTap = onTap
+        self.environmentLabel = environmentLabel
         super.init(frame: CGRect(x: 0, y: 0, width: Self.size, height: Self.size))
 
         let blur = UIVisualEffectView(effect: UIBlurEffect(style: .systemUltraThinMaterial))
@@ -68,13 +71,29 @@ final class SnagFloatingButtonView: UIView {
             icon.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
 
+        badgeLabel.translatesAutoresizingMaskIntoConstraints = false
+        badgeLabel.font = .systemFont(ofSize: 11, weight: .heavy)
+        badgeLabel.textColor = .white
+        badgeLabel.textAlignment = .center
+        badgeLabel.backgroundColor = UIColor(theme.danger)
+        badgeLabel.layer.cornerRadius = 9
+        badgeLabel.layer.masksToBounds = true
+        badgeLabel.isHidden = true
+        addSubview(badgeLabel)
+        NSLayoutConstraint.activate([
+            badgeLabel.topAnchor.constraint(equalTo: topAnchor, constant: -2),
+            badgeLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: 2),
+            badgeLabel.heightAnchor.constraint(equalToConstant: 18),
+            badgeLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 18),
+        ])
+
         layer.shadowColor = UIColor.black.withAlphaComponent(0.18).cgColor
         layer.shadowOpacity = 1
         layer.shadowRadius = 6
         layer.shadowOffset = CGSize(width: 0, height: 4)
 
         isAccessibilityElement = true
-        accessibilityLabel = "Snag (\(environmentLabel)): request a change on this screen"
+        updateAccessibilityLabel(badgeCount: 0)
         accessibilityTraits = .button
 
         addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(handleTap)))
@@ -87,6 +106,24 @@ final class SnagFloatingButtonView: UIView {
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) is not supported")
+    }
+
+    func setBadgeCount(_ count: Int) {
+        if count <= 0 {
+            badgeLabel.isHidden = true
+            badgeLabel.text = nil
+        } else {
+            badgeLabel.isHidden = false
+            badgeLabel.text = count > 9 ? " 9+ " : " \(count) "
+        }
+        updateAccessibilityLabel(badgeCount: count)
+    }
+
+    private func updateAccessibilityLabel(badgeCount: Int) {
+        let base = "Snag (\(environmentLabel)): request a change on this screen"
+        accessibilityLabel = badgeCount > 0
+            ? "\(base). \(badgeCount) awaiting your reply"
+            : base
     }
 
     func place(in window: UIWindow) {
@@ -165,6 +202,7 @@ final class OverlayController {
             let state = await client.fetchState()
             guard state.enabled, !Task.isCancelled else { return }
             await model.resolveEnvironmentLabel()
+            model.applyRelayState(state)
             guard !Task.isCancelled else { return }
             self?.attachWhenSceneReady()
         }
@@ -173,6 +211,7 @@ final class OverlayController {
     func stop() {
         startTask?.cancel()
         startTask = nil
+        model?.stopBadgePolling()
         removeSceneObserver()
         panelVisibilityCancellable = nil
         buttonView = nil
@@ -223,9 +262,12 @@ final class OverlayController {
         let button = SnagFloatingButtonView(
             theme: model.configuration.theme,
             environmentLabel: model.environmentLabel,
-            onTap: { [weak model] in model?.openPanel() }
+            onTap: { [weak model] in
+                model?.openPanel(preferList: (model?.badgeCount ?? 0) > 0)
+            }
         )
         button.place(in: window)
+        button.setBadgeCount(model.badgeCount)
         window.addSubview(button)
         window.floatingButton = button
 
@@ -236,9 +278,11 @@ final class OverlayController {
         // BEFORE the sheet presents. Key status is handed back on dismiss.
         let debug = model.configuration.debug
         panelVisibilityCancellable = model.$panelVisible
-            .sink { [weak self, weak button] visible in
+            .combineLatest(model.$badgeCount)
+            .sink { [weak self, weak button] visible, badgeCount in
                 guard let self else { return }
                 button?.isHidden = visible
+                button?.setBadgeCount(badgeCount)
                 if visible {
                     self.previousKeyWindow = self.window?.windowScene?.windows
                         .first { $0.isKeyWindow }
@@ -249,8 +293,11 @@ final class OverlayController {
                 } else {
                     self.previousKeyWindow?.makeKey()
                     self.previousKeyWindow = nil
+                    Task { await self.model?.refreshBadge() }
                 }
             }
+
+        model.startBadgePolling()
 
         #if DEBUG
         // Test hook (debug builds only): SIMCTL_CHILD_SNAG_AUTO_OPEN_PANEL=1
@@ -288,11 +335,15 @@ final class OverlayController {
 final class OverlayModel: ObservableObject {
     @Published var panelVisible = false
     @Published var screenshot: SnagScreenshot?
+    @Published var badgeCount = 0
+    @Published var followupsEnabled = false
+    @Published var preferListTab = false
 
     let configuration: SnagConfiguration
     let client: RelayClient
     weak var overlayWindow: UIWindow?
     private(set) var environmentLabel = "dev"
+    private var badgePollTask: Task<Void, Never>?
 
     init(configuration: SnagConfiguration, client: RelayClient) {
         self.configuration = configuration
@@ -308,7 +359,52 @@ final class OverlayModel: ObservableObject {
         }
     }
 
-    func openPanel() {
+    func applyRelayState(_ state: RelayStateResponse) {
+        followupsEnabled = state.requesterFollowupsEnabled == true
+        Task { await refreshBadge(using: state) }
+    }
+
+    func startBadgePolling() {
+        badgePollTask?.cancel()
+        badgePollTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 30_000_000_000)
+                guard let self, !self.panelVisible else { continue }
+                await self.refreshBadge()
+            }
+        }
+    }
+
+    func stopBadgePolling() {
+        badgePollTask?.cancel()
+        badgePollTask = nil
+    }
+
+    func refreshBadge(using state: RelayStateResponse? = nil) async {
+        let relay = state ?? await client.fetchState()
+        guard relay.enabled else {
+            badgeCount = 0
+            followupsEnabled = false
+            return
+        }
+        followupsEnabled = relay.requesterFollowupsEnabled == true
+        guard followupsEnabled else {
+            badgeCount = 0
+            return
+        }
+        let requester = await requester()
+        let rows = relay.requests ?? []
+        badgeCount = rows.filter { row in
+            guard row.status == .needsInput else { return false }
+            if let requester, let rowRequester = row.requester {
+                return rowRequester == requester
+            }
+            return true
+        }.count
+    }
+
+    func openPanel(preferList: Bool = false) {
+        preferListTab = preferList
         // Capture BEFORE the panel appears so it never shows in the screenshot.
         screenshot = ScreenshotCapturer.capture(excluding: overlayWindow)
         panelVisible = true

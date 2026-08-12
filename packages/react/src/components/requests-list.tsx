@@ -1,20 +1,26 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { fetchRelayState } from "../api";
+import { fetchRelayState, replyToSnagRequest } from "../api";
 import { resolveRequester } from "../config";
 import type { SnagRequestRow, SnagRequestStatus } from "../protocol";
 import { GLASS_SURFACE } from "../sheet";
 import type { SnagTheme } from "../theme";
 
 const POLL_INTERVAL_MS = 20_000;
+const MAX_REPLY_LENGTH = 2000;
 
 interface RequestsListProps {
   theme: SnagTheme;
   /** Bump to force an immediate reload (e.g. after submit). */
   refreshKey?: number;
+  followupsEnabled?: boolean;
 }
 
-export function RequestsList({ theme, refreshKey = 0 }: RequestsListProps) {
+export function RequestsList({
+  theme,
+  refreshKey = 0,
+  followupsEnabled = false,
+}: RequestsListProps) {
   const [rows, setRows] = useState<SnagRequestRow[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [currentRequester, setCurrentRequester] = useState<string | null>(null);
@@ -111,15 +117,55 @@ export function RequestsList({ theme, refreshKey = 0 }: RequestsListProps) {
         </p>
       ) : (
         visibleRows.map((row) => (
-          <RequestCard key={row.id} row={row} theme={theme} />
+          <RequestCard
+            key={row.id}
+            row={row}
+            theme={theme}
+            followupsEnabled={followupsEnabled}
+            onReplied={() => void load()}
+          />
         ))
       )}
     </div>
   );
 }
 
-function RequestCard({ row, theme }: { row: SnagRequestRow; theme: SnagTheme }) {
+function RequestCard({
+  row,
+  theme,
+  followupsEnabled,
+  onReplied,
+}: {
+  row: SnagRequestRow;
+  theme: SnagTheme;
+  followupsEnabled: boolean;
+  onReplied: () => void;
+}) {
   const link = row.pr_url ?? row.agent_url;
+  const [reply, setReply] = useState("");
+  const [sending, setSending] = useState(false);
+  const [replyError, setReplyError] = useState<string | null>(null);
+  const canReply = followupsEnabled && row.status === "needs_input";
+
+  const submitReply = async () => {
+    const trimmed = reply.trim();
+    if (!trimmed) {
+      setReplyError("Write a reply first.");
+      return;
+    }
+    setSending(true);
+    setReplyError(null);
+    try {
+      await replyToSnagRequest(row.id, trimmed);
+      setReply("");
+      onReplied();
+    } catch (error) {
+      setReplyError(error instanceof Error ? error.message : "Reply failed");
+    } finally {
+      setSending(false);
+    }
+  };
+
   return (
     <div
       style={{
@@ -145,7 +191,7 @@ function RequestCard({ row, theme }: { row: SnagRequestRow; theme: SnagTheme }) 
             color: statusColor(row.status, theme),
           }}
         >
-          {row.status.toUpperCase()}
+          {row.status === "needs_input" ? "NEEDS YOUR REPLY" : row.status.toUpperCase()}
         </span>
         <span style={{ fontSize: 11, color: theme.textMuted }}>
           {new Date(row.created_at).toLocaleString()}
@@ -160,7 +206,15 @@ function RequestCard({ row, theme }: { row: SnagRequestRow; theme: SnagTheme }) 
         </p>
       ) : null}
       {row.summary ? (
-        <p style={{ fontSize: 12, color: theme.textMuted, marginTop: 6, marginBottom: 0 }}>
+        <p
+          style={{
+            fontSize: 12,
+            color: theme.textMuted,
+            marginTop: 6,
+            marginBottom: 0,
+            whiteSpace: "pre-wrap",
+          }}
+        >
           {row.summary}
         </p>
       ) : null}
@@ -168,6 +222,52 @@ function RequestCard({ row, theme }: { row: SnagRequestRow; theme: SnagTheme }) 
         <p style={{ fontSize: 12, color: theme.danger, marginTop: 6, marginBottom: 0 }}>
           {row.error}
         </p>
+      ) : null}
+      {canReply ? (
+        <div style={{ marginTop: 10 }}>
+          <textarea
+            value={reply}
+            onChange={(event) => setReply(event.target.value.slice(0, MAX_REPLY_LENGTH))}
+            disabled={sending}
+            placeholder="Answer the questions above…"
+            rows={3}
+            style={{
+              width: "100%",
+              boxSizing: "border-box",
+              borderRadius: 10,
+              border: "1px solid rgba(255,255,255,0.5)",
+              background: "rgba(255,255,255,0.55)",
+              padding: 10,
+              fontSize: 13,
+              color: theme.text,
+              resize: "vertical",
+            }}
+          />
+          {replyError ? (
+            <p style={{ fontSize: 12, color: theme.danger, margin: "6px 0 0" }}>
+              {replyError}
+            </p>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => void submitReply()}
+            disabled={sending}
+            style={{
+              marginTop: 8,
+              width: "100%",
+              padding: "10px 12px",
+              borderRadius: 10,
+              border: "none",
+              background: theme.accent,
+              color: "#fff",
+              fontWeight: 700,
+              cursor: sending ? "wait" : "pointer",
+              fontSize: 13,
+            }}
+          >
+            {sending ? "Sending…" : "Send reply"}
+          </button>
+        </div>
       ) : null}
       {link ? (
         <a
@@ -201,6 +301,8 @@ function statusColor(status: SnagRequestStatus, theme: SnagTheme): string {
       return theme.success;
     case "error":
       return theme.danger;
+    case "needs_input":
+      return theme.accent;
     default:
       return theme.accent;
   }

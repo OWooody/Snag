@@ -8,6 +8,10 @@
 
 import { createServiceClient } from "../_shared/supabase.ts";
 import { mapCursorStatus } from "../_shared/agent_provider.ts";
+import {
+  mapTerminalRequestStatus,
+  resolveEffectiveRequesterFollowups,
+} from "../_shared/requester_questions.ts";
 
 interface CursorWebhookPayload {
   event?: string;
@@ -46,9 +50,37 @@ Deno.serve(async (req) => {
       return new Response("Ignored", { status: 200 });
     }
 
-    const status = mapCursorStatus(payload.status);
+    const service = createServiceClient();
+    const { data: existing } = await service
+      .from("snag_requests")
+      .select(
+        "id, project_id, snag_projects(requester_followups_enabled, snag_organizations(requester_followups_enabled))",
+      )
+      .eq("agent_id", payload.id)
+      .maybeSingle();
+
+    const project = existing?.snag_projects as
+      | {
+          requester_followups_enabled: boolean | null;
+          snag_organizations: { requester_followups_enabled: boolean } | null;
+        }
+      | null
+      | undefined;
+
+    const followupsEnabled = resolveEffectiveRequesterFollowups(
+      project?.requester_followups_enabled,
+      project?.snag_organizations?.requester_followups_enabled,
+    );
+
+    const cursorMapped = mapCursorStatus(payload.status);
+    const status = mapTerminalRequestStatus(
+      cursorMapped,
+      payload.summary,
+      followupsEnabled,
+    );
+
     const update: Record<string, unknown> = {
-      status: status === "queued" ? "running" : status,
+      status,
       updated_at: new Date().toISOString(),
     };
     if (payload.target?.url) update.agent_url = payload.target.url;
@@ -57,7 +89,7 @@ Deno.serve(async (req) => {
     if (payload.summary) update.summary = payload.summary;
     if (status === "error") update.error = "Agent run failed";
 
-    const { error } = await createServiceClient()
+    const { error } = await service
       .from("snag_requests")
       .update(update)
       .eq("agent_id", payload.id);

@@ -24,7 +24,7 @@ alwaysApply: false
 ## UI
 - Use components from `apps/admin/components/ui/` (shadcn-style)
 - Destructive actions (disable project, rotate key) require `AlertDialog` confirmation
-- Status badges use `StatusBadge` with protocol statuses: queued, running, finished, error
+- Status badges use `StatusBadge` with protocol statuses: queued, running, needs_input, finished, error
 - Pages need loading/empty states; use Sonner toasts for mutation feedback
 
 ## Data

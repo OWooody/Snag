@@ -9,6 +9,7 @@ const STATUS_VARIANT: Record<
 > = {
   queued: "secondary",
   running: "warning",
+  needs_input: "warning",
   finished: "success",
   error: "destructive",
 };
