@@ -4,10 +4,18 @@
  * Cursor POSTs `statusChange` events (FINISHED / ERROR) for agents launched
  * by snag-relay. The HMAC-SHA256 signature is verified against
  * SNAG_WEBHOOK_SECRET using the RAW body before any parsing.
+ *
+ * When Cursor omits `summary` (known v0 API gap), we fall back to
+ * GET /v0/agents/{id}/conversation and store the trailing assistant text.
  */
 
 import { createServiceClient } from "../_shared/supabase.ts";
-import { mapCursorStatus } from "../_shared/agent_provider.ts";
+import {
+  cursorProvider,
+  mapCursorStatus,
+  resolveSummaryWithConversationFallback,
+} from "../_shared/agent_provider.ts";
+import { decryptSecret, getEncryptionSecret } from "../_shared/crypto.ts";
 import {
   mapTerminalRequestStatus,
   resolveEffectiveRequesterFollowups,
@@ -54,13 +62,14 @@ Deno.serve(async (req) => {
     const { data: existing } = await service
       .from("snag_requests")
       .select(
-        "id, project_id, snag_projects(requester_followups_enabled, snag_organizations(requester_followups_enabled))",
+        "id, project_id, snag_projects(cursor_api_key_encrypted, requester_followups_enabled, snag_organizations(requester_followups_enabled))",
       )
       .eq("agent_id", payload.id)
       .maybeSingle();
 
     const project = existing?.snag_projects as
       | {
+          cursor_api_key_encrypted: string;
           requester_followups_enabled: boolean | null;
           snag_organizations: { requester_followups_enabled: boolean } | null;
         }
@@ -72,10 +81,28 @@ Deno.serve(async (req) => {
       project?.snag_organizations?.requester_followups_enabled,
     );
 
+    let summary = payload.summary?.trim() || null;
+    if (!summary && project?.cursor_api_key_encrypted) {
+      try {
+        const cursorApiKey = await decryptSecret(
+          project.cursor_api_key_encrypted,
+          getEncryptionSecret(),
+        );
+        const provider = cursorProvider({ apiKey: cursorApiKey });
+        summary = await resolveSummaryWithConversationFallback(
+          provider,
+          payload.id,
+          payload.summary,
+        );
+      } catch (error) {
+        console.warn("snag-webhook conversation fallback failed:", error);
+      }
+    }
+
     const cursorMapped = mapCursorStatus(payload.status);
     const status = mapTerminalRequestStatus(
       cursorMapped,
-      payload.summary,
+      summary,
       followupsEnabled,
     );
 
@@ -86,7 +113,7 @@ Deno.serve(async (req) => {
     if (payload.target?.url) update.agent_url = payload.target.url;
     if (payload.target?.branchName) update.branch_name = payload.target.branchName;
     if (payload.target?.prUrl) update.pr_url = payload.target.prUrl;
-    if (payload.summary) update.summary = payload.summary;
+    if (summary) update.summary = summary;
     if (status === "error") update.error = "Agent run failed";
 
     const { error } = await service

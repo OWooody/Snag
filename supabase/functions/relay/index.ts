@@ -16,6 +16,7 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   cursorProvider,
   userFacingLaunchError,
+  resolveSummaryWithConversationFallback,
   type AgentImage,
   type AgentProvider,
 } from "../_shared/agent_provider.ts";
@@ -505,36 +506,88 @@ async function listRequests(
 
   const requests = rows ?? [];
   const staleCutoff = Date.now() - STALE_RUNNING_MS;
+  let conversationBackfills = 0;
+  const MAX_CONVERSATION_BACKFILLS = 3;
 
   for (const row of requests) {
-    const isActive = row.status === "queued" || row.status === "running";
-    if (!isActive || !row.agent_id) continue;
-    if (new Date(row.updated_at as string).getTime() > staleCutoff) continue;
+    if (!row.agent_id) continue;
 
-    const task = await provider.getStatus(row.agent_id as string);
-    const update: Record<string, unknown> = {
-      updated_at: new Date().toISOString(),
-    };
-    if (task) {
-      const summary = task.summary ?? (row.summary as string | null);
-      update.status = mapTerminalRequestStatus(
-        task.status,
+    const isActive = row.status === "queued" || row.status === "running";
+    const needsSummaryBackfill =
+      row.status === "finished" &&
+      !(typeof row.summary === "string" && row.summary.trim());
+
+    if (isActive) {
+      if (new Date(row.updated_at as string).getTime() > staleCutoff) continue;
+
+      const task = await provider.getStatus(row.agent_id as string);
+      const update: Record<string, unknown> = {
+        updated_at: new Date().toISOString(),
+      };
+      if (task) {
+        let summary =
+          (task.summary?.trim() || null) ??
+          (typeof row.summary === "string" && row.summary.trim()
+            ? row.summary
+            : null);
+        if (
+          (task.status === "finished" || task.status === "error") &&
+          !summary &&
+          conversationBackfills < MAX_CONVERSATION_BACKFILLS
+        ) {
+          conversationBackfills += 1;
+          summary = await resolveSummaryWithConversationFallback(
+            provider,
+            row.agent_id as string,
+            task.summary,
+          );
+        }
+        update.status = mapTerminalRequestStatus(
+          task.status,
+          summary,
+          followupsEnabled,
+        );
+        if (task.url) update.agent_url = task.url;
+        if (task.branchName) update.branch_name = task.branchName;
+        if (task.prUrl) update.pr_url = task.prUrl;
+        if (summary) update.summary = summary;
+        Object.assign(row, {
+          status: update.status,
+          agent_url: task.url ?? row.agent_url,
+          branch_name: task.branchName ?? row.branch_name,
+          pr_url: task.prUrl ?? row.pr_url,
+          summary: summary ?? row.summary,
+        });
+      }
+      await serviceClient.from("snag_requests").update(update).eq("id", row.id);
+      continue;
+    }
+
+    // Backfill finished rows that never got a Cursor summary (v0 API gap).
+    if (
+      needsSummaryBackfill &&
+      conversationBackfills < MAX_CONVERSATION_BACKFILLS
+    ) {
+      conversationBackfills += 1;
+      const summary = await resolveSummaryWithConversationFallback(
+        provider,
+        row.agent_id as string,
+        null,
+      );
+      if (!summary) continue;
+      const status = mapTerminalRequestStatus(
+        "finished",
         summary,
         followupsEnabled,
       );
-      if (task.url) update.agent_url = task.url;
-      if (task.branchName) update.branch_name = task.branchName;
-      if (task.prUrl) update.pr_url = task.prUrl;
-      if (task.summary) update.summary = task.summary;
-      Object.assign(row, {
-        status: update.status,
-        agent_url: task.url ?? row.agent_url,
-        branch_name: task.branchName ?? row.branch_name,
-        pr_url: task.prUrl ?? row.pr_url,
-        summary: task.summary ?? row.summary,
-      });
+      const update = {
+        summary,
+        status,
+        updated_at: new Date().toISOString(),
+      };
+      Object.assign(row, { summary, status });
+      await serviceClient.from("snag_requests").update(update).eq("id", row.id);
     }
-    await serviceClient.from("snag_requests").update(update).eq("id", row.id);
   }
 
   return requests.map((row) => ({

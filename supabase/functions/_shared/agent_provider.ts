@@ -39,6 +39,11 @@ export interface AgentProvider {
     prompt: string,
     images?: AgentImage[],
   ): Promise<void>;
+  /**
+   * Fetch conversation and return assistant text for use as summary when
+   * Cursor omits `summary` (known v0 API gap).
+   */
+  getConversationSummary(taskId: string): Promise<string | null>;
 }
 
 const CURSOR_API_BASE = "https://api.cursor.com/v0";
@@ -52,6 +57,57 @@ interface CursorAgentResponse {
     prUrl?: string;
   };
   summary?: string;
+}
+
+interface CursorConversationResponse {
+  id?: string;
+  messages?: Array<{
+    id?: string;
+    type?: string;
+    text?: string;
+  }>;
+}
+
+/** Prefer API summary; if empty, derive from conversation (v0 summary gap). */
+export async function resolveSummaryWithConversationFallback(
+  provider: AgentProvider,
+  taskId: string,
+  apiSummary: string | null | undefined,
+): Promise<string | null> {
+  const trimmed = apiSummary?.trim();
+  if (trimmed) return trimmed;
+  try {
+    return await provider.getConversationSummary(taskId);
+  } catch (error) {
+    console.warn("cursor conversation summary fallback failed:", error);
+    return null;
+  }
+}
+
+/**
+ * Build a summary from the trailing assistant messages in a conversation.
+ */
+export function summaryFromConversationMessages(
+  messages: Array<{ type?: string; text?: string }> | undefined,
+): string | null {
+  if (!messages?.length) return null;
+  const assistantTexts: string[] = [];
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    const type = (message.type ?? "").toLowerCase();
+    const text = message.text?.trim();
+    if (!text) continue;
+    if (type === "assistant_message" || type === "assistant") {
+      assistantTexts.unshift(text);
+      continue;
+    }
+    // Stop once we hit a user turn after collecting assistant text.
+    if (assistantTexts.length > 0) break;
+  }
+  if (assistantTexts.length === 0) return null;
+  // Cap stored summary size so request rows stay bounded.
+  const joined = assistantTexts.join("\n\n");
+  return joined.length > 12_000 ? joined.slice(0, 12_000) : joined;
 }
 
 /** Safe, user-facing launch failure — never includes raw API bodies or secrets. */
@@ -104,10 +160,10 @@ export function userFacingLaunchError(error: unknown): string {
 export function cursorProvider(options: { apiKey: string }): AgentProvider {
   const authHeader = `Basic ${btoa(`${options.apiKey}:`)}`;
 
-  async function request(
+  async function requestJson<T>(
     path: string,
     init: RequestInit,
-  ): Promise<CursorAgentResponse> {
+  ): Promise<T> {
     const response = await fetch(`${CURSOR_API_BASE}${path}`, {
       ...init,
       headers: {
@@ -127,7 +183,14 @@ export function cursorProvider(options: { apiKey: string }): AgentProvider {
         response.status,
       );
     }
-    return (await response.json()) as CursorAgentResponse;
+    return (await response.json()) as T;
+  }
+
+  async function request(
+    path: string,
+    init: RequestInit,
+  ): Promise<CursorAgentResponse> {
+    return requestJson<CursorAgentResponse>(path, init);
   }
 
   return {
@@ -190,6 +253,19 @@ export function cursorProvider(options: { apiKey: string }): AgentProvider {
         method: "POST",
         body: JSON.stringify(payload),
       });
+    },
+
+    async getConversationSummary(taskId: string): Promise<string | null> {
+      try {
+        const conversation = await requestJson<CursorConversationResponse>(
+          `/agents/${encodeURIComponent(taskId)}/conversation`,
+          { method: "GET" },
+        );
+        return summaryFromConversationMessages(conversation.messages);
+      } catch (error) {
+        console.warn("cursor getConversationSummary failed:", error);
+        return null;
+      }
     },
   };
 }
