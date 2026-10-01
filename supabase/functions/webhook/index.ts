@@ -15,11 +15,12 @@ import {
   mapCursorStatus,
   resolveSummaryWithConversationFallback,
 } from "../_shared/agent_provider.ts";
-import { decryptSecret, getEncryptionSecret } from "../_shared/crypto.ts";
 import {
-  mapTerminalRequestStatus,
-  resolveEffectiveRequesterFollowups,
-} from "../_shared/requester_questions.ts";
+  handleAgentTerminal,
+  type LifecycleRow,
+  REQUEST_LIFECYCLE_COLUMNS,
+} from "../_shared/lifecycle.ts";
+import { decryptProjectSecret, loadProjectById } from "../_shared/projects.ts";
 
 interface CursorWebhookPayload {
   event?: string;
@@ -59,72 +60,53 @@ Deno.serve(async (req) => {
     }
 
     const service = createServiceClient();
-    const { data: existing } = await service
+    const { data: existing, error: loadError } = await service
       .from("snag_requests")
-      .select(
-        "id, project_id, snag_projects(cursor_api_key_encrypted, requester_followups_enabled, snag_organizations(requester_followups_enabled))",
-      )
+      .select(REQUEST_LIFECYCLE_COLUMNS)
       .eq("agent_id", payload.id)
       .maybeSingle();
 
-    const project = existing?.snag_projects as
-      | {
-          cursor_api_key_encrypted: string;
-          requester_followups_enabled: boolean | null;
-          snag_organizations: { requester_followups_enabled: boolean } | null;
-        }
-      | null
-      | undefined;
-
-    const followupsEnabled = resolveEffectiveRequesterFollowups(
-      project?.requester_followups_enabled,
-      project?.snag_organizations?.requester_followups_enabled,
-    );
-
-    let summary = payload.summary?.trim() || null;
-    if (!summary && project?.cursor_api_key_encrypted) {
-      try {
-        const cursorApiKey = await decryptSecret(
-          project.cursor_api_key_encrypted,
-          getEncryptionSecret(),
-        );
-        const provider = cursorProvider({ apiKey: cursorApiKey });
-        summary = await resolveSummaryWithConversationFallback(
-          provider,
-          payload.id,
-          payload.summary,
-        );
-      } catch (error) {
-        console.warn("snag-webhook conversation fallback failed:", error);
-      }
+    if (loadError) {
+      console.error("snag-webhook load failed:", loadError);
+      return new Response("Load failed", { status: 500 });
     }
+    if (!existing) {
+      return new Response("Unknown agent", { status: 200 });
+    }
+
+    const row = existing as LifecycleRow;
+    const project = await loadProjectById(service, row.project_id);
+    if (!project) {
+      return new Response("Unknown project", { status: 200 });
+    }
+
+    const cursorApiKey = await decryptProjectSecret(project.cursor_api_key_encrypted);
+    if (!cursorApiKey) {
+      return new Response("Project key unavailable", { status: 500 });
+    }
+    const provider = cursorProvider({ apiKey: cursorApiKey });
 
     const cursorMapped = mapCursorStatus(payload.status);
-    const status = mapTerminalRequestStatus(
-      cursorMapped,
-      summary,
-      followupsEnabled,
-    );
-
-    const update: Record<string, unknown> = {
-      status,
-      updated_at: new Date().toISOString(),
-    };
-    if (payload.target?.url) update.agent_url = payload.target.url;
-    if (payload.target?.branchName) update.branch_name = payload.target.branchName;
-    if (payload.target?.prUrl) update.pr_url = payload.target.prUrl;
-    if (summary) update.summary = summary;
-    if (status === "error") update.error = "Agent run failed";
-
-    const { error } = await service
-      .from("snag_requests")
-      .update(update)
-      .eq("agent_id", payload.id);
-
-    if (error) {
-      console.error("snag-webhook update failed:", error);
-      return new Response("Update failed", { status: 500 });
+    if (cursorMapped !== "finished" && cursorMapped !== "error") {
+      return new Response("Ignored", { status: 200 });
     }
+
+    let summary = payload.summary?.trim() || null;
+    if (!summary) {
+      summary = await resolveSummaryWithConversationFallback(
+        provider,
+        payload.id,
+        payload.summary,
+      );
+    }
+
+    await handleAgentTerminal({ service, provider, project }, row, {
+      status: cursorMapped,
+      summary,
+      url: payload.target?.url ?? null,
+      branchName: payload.target?.branchName ?? null,
+      prUrl: payload.target?.prUrl ?? null,
+    });
 
     return new Response("OK", { status: 200 });
   } catch (error) {

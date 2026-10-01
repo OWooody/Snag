@@ -155,6 +155,6 @@ COMMENT ON COLUMN snag_requests.phase IS
 COMMENT ON COLUMN snag_requests.lifecycle_version IS
   'Optimistic lock: every lifecycle transition increments this so concurrent webhook/poll handlers act once.';
 COMMENT ON COLUMN snag_requests.plan_summary IS
-  'Agent summary at the end of planning, used to tell a stale finished status apart from the implementation result.';
+  'Agent summary when Snag last handed work back to the agent (end of planning, preview feedback), used to tell a stale finished status apart from the next result.';
 COMMENT ON COLUMN snag_requests.policy_decision IS
   'Policy evaluation record: plan and diff decisions, matched rules, shadow results, final outcome.';
