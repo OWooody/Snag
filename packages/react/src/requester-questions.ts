@@ -23,6 +23,18 @@ export function extractRequesterQuestionsSection(
   return trimmed;
 }
 
+export const SNAG_PLAN_HEADING = "## Snag plan";
+
+/** Remove the machine-readable "## Snag plan" section. Mirrors packages/shared. */
+export function stripSnagPlanSection(summary: string): string {
+  const headingIndex = summary.lastIndexOf(SNAG_PLAN_HEADING);
+  if (headingIndex < 0) return summary;
+  const after = summary.slice(headingIndex + SNAG_PLAN_HEADING.length);
+  const nextHeading = after.match(/\n##\s/);
+  const rest = nextHeading ? after.slice(nextHeading.index) : "";
+  return [summary.slice(0, headingIndex).trim(), rest.trim()].filter(Boolean).join("\n\n");
+}
+
 /** Summary text to show requesters — questions only when needs_input. */
 export function displaySummaryForRequest(
   status: string,
@@ -30,7 +42,8 @@ export function displaySummaryForRequest(
 ): string | null {
   if (!summary?.trim()) return null;
   if (status === "needs_input") {
-    return extractRequesterQuestionsSection(summary) ?? summary.trim();
+    return extractRequesterQuestionsSection(summary) ?? stripSnagPlanSection(summary.trim());
   }
-  return summary.trim();
+  const display = stripSnagPlanSection(summary.trim());
+  return display || null;
 }

@@ -273,7 +273,7 @@ export function stripSnagPlanSection(summary: string): string {
   const after = summary.slice(headingIndex + SNAG_PLAN_HEADING.length);
   const nextHeading = after.match(/\n##\s/);
   const rest = nextHeading ? after.slice(nextHeading.index) : "";
-  return (summary.slice(0, headingIndex) + rest).trim();
+  return [summary.slice(0, headingIndex).trim(), rest.trim()].filter(Boolean).join("\n\n");
 }
 
 /**

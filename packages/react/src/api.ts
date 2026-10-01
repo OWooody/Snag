@@ -1,5 +1,7 @@
 import { getSnagConfig, isDebugEnabled, resolveRequester } from "./config";
 import type {
+  ConfirmSnagRequestBody,
+  ConfirmSnagRequestResponse,
   CreateSnagRequestBody,
   CreateSnagRequestResponse,
   RelayStateResponse,
@@ -109,6 +111,26 @@ export async function replyToSnagRequest(
   if (!response.ok || !payload?.id) {
     debugLog("reply failed", response.status, payload);
     throw new Error(payload?.error ?? `Reply failed (${response.status})`);
+  }
+  return payload;
+}
+
+export async function confirmSnagRequest(
+  body: ConfirmSnagRequestBody,
+): Promise<ConfirmSnagRequestResponse> {
+  const config = getSnagConfig();
+  if (!config) throw new Error("Snag is not initialized");
+  const response = await fetch(config.endpoint, {
+    method: "POST",
+    headers: await buildHeaders(),
+    body: JSON.stringify(body),
+  });
+  const payload = (await response.json().catch(() => null)) as
+    | (ConfirmSnagRequestResponse & { error?: string })
+    | null;
+  if (!response.ok || !payload?.id) {
+    debugLog("confirm failed", response.status, payload);
+    throw new Error(payload?.error ?? `Confirmation failed (${response.status})`);
   }
   return payload;
 }

@@ -388,14 +388,13 @@ final class OverlayModel: ObservableObject {
             return
         }
         followupsEnabled = relay.requesterFollowupsEnabled == true
-        guard followupsEnabled else {
-            badgeCount = 0
-            return
-        }
+        let followups = followupsEnabled
         let requester = await requester()
         let rows = relay.requests ?? []
         badgeCount = rows.filter { row in
-            guard row.status == .needsInput else { return false }
+            let needsRequester = row.status == .awaitingConfirmation
+                || (followups && row.status == .needsInput)
+            guard needsRequester else { return false }
             if let requester, let rowRequester = row.requester {
                 return rowRequester == requester
             }

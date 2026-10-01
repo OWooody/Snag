@@ -33,7 +33,7 @@ struct RequestsListView: View {
                 Spacer()
                 if followupsEnabled {
                     filterToggle(
-                        label: "Needs reply",
+                        label: "Needs you",
                         isOn: model.needsAttentionOnly
                     ) {
                         model.needsAttentionOnly.toggle()
@@ -91,10 +91,10 @@ struct RequestsListView: View {
 
     private var emptyMessage: String {
         if followupsEnabled && model.needsAttentionOnly && model.mineOnly {
-            return "Nothing needs your reply right now."
+            return "Nothing needs you right now."
         }
         if followupsEnabled && model.needsAttentionOnly {
-            return "Nothing needs a reply right now. Uncheck Needs reply to see all."
+            return "Nothing needs a reply right now. Uncheck Needs you to see all."
         }
         if model.mineOnly {
             return "No requests from you yet."
@@ -139,7 +139,8 @@ final class RequestsListModel: ObservableObject {
 
     func visibleRows(followupsEnabled: Bool) -> [SnagRequestRow] {
         rows.filter { row in
-            if followupsEnabled && needsAttentionOnly && row.status != .needsInput {
+            if followupsEnabled && needsAttentionOnly
+                && row.status != .needsInput && row.status != .awaitingConfirmation {
                 return false
             }
             if mineOnly, let currentRequester, row.requester != currentRequester {
@@ -169,9 +170,17 @@ struct RequestCardView: View {
     @State private var reply = ""
     @State private var sending = false
     @State private var replyError: String?
+    @State private var feedbackOpen = false
+    @State private var feedback = ""
+    @State private var confirming = false
+    @State private var confirmError: String?
 
     private var canReply: Bool {
         followupsEnabled && row.status == .needsInput
+    }
+
+    private var canConfirm: Bool {
+        row.status == .awaitingConfirmation
     }
 
     private var summaryText: String? {
@@ -247,6 +256,9 @@ struct RequestCardView: View {
                 }
                 .disabled(sending)
             }
+            if canConfirm {
+                confirmSection
+            }
             if let link = row.prUrl ?? row.agentUrl, let url = URL(string: link) {
                 Link(
                     row.prUrl != nil ? "Open pull request" : "Open agent",
@@ -268,7 +280,127 @@ struct RequestCardView: View {
     }
 
     private var statusLabel: String {
-        row.status == .needsInput ? "NEEDS YOUR REPLY" : row.status.rawValue.uppercased()
+        switch row.status {
+        case .queued: return "QUEUED"
+        case .running, .unknown: return "IN PROGRESS"
+        case .needsInput: return "NEEDS YOUR REPLY"
+        case .awaitingApproval: return "WAITING FOR A DEVELOPER"
+        case .awaitingReview: return "IN DEVELOPER REVIEW"
+        case .awaitingConfirmation: return "READY FOR YOU TO CHECK"
+        case .finished: return "FINISHED"
+        case .merged: return "LIVE"
+        case .error: return "ERROR"
+        }
+    }
+
+    @ViewBuilder
+    private var confirmSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Your change is ready to try. Check the preview, then tell us if it looks right — it goes live once you confirm.")
+                .font(.system(size: 13))
+                .foregroundColor(theme.text)
+                .fixedSize(horizontal: false, vertical: true)
+            if let preview = row.previewUrl, let url = URL(string: preview) {
+                Link(destination: url) {
+                    Text("Open preview")
+                        .font(.system(size: 13, weight: .bold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(RoundedRectangle(cornerRadius: 10).fill(theme.background))
+                        .foregroundColor(theme.accent)
+                }
+            }
+            if feedbackOpen {
+                ZStack(alignment: .topLeading) {
+                    TextEditor(text: $feedback)
+                        .frame(minHeight: 72)
+                        .font(.system(size: 13))
+                        .foregroundColor(theme.text)
+                        .disabled(confirming)
+                        .snagClearTextEditorBackground()
+                        .padding(8)
+                    if feedback.isEmpty {
+                        Text("What should be different?")
+                            .font(.system(size: 13))
+                            .foregroundColor(theme.textMuted)
+                            .padding(.top, 16)
+                            .padding(.leading, 12)
+                            .allowsHitTesting(false)
+                    }
+                }
+                .background(RoundedRectangle(cornerRadius: 10).fill(theme.background))
+                .onChange(of: feedback) { value in
+                    if value.count > 2000 {
+                        feedback = String(value.prefix(2000))
+                    }
+                }
+                HStack(spacing: 8) {
+                    secondaryButton("Cancel") { feedbackOpen = false }
+                    primaryButton(confirming ? "Sending…" : "Send feedback") {
+                        Task { await submitConfirm(looksRight: false) }
+                    }
+                }
+            } else {
+                HStack(spacing: 8) {
+                    secondaryButton("Not right") { feedbackOpen = true }
+                    primaryButton(confirming ? "Confirming…" : "Looks right") {
+                        Task { await submitConfirm(looksRight: true) }
+                    }
+                }
+            }
+            if let confirmError {
+                Text(confirmError)
+                    .font(.system(size: 12))
+                    .foregroundColor(theme.danger)
+            }
+        }
+        .padding(.top, 4)
+    }
+
+    private func primaryButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 13, weight: .bold))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(RoundedRectangle(cornerRadius: 10).fill(theme.accent))
+                .foregroundColor(.white)
+        }
+        .disabled(confirming)
+    }
+
+    private func secondaryButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 13, weight: .bold))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(theme.accent, lineWidth: 1))
+                .foregroundColor(theme.accent)
+        }
+        .disabled(confirming)
+    }
+
+    private func submitConfirm(looksRight: Bool) async {
+        let trimmed = feedback.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !looksRight && trimmed.isEmpty {
+            confirmError = "Tell us what is not right first."
+            return
+        }
+        confirming = true
+        confirmError = nil
+        do {
+            _ = try await client.confirm(
+                requestId: row.id,
+                decision: looksRight ? .looksRight : .notRight(feedback: trimmed)
+            )
+            feedback = ""
+            feedbackOpen = false
+            onReplied()
+        } catch {
+            confirmError = (error as? SnagRelayError)?.message ?? "Something went wrong"
+        }
+        confirming = false
     }
 
     private var formattedDate: String {
@@ -278,11 +410,12 @@ struct RequestCardView: View {
 
     private var statusColor: Color {
         switch row.status {
-        case .finished:
+        case .finished, .merged:
             return theme.success
         case .error:
             return theme.danger
-        case .queued, .running, .needsInput:
+        case .queued, .running, .needsInput, .awaitingApproval, .awaitingReview,
+             .awaitingConfirmation, .unknown:
             return theme.accent
         }
     }

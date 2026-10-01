@@ -125,6 +125,38 @@ final class RelayClient: @unchecked Sendable {
         )
     }
 
+    func confirm(
+        requestId: String,
+        decision: SnagConfirmDecision
+    ) async throws -> ConfirmSnagRequestResponse {
+        var body: [String: Any] = ["request_id": requestId]
+        switch decision {
+        case .looksRight:
+            body["decision"] = "looks_right"
+        case .notRight(let feedback):
+            body["decision"] = "not_right"
+            body["feedback"] = feedback
+        }
+
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        await applyHeaders(to: &request)
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response) = try await send(request)
+        if response.statusCode == 200,
+           let payload = try? JSONDecoder().decode(ConfirmSnagRequestResponse.self, from: data) {
+            return payload
+        }
+
+        debugLog("confirm failed", String(response.statusCode))
+        let serverMessage =
+            ((try? JSONSerialization.jsonObject(with: data)) as? [String: Any])?["error"] as? String
+        throw SnagRelayError(
+            message: serverMessage ?? "Confirmation failed (\(response.statusCode))"
+        )
+    }
+
     private func applyHeaders(to request: inout URLRequest) async {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(projectKey, forHTTPHeaderField: "x-snag-key")

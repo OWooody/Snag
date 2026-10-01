@@ -11,6 +11,21 @@ public enum SnagRequestStatus: String, Codable, Sendable {
     case finished
     case error
     case needsInput = "needs_input"
+    /// Execute mode: the plan is waiting for a developer's approval.
+    case awaitingApproval = "awaiting_approval"
+    /// Execute mode: the PR is waiting for a developer to review and merge.
+    case awaitingReview = "awaiting_review"
+    /// Execute mode: the preview is ready; the requester confirms or sends feedback.
+    case awaitingConfirmation = "awaiting_confirmation"
+    /// Execute mode: Snag merged the PR.
+    case merged
+    /// A status this SDK version does not know yet; shown as in progress.
+    case unknown
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = SnagRequestStatus(rawValue: raw) ?? .unknown
+    }
 }
 
 /// JPEG image data, base64-encoded (no data-URI prefix).
@@ -44,6 +59,18 @@ public struct ReplySnagRequestResponse: Decodable, Sendable {
     public let status: String
 }
 
+/// Requester's answer to `awaiting_confirmation` after checking the preview.
+public enum SnagConfirmDecision: Sendable, Equatable {
+    case looksRight
+    case notRight(feedback: String)
+}
+
+/// Response to `POST <endpoint>` confirm.
+public struct ConfirmSnagRequestResponse: Decodable, Sendable {
+    public let id: String
+    public let status: String
+}
+
 public struct SnagRequestRow: Decodable, Identifiable, Sendable {
     public let id: String
     public let prompt: String
@@ -51,6 +78,8 @@ public struct SnagRequestRow: Decodable, Identifiable, Sendable {
     public let agentUrl: String?
     public let branchName: String?
     public let prUrl: String?
+    /// Preview deployment for the PR, set while `awaitingConfirmation`.
+    public let previewUrl: String?
     public let summary: String?
     public let error: String?
     /// Host-supplied display id from the `requester` provider, when present.
@@ -64,6 +93,7 @@ public struct SnagRequestRow: Decodable, Identifiable, Sendable {
         case agentUrl = "agent_url"
         case branchName = "branch_name"
         case prUrl = "pr_url"
+        case previewUrl = "preview_url"
         case summary
         case error
         case requester

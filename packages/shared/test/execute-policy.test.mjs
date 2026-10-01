@@ -55,6 +55,12 @@ test("stripSnagPlanSection keeps the human-readable summary", () => {
   assert.ok(!stripped.includes(SNAG_PLAN_HEADING));
   assert.ok(stripped.includes("## Notes for developers"));
   assert.equal(stripSnagPlanSection("plain"), "plain");
+  assert.equal(
+    stripSnagPlanSection(
+      'Intro.\n\n## Snag plan\n```json\n{"files":[]}\n```\n\n## Notes for developers\n- x',
+    ),
+    "Intro.\n\n## Notes for developers\n- x",
+  );
 });
 
 test("strictestOutcome orders outcomes", () => {

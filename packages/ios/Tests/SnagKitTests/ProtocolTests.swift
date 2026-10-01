@@ -116,4 +116,63 @@ final class ProtocolTests: XCTestCase {
             summary.trimmingCharacters(in: .whitespacesAndNewlines)
         )
     }
+
+    func testDecodesExecuteStatusesAndPreviewUrl() throws {
+        let json = """
+        {
+          "enabled": true,
+          "requests": [
+            {
+              "id": "a",
+              "prompt": "Change copy",
+              "status": "awaiting_confirmation",
+              "agent_url": null,
+              "branch_name": "cursor/copy-1",
+              "pr_url": "https://github.com/acme/app/pull/7",
+              "preview_url": "https://app-git-copy.vercel.app",
+              "summary": null,
+              "error": null,
+              "requester": "u_1",
+              "created_at": "2026-07-24T14:20:33Z"
+            },
+            {
+              "id": "b",
+              "prompt": "Something new",
+              "status": "some_future_status",
+              "agent_url": null,
+              "branch_name": null,
+              "pr_url": null,
+              "summary": null,
+              "error": null,
+              "requester": null,
+              "created_at": "2026-07-24T14:20:33Z"
+            }
+          ]
+        }
+        """
+        let state = try JSONDecoder().decode(RelayStateResponse.self, from: Data(json.utf8))
+        let rows = try XCTUnwrap(state.requests)
+        XCTAssertEqual(rows[0].status, .awaitingConfirmation)
+        XCTAssertEqual(rows[0].previewUrl, "https://app-git-copy.vercel.app")
+        XCTAssertEqual(rows[1].status, .unknown)
+        XCTAssertNil(rows[1].previewUrl)
+    }
+
+    func testDisplaySummaryStripsSnagPlan() {
+        let summary = """
+        I'll update the button label.
+
+        ## Snag plan
+        ```json
+        {"files": ["src/Button.tsx"], "risk": "low", "flags": []}
+        ```
+
+        ## Notes for developers
+        - Straightforward copy change
+        """
+        XCTAssertEqual(
+            RequesterQuestions.displaySummary(status: .finished, summary: summary),
+            "I'll update the button label.\n\n## Notes for developers\n- Straightforward copy change"
+        )
+    }
 }
