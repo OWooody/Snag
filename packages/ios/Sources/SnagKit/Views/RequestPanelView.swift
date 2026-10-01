@@ -88,7 +88,11 @@ struct RequestPanelView: View {
         let active = model.tab == tab
         return Button {
             withAnimation(.easeInOut(duration: 0.2)) {
-                model.tab = tab
+                if tab == .new, model.phase == .done {
+                    model.startAnother()
+                } else {
+                    model.tab = tab
+                }
             }
         } label: {
             Text(label)
@@ -242,6 +246,21 @@ struct RequestPanelView: View {
                     .foregroundColor(.white)
             }
             .padding(.top, 8)
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    model.startAnother()
+                }
+            } label: {
+                Text("New request")
+                    .font(.system(size: 15, weight: .bold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 13)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(overlay.theme.surface)
+                    )
+                    .foregroundColor(overlay.theme.text)
+            }
         }
     }
 }
@@ -273,6 +292,16 @@ final class PanelModel: ObservableObject {
         if overlay.preferListTab {
             tab = .list
         }
+    }
+
+    /// Clears the success screen so another request can be composed in place.
+    func startAnother() {
+        phase = .editing
+        prompt = ""
+        includeScreenshot = true
+        agentUrl = nil
+        errorMessage = nil
+        tab = .new
     }
 
     func submit() async {
