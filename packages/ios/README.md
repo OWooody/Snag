@@ -90,9 +90,47 @@ No view code needed — SnagKit attaches its own passthrough window above your a
 | Option | What it does |
 |--------|----------------|
 | `context` | Async closure attaching environment, feature flags, etc. to every request (merged on top of auto-captured `snag_auto`: app version, device, OS, screen, locale, current view controller) |
-| `requester` | Async closure returning a display id for who filed the request — shown in the list; **Mine** defaults on when set. When follow-ups are on, **Needs reply** also defaults on (only `needs_input`) |
+| `requester` | Async closure returning a display id for who filed the request — shown in the list; **Mine** defaults on when set. When follow-ups are on, **Needs you** also defaults on (`needs_input` and requests waiting for your confirmation) |
+| `requesterToken` | Async closure returning a signed requester token from your backend, sent as `x-snag-requester-token`. Verifies who filed the request — required for execute-mode auto-merge (see below) |
 | `theme` | Override button/panel colors (`SnagTheme`) |
 | `debug: true` | Log probe/request details to the console |
+
+### Execute mode: checking your own change
+
+When your admin enables execute mode with **Preview, then merge**, a request moves to **Ready for you to check** once the preview deployment is up. Open the preview from the request card, then tap **Looks right** (Snag merges it once CI passes and it goes live) or **Not right** with what should change (the agent revises the same PR). The floating button's badge counts these requests too.
+
+### Verified requesters (signed token)
+
+Execute-mode auto-merge only applies to requesters Snag can verify. Your admin generates a **requester signing secret** in the Snag admin panel; your backend signs a short-lived token for the logged-in user, and the app passes it to Snag. Example signer (Node):
+
+```ts
+// Your backend — never ship the signing secret to the browser or the app.
+import { createHmac } from "node:crypto";
+
+export function signSnagRequesterToken(userId: string, ttlSeconds = 3600): string {
+  const payload = Buffer.from(
+    JSON.stringify({ sub: userId, exp: Math.floor(Date.now() / 1000) + ttlSeconds }),
+  ).toString("base64url");
+  const signature = createHmac("sha256", process.env.SNAG_REQUESTER_SECRET!)
+    .update(`v1.${payload}`)
+    .digest("base64url");
+  return `v1.${payload}.${signature}`;
+}
+```
+
+Format: `v1.<base64url(JSON {sub, exp})>.<base64url(HMAC-SHA256(secret, "v1." + payload))>`, with `exp` in Unix seconds and at most 7 days ahead. `sub` must be printable ASCII, up to 128 characters, and should match the ids your admin puts on the **Trusted requesters** list.
+
+```swift
+Snag.start(
+    endpoint: relayURL,
+    projectKey: "snag_pk_...",
+    requester: { await session.currentUserId },
+    // Fetch from your backend and cache until shortly before it expires.
+    requesterToken: { await session.snagRequesterToken() }
+)
+```
+
+When the token verifies, its `sub` replaces `requester` as the stored requester, so return the same id from both to keep **Mine** working. An invalid or expired token is ignored (the request is filed as unverified) — it never blocks filing.
 
 ---
 

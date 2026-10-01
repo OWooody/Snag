@@ -46,6 +46,8 @@ Migration: `supabase/migrations/00001_snag_core.sql` → tables `snag_projects`,
 
 Migration: `supabase/migrations/00002_admin_auth.sql` → organizations, memberships, platform admins, audit log, RLS for admin panel.
 
+Migration: `supabase/migrations/00006_execute_policy.sql` → execute-mode rules (`snag_policy_rules`), delivery settings, per-project GitHub token and requester signing secret, request lifecycle columns.
+
 If policies already exist from a partial run:
 
 ```sh
@@ -59,12 +61,14 @@ supabase migration repair 00001 --status applied
 ```sh
 openssl rand -base64 32   # SNAG_KEY_ENCRYPTION_SECRET — save this
 openssl rand -base64 24   # SNAG_WEBHOOK_SECRET
+openssl rand -base64 32   # SNAG_WORKER_SECRET — only for execute-mode delivery
 ```
 
 ```sh
 supabase secrets set \
   SNAG_KEY_ENCRYPTION_SECRET="<32+ char secret>" \
-  SNAG_WEBHOOK_SECRET="<webhook secret>"
+  SNAG_WEBHOOK_SECRET="<webhook secret>" \
+  SNAG_WORKER_SECRET="<32+ char secret>"
 ```
 
 Keep `SNAG_KEY_ENCRYPTION_SECRET` — you need the **same value** when provisioning tenants.
@@ -74,7 +78,10 @@ Keep `SNAG_KEY_ENCRYPTION_SECRET` — you need the **same value** when provision
 ```sh
 supabase functions deploy relay --no-verify-jwt
 supabase functions deploy webhook --no-verify-jwt
+supabase functions deploy delivery-worker --no-verify-jwt
 ```
+
+`delivery-worker` authenticates callers with the `x-snag-worker-secret` header instead of a JWT; it rejects every call when `SNAG_WORKER_SECRET` is unset or shorter than 32 characters.
 
 In dashboard: **Edge Functions → each function → disable “Enforce JWT verification”.**
 
@@ -83,6 +90,33 @@ Must deploy via CLI so `../_shared/` imports resolve (dashboard single-file past
 ### 5. Register Cursor webhook (optional)
 
 Point Cursor Cloud Agents webhooks at the webhook URL above, using the same `SNAG_WEBHOOK_SECRET`. Without this, status still refreshes via GET polling (~3 min stale).
+
+### 6. Schedule the delivery worker (execute mode only)
+
+Needed when any project uses **Preview, then merge** or **Merge directly to production** delivery. The worker waits for CI and preview deployments, flips requests to `awaiting_confirmation`, merges PRs, and tracks PRs handed to developers. Run it every minute with `pg_cron` + `pg_net` (enable both under **Database → Extensions**). Store the worker secret in Vault rather than in the job definition:
+
+```sql
+select vault.create_secret('<SNAG_WORKER_SECRET value>', 'snag_worker_secret');
+
+select cron.schedule(
+  'snag-delivery-worker',
+  '* * * * *',
+  $$
+  select net.http_post(
+    url := 'https://<project-ref>.supabase.co/functions/v1/delivery-worker',
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'x-snag-worker-secret',
+      (select decrypted_secret from vault.decrypted_secrets where name = 'snag_worker_secret')
+    ),
+    body := '{}'::jsonb,
+    timeout_milliseconds := 55000
+  );
+  $$
+);
+```
+
+Check runs with `select * from cron.job_run_details order by start_time desc limit 10;` and responses with `select status_code, content from net._http_response order by created desc limit 10;` — a healthy run returns `{"processed": N, "pending": M}`. Unschedule with `select cron.unschedule('snag-delivery-worker');`.
 
 ---
 
@@ -244,6 +278,57 @@ npm install /path/to/snag/packages/react/snag-tech-react-0.1.0.tgz
 
 
 
+## Execute mode: rules and delivery
+
+Execute mode runs in two phases. The agent first **plans only** (asking the requester business questions if needed) and ends with a machine-readable `## Snag plan` block listing files, risk, and flags. Snag evaluates the project's rules against that plan, then either sends the agent back to implement, or parks the request in `awaiting_approval` for a developer. After implementation Snag re-evaluates the rules against the real PR diff before anything merges.
+
+| Outcome | What happens |
+|---------|--------------|
+| Execute now | Implement immediately, then deliver per the delivery setting |
+| Review before merge | Implement immediately; a developer reviews and merges the PR (`awaiting_review`) |
+| Review before execution | A developer approves the plan in the admin panel first (`awaiting_approval`) |
+
+The strictest matching rule wins; rules can only escalate beyond the default unless an **allow** rule matches. Built-in escalations (missing plan, edits during planning, files outside the plan, CI config, existing tests, dependency manifests, unverified requester for auto-merge) cannot be disabled. See [ADMIN.md](ADMIN.md#execute-mode-rules-and-delivery) for the admin workflow.
+
+### Delivery settings
+
+| Delivery | Needs | Behaviour |
+|----------|-------|-----------|
+| PR only (default) | — | Agent opens a PR; developers merge as usual |
+| Preview, then merge | GitHub token, preview deployments on PRs (Vercel, Netlify, …) | Snag waits for the PR's preview URL, the requester taps **Looks right**, then Snag squash-merges once CI is green |
+| Merge directly to production | GitHub token, requester signing secret, trusted requesters, admin acknowledgement | Snag squash-merges as soon as CI is green, for verified trusted requesters only, up to the daily limit |
+
+A project missing any prerequisite silently falls back to **PR only** (logged by the Edge Functions).
+
+### GitHub token
+
+Create a **fine-grained personal access token** (or a token from a machine user / GitHub App installation) scoped to the single project repository:
+
+| Permission | Access | Used for |
+|------------|--------|----------|
+| Contents | Read and write | Merging PRs, comparing branches |
+| Pull requests | Read and write | Finding/creating PRs, marking drafts ready, merging |
+| Checks | Read | CI gate (check runs) |
+| Commit statuses | Read | CI gate (legacy statuses) |
+| Deployments | Read | Finding preview URLs |
+| Metadata | Read | Required by GitHub |
+
+Paste it under **Settings → GitHub token**; it is stored AES-256-GCM encrypted and never shown again.
+
+### Branch protection
+
+Snag merges through the GitHub API as the token's owner, so branch protection is your final guardrail:
+
+- Require status checks on the production branch — Snag treats a PR with **no** checks as "hand to a developer", but protection makes this enforceable on GitHub's side too.
+- If you require pull-request reviews, Snag's merge is refused (HTTP 405) and the request moves to `awaiting_review` — which effectively disables auto-merge. Use a ruleset bypass for the token's actor if you want auto-merge with reviews required for humans.
+- Keep CODEOWNERS for sensitive paths; GitHub refuses the merge and Snag hands the PR to a developer.
+
+### Rollout checklist
+
+1. Leave delivery on **PR only** and turn on **shadow mode**; add rules and watch the decisions on each request's detail page.
+2. Switch to **Preview, then merge** once rule decisions match what developers would have done.
+3. Only then consider **Merge directly to production**, with a short trusted-requester list and a low daily limit.
+
 ## Day-2 operations
 
 
@@ -301,6 +386,16 @@ SELECT slug, name, publishable_key, enabled, repo_url, repo_ref FROM snag_projec
 
 
 
+
+### Execute-mode delivery
+
+| Symptom | Likely cause |
+|---------|--------------|
+| Request stuck `running` after the PR opened | Delivery worker not scheduled, or `SNAG_WORKER_SECRET` mismatch — check `net._http_response` for 401s |
+| `awaiting_review` with "The repository reports no CI checks…" | No checks ran on the PR head commit; add CI or keep delivery on PR only |
+| "No preview deployment was found for this pull request." | The preview provider is not posting GitHub deployment statuses, or took longer than 30 minutes |
+| "GitHub refused the merge" | Branch protection (required reviews, CODEOWNERS) or merge conflicts — a developer finishes it |
+| Requester never verified | Host backend not sending `x-snag-requester-token`, wrong secret, or token lifetime over 7 days |
 
 ### Relay logs
 
