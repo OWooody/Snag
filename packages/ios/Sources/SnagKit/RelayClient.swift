@@ -20,16 +20,19 @@ final class RelayClient: @unchecked Sendable {
     private let projectKey: String
     private let appId: String?
     private let requesterProvider: (() async -> String?)?
+    private let requesterTokenProvider: (() async -> String?)?
     private let debug: Bool
     private let session: URLSession
 
     private static let maxRequesterLength = 128
+    private static let maxRequesterTokenLength = 1024
 
     init(
         endpoint: URL,
         projectKey: String,
         appId: String?,
         requesterProvider: (() async -> String?)?,
+        requesterTokenProvider: (() async -> String?)? = nil,
         debug: Bool,
         session: URLSession = .shared
     ) {
@@ -37,6 +40,7 @@ final class RelayClient: @unchecked Sendable {
         self.projectKey = projectKey
         self.appId = appId
         self.requesterProvider = requesterProvider
+        self.requesterTokenProvider = requesterTokenProvider
         self.debug = debug
         self.session = session
     }
@@ -168,6 +172,13 @@ final class RelayClient: @unchecked Sendable {
             let trimmed = requester.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmed.isEmpty && trimmed.count <= Self.maxRequesterLength {
                 request.setValue(trimmed, forHTTPHeaderField: "x-snag-requester")
+            }
+        }
+        if let requesterTokenProvider,
+           let token = await requesterTokenProvider() {
+            let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty && trimmed.count <= Self.maxRequesterTokenLength {
+                request.setValue(trimmed, forHTTPHeaderField: "x-snag-requester-token")
             }
         }
     }

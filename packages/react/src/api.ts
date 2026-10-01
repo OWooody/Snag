@@ -1,4 +1,9 @@
-import { getSnagConfig, isDebugEnabled, resolveRequester } from "./config";
+import {
+  getSnagConfig,
+  isDebugEnabled,
+  resolveRequester,
+  resolveRequesterToken,
+} from "./config";
 import type {
   ConfirmSnagRequestBody,
   ConfirmSnagRequestResponse,
@@ -33,9 +38,15 @@ async function buildHeaders(): Promise<Record<string, string>> {
     headers.Authorization = `Bearer ${userToken}`;
   }
 
-  const requester = await resolveRequester();
+  const [requester, requesterToken] = await Promise.all([
+    resolveRequester(),
+    resolveRequesterToken(),
+  ]);
   if (requester) {
     headers["x-snag-requester"] = requester;
+  }
+  if (requesterToken) {
+    headers["x-snag-requester-token"] = requesterToken;
   }
   return headers;
 }

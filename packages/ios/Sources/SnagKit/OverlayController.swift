@@ -193,6 +193,7 @@ final class OverlayController {
             projectKey: configuration.projectKey,
             appId: Bundle.main.bundleIdentifier,
             requesterProvider: configuration.requester,
+            requesterTokenProvider: configuration.requesterToken,
             debug: configuration.debug
         )
         let model = OverlayModel(configuration: configuration, client: client)

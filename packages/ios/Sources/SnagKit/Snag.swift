@@ -12,6 +12,11 @@ public struct SnagConfiguration {
     /// Sent as `x-snag-requester` and shown in the in-app request list —
     /// keep it free of secrets.
     public var requester: (() async -> String?)?
+    /// Optional signed requester token from your backend, sent as
+    /// `x-snag-requester-token`. When it verifies against the project's
+    /// requester signing secret, its `sub` becomes the verified requester —
+    /// required for execute-mode auto-merge. Called per request; cache it.
+    public var requesterToken: (() async -> String?)?
     /// Host context attached to every request: current screen, environment
     /// name, feature flags, etc. Keep it free of personal data — it is
     /// forwarded verbatim to the coding agent. Merged on top of the
@@ -25,6 +30,7 @@ public struct SnagConfiguration {
         endpoint: URL,
         projectKey: String,
         requester: (() async -> String?)? = nil,
+        requesterToken: (() async -> String?)? = nil,
         context: (() async -> [String: Any])? = nil,
         theme: SnagTheme = SnagTheme(),
         debug: Bool = false
@@ -32,6 +38,7 @@ public struct SnagConfiguration {
         self.endpoint = endpoint
         self.projectKey = projectKey
         self.requester = requester
+        self.requesterToken = requesterToken
         self.context = context
         self.theme = theme
         self.debug = debug
@@ -54,6 +61,7 @@ public enum Snag {
         endpoint: URL,
         projectKey: String,
         requester: (() async -> String?)? = nil,
+        requesterToken: (() async -> String?)? = nil,
         context: (() async -> [String: Any])? = nil,
         theme: SnagTheme = SnagTheme(),
         debug: Bool = false
@@ -63,6 +71,7 @@ public enum Snag {
                 endpoint: endpoint,
                 projectKey: projectKey,
                 requester: requester,
+                requesterToken: requesterToken,
                 context: context,
                 theme: theme,
                 debug: debug
