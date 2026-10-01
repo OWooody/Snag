@@ -48,6 +48,8 @@ Migration: `supabase/migrations/00002_admin_auth.sql` → organizations, members
 
 Migration: `supabase/migrations/00006_execute_policy.sql` → execute-mode rules (`snag_policy_rules`), delivery settings, per-project GitHub token and requester signing secret, request lifecycle columns.
 
+Migrations `00007`–`00010` → `rejected` status and `rejection_note`, `handoff_reason`, the `snag_request_transitions` status history (written by a trigger on `snag_requests`), and the `snag_execute_metrics` function behind the dashboard's execute-mode metrics.
+
 If policies already exist from a partial run:
 
 ```sh

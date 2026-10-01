@@ -112,6 +112,33 @@ export interface SnagRequestRow {
   updated_at: string;
 }
 
+export interface DurationStats {
+  count: number;
+  p50_seconds: number | null;
+  p90_seconds: number | null;
+}
+
+/** Result of the snag_execute_metrics SQL function: aggregates only, no prompts or summaries. */
+export interface ExecuteMetrics {
+  range_days: number;
+  total: number;
+  outcomes: Partial<Record<PolicyOutcome | "rejected" | "undecided", number>>;
+  merged: { by_snag: number; by_developer: number };
+  top_escalations: {
+    id: string;
+    name: string;
+    kind: PolicyRuleKind | "builtin";
+    requests: number;
+  }[];
+  shadow: { decided: number; disagreements: number };
+  handoff_reasons: { reason: string; requests: number }[];
+  waits: Partial<
+    Record<"awaiting_approval" | "awaiting_review" | "awaiting_confirmation", DurationStats>
+  >;
+  submit_to_merge: DurationStats;
+  history_started_at: string | null;
+}
+
 export interface SnagOrganization {
   id: string;
   name: string;
