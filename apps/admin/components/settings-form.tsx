@@ -8,6 +8,8 @@ import {
   resolveEffectiveAgentMode,
   resolveEffectiveRequesterFollowups,
   type AgentMode,
+  type ExecuteDelivery,
+  type PolicyOutcome,
   type SnagOrganization,
   type SnagProjectSafe,
 } from "@snag/shared";
@@ -19,9 +21,25 @@ import { z } from "zod";
 import { AgentModeSelect, ProjectAgentModeOverrideSelect } from "@/components/agent-mode-select";
 import { AllowedOriginsField, originsToTextarea } from "@/components/allowed-origins-field";
 import {
+  DefaultOutcomeSelect,
+  ExecuteDeliverySelect,
+  SHADOW_MODE_DESCRIPTION,
+} from "@/components/execution-selects";
+import { ExecutionSettingsCard } from "@/components/execution-settings-card";
+import {
   ProjectRequesterFollowupsOverrideSelect,
   RequesterFollowupsSwitch,
 } from "@/components/requester-followups-select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -49,6 +67,14 @@ export function SettingsForm({
   const [orgFollowupsEnabled, setOrgFollowupsEnabled] = useState(
     organization?.requester_followups_enabled ?? true,
   );
+  const [orgDelivery, setOrgDelivery] = useState<ExecuteDelivery>(
+    organization?.execute_delivery ?? "pr_only",
+  );
+  const [orgOutcome, setOrgOutcome] = useState<PolicyOutcome>(
+    organization?.default_outcome ?? "review_before_execution",
+  );
+  const [orgShadow, setOrgShadow] = useState(organization?.policy_shadow_mode ?? false);
+  const [orgAckOpen, setOrgAckOpen] = useState(false);
   const [savingOrg, setSavingOrg] = useState(false);
   const [allowedOriginsText, setAllowedOriginsText] = useState(() =>
     originsToTextarea(project.allowed_origins),
@@ -81,8 +107,17 @@ export function SettingsForm({
     if (organization) {
       setOrgAgentMode(organization.agent_mode);
       setOrgFollowupsEnabled(organization.requester_followups_enabled);
+      setOrgDelivery(organization.execute_delivery ?? "pr_only");
+      setOrgOutcome(organization.default_outcome ?? "review_before_execution");
+      setOrgShadow(organization.policy_shadow_mode ?? false);
     }
-  }, [organization?.agent_mode, organization?.requester_followups_enabled]);
+  }, [
+    organization?.agent_mode,
+    organization?.requester_followups_enabled,
+    organization?.execute_delivery,
+    organization?.default_outcome,
+    organization?.policy_shadow_mode,
+  ]);
 
   useEffect(() => {
     setAllowedOriginsText(originsToTextarea(project.allowed_origins));
@@ -130,7 +165,15 @@ export function SettingsForm({
     router.refresh();
   }
 
-  async function saveOrganizationMode() {
+  function onSaveOrganization() {
+    if (orgDelivery === "auto_merge" && organization?.execute_delivery !== "auto_merge") {
+      setOrgAckOpen(true);
+      return;
+    }
+    void saveOrganizationMode(false);
+  }
+
+  async function saveOrganizationMode(acknowledgeAutoMerge: boolean) {
     if (!organization) return;
     setSavingOrg(true);
     const res = await fetch("/api/organization", {
@@ -140,12 +183,18 @@ export function SettingsForm({
         organization_id: organization.id,
         agent_mode: orgAgentMode,
         requester_followups_enabled: orgFollowupsEnabled,
+        execute_delivery: orgDelivery,
+        default_outcome: orgOutcome,
+        policy_shadow_mode: orgShadow,
+        acknowledge_auto_merge: acknowledgeAutoMerge || undefined,
       }),
     });
     setSavingOrg(false);
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      toast.error(body.error ?? "Failed to save organization settings");
+      toast.error(
+        typeof body.error === "string" ? body.error : "Failed to save organization settings",
+      );
       return;
     }
     toast.success("Organization settings saved");
@@ -193,9 +242,45 @@ export function SettingsForm({
               checked={orgFollowupsEnabled}
               onCheckedChange={setOrgFollowupsEnabled}
             />
-            <Button type="button" onClick={saveOrganizationMode} disabled={savingOrg}>
+            <ExecuteDeliverySelect
+              id="org_execute_delivery"
+              value={orgDelivery}
+              onChange={setOrgDelivery}
+            />
+            <DefaultOutcomeSelect
+              id="org_default_outcome"
+              value={orgOutcome}
+              onChange={setOrgOutcome}
+            />
+            <div className="flex items-center justify-between rounded-lg border border-zinc-200 p-4">
+              <div>
+                <p className="font-medium">Rules shadow mode</p>
+                <p className="text-sm text-zinc-500">{SHADOW_MODE_DESCRIPTION}</p>
+              </div>
+              <Switch checked={orgShadow} onCheckedChange={setOrgShadow} />
+            </div>
+            <Button type="button" onClick={onSaveOrganization} disabled={savingOrg}>
               {savingOrg ? "Saving…" : "Save organization defaults"}
             </Button>
+            <AlertDialog open={orgAckOpen} onOpenChange={setOrgAckOpen}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Make auto-merge the organization default?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Projects that inherit this setting will merge agent PRs to production as soon
+                    as CI passes when rules allow it, without code review. Each project still
+                    needs a GitHub token, a requester signing secret, and trusted requesters;
+                    otherwise it stays on PR only.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => void saveOrganizationMode(true)}>
+                    I understand, save
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </CardContent>
         </Card>
       ) : null}
@@ -271,6 +356,15 @@ export function SettingsForm({
           </form>
         </CardContent>
       </Card>
+
+      <ExecutionSettingsCard
+        project={project}
+        orgDefaults={{
+          execute_delivery: organization?.execute_delivery ?? "pr_only",
+          default_outcome: organization?.default_outcome ?? "review_before_execution",
+          policy_shadow_mode: organization?.policy_shadow_mode ?? false,
+        }}
+      />
 
       <Card>
         <CardHeader>

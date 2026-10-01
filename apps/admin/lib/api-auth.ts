@@ -53,6 +53,13 @@ export async function canManageProject(userId: string, projectSlug: string) {
   return member?.role === "owner" || member?.role === "admin";
 }
 
+/** Org admins/owners, or platform admins who are not impersonating. */
+export async function canAdministerProject(userId: string, projectSlug: string) {
+  if (await canManageProject(userId, projectSlug)) return true;
+  if (await getEffectiveImpersonationOrgId(userId)) return false;
+  return isPlatformAdminUser(userId);
+}
+
 export async function canReadProject(userId: string, projectSlug: string) {
   const impersonatingOrgId = await getEffectiveImpersonationOrgId(userId);
   if (impersonatingOrgId) {

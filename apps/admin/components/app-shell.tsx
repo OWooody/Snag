@@ -10,6 +10,7 @@ import {
   Plug,
   Server,
   Settings,
+  ShieldCheck,
   Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,7 @@ interface AppShellProps {
 const companyLinks = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/requests", label: "Requests", icon: FileText },
+  { href: "/rules", label: "Rules", icon: ShieldCheck },
   { href: "/integration", label: "Integration", icon: Plug },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
@@ -64,7 +66,7 @@ export function AppShell({
         <nav className="flex flex-1 flex-col gap-1 p-3">
           {companyLinks.map((link) => {
             const Icon = link.icon;
-            const active = pathname === link.href;
+            const active = pathname === link.href || pathname.startsWith(`${link.href}/`);
             return (
               <Link
                 key={link.href}
