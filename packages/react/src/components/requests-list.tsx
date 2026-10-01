@@ -17,12 +17,15 @@ interface RequestsListProps {
   /** Bump to force an immediate reload (e.g. after submit). */
   refreshKey?: number;
   followupsEnabled?: boolean;
+  /** Request to show expanded and scroll to, e.g. the one just submitted. */
+  focusRequestId?: string | null;
 }
 
 export function RequestsList({
   theme,
   refreshKey = 0,
   followupsEnabled = false,
+  focusRequestId = null,
 }: RequestsListProps) {
   const [rows, setRows] = useState<SnagRequestRow[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -35,6 +38,8 @@ export function RequestsList({
   const needsAttentionOnly = needsAttentionChoice ?? agentMode !== "execute";
   // Per-card expand/collapse chosen by the user; kept across polls.
   const [expandedOverrides, setExpandedOverrides] = useState<Record<string, boolean>>({});
+  const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const scrolledToFocus = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     setRefreshing(true);
@@ -68,7 +73,16 @@ export function RequestsList({
     };
   }, [load]);
 
+  useEffect(() => {
+    if (!focusRequestId || scrolledToFocus.current === focusRequestId) return;
+    const node = cardRefs.current[focusRequestId];
+    if (!node) return;
+    scrolledToFocus.current = focusRequestId;
+    node.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [focusRequestId, rows]);
+
   const visibleRows = rows.filter((row) => {
+    if (row.id === focusRequestId) return true;
     if (
       followupsEnabled &&
       needsAttentionOnly &&
@@ -171,18 +185,26 @@ export function RequestsList({
           const needsRequester =
             row.status === "awaiting_confirmation" ||
             (followupsEnabled && row.status === "needs_input");
+          const focused = row.id === focusRequestId;
           return (
-            <RequestCard
+            <div
               key={row.id}
-              row={row}
-              theme={theme}
-              followupsEnabled={followupsEnabled}
-              expanded={expandedOverrides[row.id] ?? needsRequester}
-              onToggleExpanded={(next) =>
-                setExpandedOverrides((current) => ({ ...current, [row.id]: next }))
-              }
-              onReplied={() => void load()}
-            />
+              ref={(node) => {
+                cardRefs.current[row.id] = node;
+              }}
+            >
+              <RequestCard
+                row={row}
+                theme={theme}
+                followupsEnabled={followupsEnabled}
+                focused={focused}
+                expanded={expandedOverrides[row.id] ?? (needsRequester || focused)}
+                onToggleExpanded={(next) =>
+                  setExpandedOverrides((current) => ({ ...current, [row.id]: next }))
+                }
+                onReplied={() => void load()}
+              />
+            </div>
           );
         })
       )}
@@ -194,6 +216,7 @@ function RequestCard({
   row,
   theme,
   followupsEnabled,
+  focused = false,
   expanded,
   onToggleExpanded,
   onReplied,
@@ -201,6 +224,7 @@ function RequestCard({
   row: SnagRequestRow;
   theme: SnagTheme;
   followupsEnabled: boolean;
+  focused?: boolean;
   expanded: boolean;
   onToggleExpanded: (expanded: boolean) => void;
   onReplied: () => void;
@@ -301,7 +325,7 @@ function RequestCard({
         padding: 12,
         marginBottom: 10,
         background: GLASS_SURFACE,
-        border: "1px solid rgba(255,255,255,0.4)",
+        border: focused ? `1px solid ${theme.accent}` : "1px solid rgba(255,255,255,0.4)",
       }}
     >
       <div

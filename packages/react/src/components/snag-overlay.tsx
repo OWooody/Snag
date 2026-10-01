@@ -27,6 +27,7 @@ export function SnagOverlay() {
   const [initialized, setInitialized] = useState(() => getSnagConfig() != null);
   const [enabled, setEnabled] = useState(false);
   const [followupsEnabled, setFollowupsEnabled] = useState(false);
+  const [agentMode, setAgentMode] = useState<"plan_only" | "execute" | null>(null);
   const [badgeCount, setBadgeCount] = useState(0);
   const [environmentLabel, setEnvironmentLabel] = useState("");
   const [panelVisible, setPanelVisible] = useState(false);
@@ -57,6 +58,7 @@ export function SnagOverlay() {
     setEnabled(true);
     const followups = state.requester_followups_enabled === true;
     setFollowupsEnabled(followups);
+    if (state.agent_mode) setAgentMode(state.agent_mode);
     const rows = state.requests ?? [];
     const count = rows.filter((row) => {
       const needsRequester =
@@ -87,6 +89,7 @@ export function SnagOverlay() {
       );
       setEnabled(true);
       setFollowupsEnabled(state.requester_followups_enabled === true);
+      if (state.agent_mode) setAgentMode(state.agent_mode);
       if (isDebugEnabled()) {
         console.log("[Snag] overlay enabled");
       }
@@ -146,6 +149,7 @@ export function SnagOverlay() {
           theme={theme}
           initialTab={initialTab}
           followupsEnabled={followupsEnabled}
+          agentMode={agentMode}
           badgeCount={badgeCount}
           onClose={() => {
             setPanelVisible(false);

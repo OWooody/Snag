@@ -50,6 +50,7 @@ interface RequestPanelProps {
   onClose: () => void;
   initialTab?: Tab;
   followupsEnabled?: boolean;
+  agentMode?: "plan_only" | "execute" | null;
   /** Pending needs_input count for the Requests tab badge. */
   badgeCount?: number;
 }
@@ -60,6 +61,7 @@ export function RequestPanel({
   onClose,
   initialTab = "new",
   followupsEnabled = false,
+  agentMode = null,
   badgeCount = 0,
 }: RequestPanelProps) {
   const [tab, setTab] = useState<Tab>(initialTab);
@@ -77,6 +79,8 @@ export function RequestPanel({
     screenshot,
   );
   const [agentUrl, setAgentUrl] = useState<string | null>(null);
+  const [submittedId, setSubmittedId] = useState<string | null>(null);
+  const [focusRequestId, setFocusRequestId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [listRefreshKey, setListRefreshKey] = useState(0);
 
@@ -143,6 +147,7 @@ export function RequestPanel({
         locale: typeof context.locale === "string" ? context.locale : undefined,
       });
       setAgentUrl(response.agent_url);
+      setSubmittedId(response.id);
       setPhase("done");
       setListRefreshKey((key) => key + 1);
     } catch (error) {
@@ -155,6 +160,7 @@ export function RequestPanel({
     setPhase("editing");
     setPrompt("");
     setAgentUrl(null);
+    setSubmittedId(null);
     setErrorMessage(null);
     setIncludeScreenshot(true);
     setWorkingScreenshot(screenshot);
@@ -278,7 +284,10 @@ export function RequestPanel({
             label="Requests"
             theme={theme}
             badgeCount={badgeCount}
-            onClick={() => setTab("list")}
+            onClick={() => {
+              setFocusRequestId(null);
+              setTab("list");
+            }}
           />
         </div>
 
@@ -289,12 +298,25 @@ export function RequestPanel({
                 theme={theme}
                 refreshKey={listRefreshKey}
                 followupsEnabled={followupsEnabled}
+                focusRequestId={focusRequestId}
               />
             ) : phase === "done" ? (
               <div>
                 <p style={{ color: theme.text, fontSize: 15 }}>
-                  Request submitted. An agent is working on it.
+                  {agentMode === "execute"
+                    ? "Request submitted. The agent plans the change first."
+                    : "Request submitted. An agent is working on it."}
                 </p>
+                {agentMode === "execute" ? (
+                  <p style={{ color: theme.textMuted, fontSize: 13, lineHeight: 1.45 }}>
+                    {followupsEnabled
+                      ? "If anything is unclear you'll get questions here. "
+                      : ""}
+                    Depending on the change, a developer may check it first, or you may be
+                    asked to try a preview before it goes live. Progress shows on the request
+                    card.
+                  </p>
+                ) : null}
                 {agentUrl ? (
                   <a
                     href={agentUrl}
@@ -307,7 +329,10 @@ export function RequestPanel({
                 ) : null}
                 <button
                   type="button"
-                  onClick={() => setTab("list")}
+                  onClick={() => {
+                    setFocusRequestId(submittedId);
+                    setTab("list");
+                  }}
                   style={{
                     display: "block",
                     marginTop: 20,
@@ -321,7 +346,7 @@ export function RequestPanel({
                     cursor: "pointer",
                   }}
                 >
-                  View requests
+                  {submittedId ? "Track this request" : "View requests"}
                 </button>
                 <button
                   type="button"
