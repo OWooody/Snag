@@ -101,6 +101,8 @@ export interface SnagRequestRow {
   error: string | null;
   /** Developer's note when the plan was rejected; shown to the requester. */
   rejection_note: string | null;
+  /** Why Snag handed the request to a developer (awaiting_review). */
+  handoff_reason: string | null;
   plan: SnagPlan | null;
   policy_decision: PolicyDecisionRecord | null;
   approved_at: string | null;

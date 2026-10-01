@@ -733,6 +733,7 @@ async function listRequests(
     summary: row.summary,
     error: row.error,
     rejection_note: row.status === "rejected" ? row.rejection_note : null,
+    handoff_reason: row.status === "awaiting_review" ? row.handoff_reason : null,
     phase: row.phase,
     stage_label: requestStageLabel(row),
     requester: row.requester ?? null,

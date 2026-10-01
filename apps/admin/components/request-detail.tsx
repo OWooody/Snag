@@ -281,6 +281,14 @@ export function RequestDetail({
               on GitHub. Snag tracks it and marks the request merged or closed.
             </CardDescription>
           </CardHeader>
+          {request.handoff_reason ? (
+            <CardContent>
+              <p className="text-sm text-zinc-700">
+                <span className="font-medium">Why it was handed off:</span>{" "}
+                {request.handoff_reason}
+              </p>
+            </CardContent>
+          ) : null}
         </Card>
       ) : null}
 

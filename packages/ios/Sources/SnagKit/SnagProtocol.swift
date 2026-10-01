@@ -86,6 +86,8 @@ public struct SnagRequestRow: Decodable, Identifiable, Sendable {
     public let error: String?
     /// The developer's note when the plan was rejected.
     public let rejectionNote: String?
+    /// Why the request went to a developer while `awaitingReview`. Informational, not an error.
+    public let handoffReason: String?
     /// Execute mode: `planning`, `implementing`, or `delivering`. Nil in plan-only mode.
     public let phase: String?
     /// Short description of an in-progress step, e.g. "Planning" or "Waiting for checks".
@@ -105,6 +107,7 @@ public struct SnagRequestRow: Decodable, Identifiable, Sendable {
         case summary
         case error
         case rejectionNote = "rejection_note"
+        case handoffReason = "handoff_reason"
         case phase
         case stageLabel = "stage_label"
         case requester

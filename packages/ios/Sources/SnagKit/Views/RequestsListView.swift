@@ -273,6 +273,12 @@ struct RequestCardView: View {
                     .font(.system(size: 12))
                     .foregroundColor(theme.danger)
             }
+            if let reason = row.handoffReason, !reason.isEmpty {
+                Text("A developer will take it from here. \(reason)")
+                    .font(.system(size: 12))
+                    .foregroundColor(theme.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if row.status == .rejected {
                 Text(rejectionText)
                     .font(.system(size: 12))

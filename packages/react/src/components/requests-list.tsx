@@ -381,6 +381,11 @@ function RequestCard({
           {row.error}
         </p>
       ) : null}
+      {row.handoff_reason ? (
+        <p style={{ fontSize: 12, color: theme.textMuted, marginTop: 6, marginBottom: 0 }}>
+          {`A developer will take it from here. ${row.handoff_reason}`}
+        </p>
+      ) : null}
       {row.status === "rejected" ? (
         <p
           style={{

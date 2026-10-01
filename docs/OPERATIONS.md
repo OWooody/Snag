@@ -389,6 +389,8 @@ SELECT slug, name, publishable_key, enabled, repo_url, repo_ref FROM snag_projec
 
 ### Execute-mode delivery
 
+When Snag hands a request to a developer it records why in `snag_requests.handoff_reason` (shown on the request detail page and, as plain information, to the requester). `error` is reserved for real failures.
+
 | Symptom | Likely cause |
 |---------|--------------|
 | Request stuck `running` after the PR opened | Delivery worker not scheduled, or `SNAG_WORKER_SECRET` mismatch — check `net._http_response` for 401s |

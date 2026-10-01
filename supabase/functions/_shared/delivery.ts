@@ -129,7 +129,7 @@ async function recheckNewCommits(
     await claimTransition(service, row, {
       status: "awaiting_review",
       policy_decision: nextRecord,
-      error: "New commits on the pull request no longer pass the rules.",
+      handoff_reason: "New commits on the pull request no longer pass the rules.",
     });
     return false;
   }
@@ -234,7 +234,7 @@ async function handOff(
   row: LifecycleRow,
   reason: string,
 ): Promise<void> {
-  await claimTransition(service, row, { status: "awaiting_review", error: reason });
+  await claimTransition(service, row, { status: "awaiting_review", handoff_reason: reason });
 }
 
 function elapsedSince(iso: string | null, now: number): number {
