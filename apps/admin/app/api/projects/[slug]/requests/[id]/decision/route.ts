@@ -1,5 +1,6 @@
 import {
   buildImplementationPrompt,
+  buildPlanRevisionPrompt,
   decryptSecret,
   requestReviewDecisionSchema,
   type PolicyDecisionRecord,
@@ -16,10 +17,17 @@ interface PendingRow {
   status: string;
   agent_id: string | null;
   lifecycle_version: number;
+  summary: string | null;
   policy_decision: PolicyDecisionRecord | null;
 }
 
-/** Developer approval or rejection of a plan waiting in awaiting_approval. */
+const DECISION_NOTES = {
+  approve: "Plan approved by a developer",
+  reject: "Plan rejected by a developer",
+  revise: "Plan sent back for changes by a developer",
+} as const;
+
+/** Developer approval, rejection, or revision request for a plan waiting in awaiting_approval. */
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ slug: string; id: string }> },
@@ -39,7 +47,7 @@ export async function POST(
   const service = createServiceClient();
   const { data: row } = await service
     .from("snag_requests")
-    .select("id, status, agent_id, lifecycle_version, policy_decision")
+    .select("id, status, agent_id, lifecycle_version, summary, policy_decision")
     .eq("id", id)
     .eq("project_id", project.id)
     .maybeSingle<PendingRow>();
@@ -56,10 +64,7 @@ export async function POST(
   const now = new Date().toISOString();
   const policyDecision: PolicyDecisionRecord = {
     ...(row.policy_decision ?? {}),
-    note:
-      decision === "approve"
-        ? "Plan approved by a developer"
-        : "Plan rejected by a developer",
+    note: DECISION_NOTES[decision],
   };
 
   async function transition(update: Record<string, unknown>, fromVersion: number) {
@@ -108,16 +113,27 @@ export async function POST(
     return NextResponse.json({ error: "Cursor API key could not be decrypted" }, { status: 500 });
   }
 
+  const revising = decision === "revise";
   const updated = await transition(
-    {
-      status: "running",
-      phase: "implementing",
-      phase_started_at: now,
-      approved_by: user.id,
-      approved_at: now,
-      error: null,
-      policy_decision: policyDecision,
-    },
+    revising
+      ? {
+          status: "running",
+          phase: "planning",
+          phase_started_at: now,
+          // Lets the lifecycle ignore a stale "finished" that still carries this plan.
+          plan_summary: row.summary,
+          error: null,
+          policy_decision: policyDecision,
+        }
+      : {
+          status: "running",
+          phase: "implementing",
+          phase_started_at: now,
+          approved_by: user.id,
+          approved_at: now,
+          error: null,
+          policy_decision: policyDecision,
+        },
     row.lifecycle_version,
   );
   if (!updated) {
@@ -128,21 +144,25 @@ export async function POST(
     await sendCursorFollowUp(
       cursorKey,
       row.agent_id,
-      buildImplementationPrompt({
-        baseRef: project.repo_ref,
-        approvedBy: "developer",
-        developerNote: note,
-      }),
+      revising
+        ? buildPlanRevisionPrompt(note!)
+        : buildImplementationPrompt({
+            baseRef: project.repo_ref,
+            approvedBy: "developer",
+            developerNote: note,
+          }),
     );
   } catch (error) {
-    console.error(`snag approval follow-up failed request=${row.id}:`, error);
+    console.error(`snag ${decision} follow-up failed request=${row.id}:`, error);
     await transition(
       {
         status: "awaiting_approval",
         phase: "planning",
         approved_by: null,
         approved_at: null,
-        error: "Could not reach the agent. Try approving again.",
+        error: revising
+          ? "Could not reach the agent. Try sending the plan back again."
+          : "Could not reach the agent. Try approving again.",
       },
       row.lifecycle_version + 1,
     );
@@ -154,7 +174,7 @@ export async function POST(
 
   await writeAuditLog({
     actorId: user.id,
-    action: "request.plan_approve",
+    action: revising ? "request.plan_revise" : "request.plan_approve",
     targetType: "snag_requests",
     targetId: row.id,
     metadata: { slug, has_note: Boolean(note) },

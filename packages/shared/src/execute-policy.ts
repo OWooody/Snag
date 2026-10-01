@@ -318,3 +318,17 @@ export function buildImplementationPrompt(options: {
   }
   return lines.join("\n");
 }
+
+/** Follow-up sent when a developer sends a plan back for changes instead of approving it. */
+export function buildPlanRevisionPrompt(developerNote: string): string {
+  return [
+    "A developer reviewed your plan via Snag and wants changes before anything is implemented:",
+    "",
+    developerNote.trim(),
+    "",
+    "Revise the plan to address this. Do NOT edit files, commit, push, or open a pull request yet.",
+    'If the feedback raises a product question only the requester can answer, list it under "## Questions for requester".',
+    'Put technical notes under "## Notes for developers".',
+    `End your summary with an updated "${SNAG_PLAN_HEADING}" JSON block in the same format as before.`,
+  ].join("\n");
+}
