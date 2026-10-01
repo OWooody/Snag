@@ -10,6 +10,7 @@ import {
   type PolicyOutcome,
   type SnagProjectSafe,
 } from "@snag/shared";
+import { CheckCircle2, CircleDashed } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -52,6 +53,26 @@ function parseRequesterList(text: string): string[] {
         .filter(Boolean),
     ),
   ];
+}
+
+function SavedStatus({ savedAt, label }: { savedAt: string | null; label: string }) {
+  if (!savedAt) {
+    return (
+      <span className="flex items-center gap-1.5 text-sm font-normal text-zinc-500">
+        <CircleDashed className="h-4 w-4" aria-hidden />
+        Not set
+      </span>
+    );
+  }
+  return (
+    <span
+      className="flex items-center gap-1.5 text-sm font-normal text-emerald-700"
+      title={new Date(savedAt).toLocaleString()}
+    >
+      <CheckCircle2 className="h-4 w-4" aria-hidden />
+      {label} {new Date(savedAt).toLocaleString()}
+    </span>
+  );
 }
 
 async function errorMessage(res: Response, fallback: string): Promise<string> {
@@ -306,14 +327,15 @@ export function ExecutionSettingsCard({
 
       <Card>
         <CardHeader>
-          <CardTitle>GitHub token</CardTitle>
+          <CardTitle className="flex flex-wrap items-center justify-between gap-2">
+            GitHub token
+            <SavedStatus savedAt={project.github_token_updated_at} label="Saved" />
+          </CardTitle>
           <CardDescription>
             Fine-grained token for {project.repo_url}. Needs Contents and Pull requests (read and
             write) plus Checks, Commit statuses, and Deployments (read). Stored encrypted; never
             displayed after save.
-            {project.github_token_updated_at ? (
-              <> Last updated {new Date(project.github_token_updated_at).toLocaleString()}.</>
-            ) : (
+            {project.github_token_updated_at ? null : (
               <> Not configured — merge deliveries fall back to PR only.</>
             )}
           </CardDescription>
@@ -364,13 +386,13 @@ export function ExecutionSettingsCard({
 
       <Card>
         <CardHeader>
-          <CardTitle>Requester signing secret</CardTitle>
+          <CardTitle className="flex flex-wrap items-center justify-between gap-2">
+            Requester signing secret
+            <SavedStatus savedAt={project.requester_secret_updated_at} label="Generated" />
+          </CardTitle>
           <CardDescription>
             Your backend signs a short-lived requester token with this secret so Snag can trust
             who filed a request. Required for auto-merge.
-            {project.requester_secret_updated_at ? (
-              <> Generated {new Date(project.requester_secret_updated_at).toLocaleString()}.</>
-            ) : null}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
