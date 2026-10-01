@@ -1,7 +1,7 @@
 import { SAFE_PROJECT_COLUMNS, companyProjectUpdateSchema } from "@snag/shared";
 import { NextResponse } from "next/server";
 import { writeAuditLog } from "@/lib/audit";
-import { canManageProject, requireSessionUser } from "@/lib/api-auth";
+import { canAdministerProject, requireSessionUser } from "@/lib/api-auth";
 import { createServiceClient } from "@/lib/service";
 
 export async function PATCH(
@@ -12,7 +12,7 @@ export async function PATCH(
   const { user, error } = await requireSessionUser();
   if (error) return error;
 
-  const allowed = await canManageProject(user!.id, slug);
+  const allowed = await canAdministerProject(user!.id, slug);
   if (!allowed) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

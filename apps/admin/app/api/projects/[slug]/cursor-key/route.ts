@@ -1,7 +1,7 @@
 import { assertEncryptionSecret, cursorKeyUpdateSchema, encryptSecret } from "@snag/shared";
 import { NextResponse } from "next/server";
 import { writeAuditLog } from "@/lib/audit";
-import { canManageProject, getProjectBySlug, requireSessionUser } from "@/lib/api-auth";
+import { canAdministerProject, getProjectBySlug, requireSessionUser } from "@/lib/api-auth";
 import { createServiceClient } from "@/lib/service";
 
 export async function POST(
@@ -12,7 +12,7 @@ export async function POST(
   const { user, error } = await requireSessionUser();
   if (error) return error;
 
-  const allowed = await canManageProject(user!.id, slug);
+  const allowed = await canAdministerProject(user!.id, slug);
   if (!allowed) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
