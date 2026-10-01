@@ -320,6 +320,11 @@ function RequestCard({
           }}
         >
           {STATUS_LABELS[row.status] ?? row.status.toUpperCase()}
+          {row.stage_label ? (
+            <span style={{ fontWeight: 600, letterSpacing: 0, color: theme.textMuted }}>
+              {` · ${row.stage_label}`}
+            </span>
+          ) : null}
         </span>
         <span style={{ fontSize: 11, color: theme.textMuted }}>
           {new Date(row.created_at).toLocaleString()}

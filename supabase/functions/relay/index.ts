@@ -42,6 +42,7 @@ import {
   type ProjectRow,
   projectSettings,
 } from "../_shared/projects.ts";
+import { requestStageLabel } from "../_shared/request_stage.ts";
 import { mapTerminalRequestStatus } from "../_shared/requester_questions.ts";
 import { verifyRequesterToken } from "../_shared/requester_token.ts";
 import {
@@ -732,6 +733,8 @@ async function listRequests(
     summary: row.summary,
     error: row.error,
     rejection_note: row.status === "rejected" ? row.rejection_note : null,
+    phase: row.phase,
+    stage_label: requestStageLabel(row),
     requester: row.requester ?? null,
     created_at: row.created_at,
   }));

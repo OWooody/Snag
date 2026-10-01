@@ -172,6 +172,8 @@ final class ProtocolTests: XCTestCase {
           "summary": null,
           "error": null,
           "rejection_note": "The footer is required for legal.",
+          "phase": "planning",
+          "stage_label": null,
           "requester": null,
           "created_at": "2026-07-24T14:20:33Z"
         }
@@ -179,6 +181,29 @@ final class ProtocolTests: XCTestCase {
         let row = try JSONDecoder().decode(SnagRequestRow.self, from: Data(json.utf8))
         XCTAssertEqual(row.status, .rejected)
         XCTAssertEqual(row.rejectionNote, "The footer is required for legal.")
+        XCTAssertEqual(row.phase, "planning")
+        XCTAssertNil(row.stageLabel)
+    }
+
+    func testDecodesStageLabel() throws {
+        let json = """
+        {
+          "id": "d",
+          "prompt": "Change copy",
+          "status": "running",
+          "agent_url": null,
+          "branch_name": null,
+          "pr_url": null,
+          "summary": null,
+          "error": null,
+          "phase": "delivering",
+          "stage_label": "Waiting for checks",
+          "requester": null,
+          "created_at": "2026-07-24T14:20:33Z"
+        }
+        """
+        let row = try JSONDecoder().decode(SnagRequestRow.self, from: Data(json.utf8))
+        XCTAssertEqual(row.stageLabel, "Waiting for checks")
     }
 
     func testDisplaySummaryStripsSnagPlan() {

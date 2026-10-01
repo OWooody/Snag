@@ -222,11 +222,16 @@ struct RequestCardView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack {
+            HStack(spacing: 0) {
                 Text(statusLabel)
                     .font(.system(size: 11, weight: .heavy))
                     .kerning(0.5)
                     .foregroundColor(statusColor)
+                if let stage = row.stageLabel, !stage.isEmpty {
+                    Text(" · \(stage)")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(theme.textMuted)
+                }
                 Spacer()
                 Text(formattedDate)
                     .font(.system(size: 11))

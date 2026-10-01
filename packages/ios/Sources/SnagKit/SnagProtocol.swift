@@ -86,6 +86,10 @@ public struct SnagRequestRow: Decodable, Identifiable, Sendable {
     public let error: String?
     /// The developer's note when the plan was rejected.
     public let rejectionNote: String?
+    /// Execute mode: `planning`, `implementing`, or `delivering`. Nil in plan-only mode.
+    public let phase: String?
+    /// Short description of an in-progress step, e.g. "Planning" or "Waiting for checks".
+    public let stageLabel: String?
     /// Host-supplied display id from the `requester` provider, when present.
     public let requester: String?
     public let createdAt: String
@@ -101,6 +105,8 @@ public struct SnagRequestRow: Decodable, Identifiable, Sendable {
         case summary
         case error
         case rejectionNote = "rejection_note"
+        case phase
+        case stageLabel = "stage_label"
         case requester
         case createdAt = "created_at"
     }
