@@ -128,6 +128,10 @@ Rules marked **Check these paths** use common path guesses; adjust them to the r
 - **Reject** ends the request with status `rejected`; the requester sees it as **Not approved**, along with the note if you wrote one.
 - PRs in `awaiting_review` are merged by developers on GitHub; the delivery worker marks the request `merged` (or `error` if the PR is closed).
 
+### Dashboard metrics
+
+When the project's effective agent mode is **Plan and execute**, the dashboard has an **Execute mode** section covering the last 7 or 30 days. It shows the outcome mix, merges by Snag versus by a developer, the median and p90 time spent in plan approval, PR review, and preview confirmation, the rules that escalated most, how often shadow rules would have changed a decision, and the most common handoff reasons. It reports counts and durations only, never prompts or summaries. Wait times come from `snag_request_transitions`, so they only cover status changes after migration `00009`.
+
 All rule, setting, token, secret, and approval changes are written to `snag_audit_log` (without prompts, notes, or secrets).
 
 ## Security notes
