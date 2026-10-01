@@ -29,10 +29,12 @@ export async function isPlatformAdminUser(userId: string) {
   return Boolean(data);
 }
 
+/**
+ * Org admins/owners. A platform admin who is impersonating may manage only
+ * the impersonated organization's projects.
+ */
 export async function canManageProject(userId: string, projectSlug: string) {
-  if (await getEffectiveImpersonationOrgId(userId)) {
-    return false;
-  }
+  const impersonatingOrgId = await getEffectiveImpersonationOrgId(userId);
 
   const service = createServiceClient();
   const { data: project } = await service
@@ -42,6 +44,7 @@ export async function canManageProject(userId: string, projectSlug: string) {
     .single();
 
   if (!project?.organization_id) return false;
+  if (impersonatingOrgId) return project.organization_id === impersonatingOrgId;
 
   const { data: member } = await service
     .from("snag_org_members")
@@ -53,7 +56,7 @@ export async function canManageProject(userId: string, projectSlug: string) {
   return member?.role === "owner" || member?.role === "admin";
 }
 
-/** Org admins/owners, or platform admins who are not impersonating. */
+/** canManageProject, plus platform admins who are not impersonating (any project). */
 export async function canAdministerProject(userId: string, projectSlug: string) {
   if (await canManageProject(userId, projectSlug)) return true;
   if (await getEffectiveImpersonationOrgId(userId)) return false;
@@ -96,9 +99,8 @@ export async function canReadProject(userId: string, projectSlug: string) {
 }
 
 export async function canManageOrganization(userId: string, organizationId: string) {
-  if (await getEffectiveImpersonationOrgId(userId)) {
-    return false;
-  }
+  const impersonatingOrgId = await getEffectiveImpersonationOrgId(userId);
+  if (impersonatingOrgId) return organizationId === impersonatingOrgId;
 
   const service = createServiceClient();
   const { data: member } = await service

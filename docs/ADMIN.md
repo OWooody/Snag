@@ -115,4 +115,4 @@ All rule, setting, token, secret, and approval changes are written to `snag_audi
 - **Allowed origins** — company admins (Settings) and platform admins (tenant edit) manage per-project origin allowlists; **empty list blocks all origins** until configured
 - **Rate limits** — platform admins set per-IP/hourly/daily caps when creating or editing a tenant
 - **Requester follow-ups** — org default (on by default) with optional project override. When on, agents may ask product questions under `## Questions for requester`; requests enter `needs_input` and the in-app bubble shows a badge until the requester replies
-- Impersonation is read-only; start/stop events are written to `snag_audit_log`
+- Impersonating platform admins can edit the impersonated company only (settings, rules, approvals). Changes are audit-logged under the admin's account with `impersonating_org_id` in metadata; start/stop events are also written to `snag_audit_log`
