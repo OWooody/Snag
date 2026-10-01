@@ -29,6 +29,26 @@ export interface SnagScreenshot {
   height: number;
 }
 
+/** A page element the requester pointed at with the element picker. */
+export interface SnagElement {
+  /** Short CSS selector; prefers id / data-testid anchors. */
+  selector: string;
+  /** Lowercase tag name, e.g. "button". */
+  tag: string;
+  /** Visible text, whitespace-collapsed and truncated. Never form values. */
+  text?: string;
+  /** Identifying attributes: role, aria-label, href (no query), data-testid, class, ... */
+  attributes?: Record<string, string>;
+  /** Bounding box in viewport CSS pixels at pick time. */
+  rect: { x: number; y: number; width: number; height: number };
+  /** Nearest named React component, when discoverable. */
+  component?: string;
+  /** Named React ancestors, nearest first (includes `component`). */
+  componentStack?: string[];
+  /** Where the element's JSX was written. Dev builds only; line may be approximate. */
+  source?: { file: string; line?: number; column?: number };
+}
+
 /** POST <endpoint> — create */
 export interface CreateSnagRequestBody {
   /** The user's change request, free text. */
@@ -36,6 +56,8 @@ export interface CreateSnagRequestBody {
   /** Host-provided context: route, locale, app version, environment, ... */
   context: Record<string, unknown>;
   screenshot?: SnagScreenshot;
+  /** Elements picked on the page; numbered boxes on the screenshot match this order. */
+  elements?: SnagElement[];
   locale?: string;
 }
 

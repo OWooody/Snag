@@ -11,6 +11,7 @@ export type {
   ReplySnagRequestBody,
   ReplySnagRequestResponse,
   SnagRequestRow,
+  SnagElement,
   SnagRequestStatus,
   SnagScreenshot,
 } from "./protocol";

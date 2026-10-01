@@ -3,11 +3,18 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from "react";
 
 import { createSnagRequest } from "../api";
 import { resolveContext } from "../config";
+import {
+  compositeElementHighlights,
+  pagePosition,
+  type PickedElement,
+} from "../element-highlights";
+import { describeElement, elementLabel } from "../element-info";
 import type { SnagScreenshot } from "../protocol";
 import {
   GLASS_SURFACE,
@@ -17,10 +24,22 @@ import {
   useSheetMotion,
 } from "../sheet";
 import type { SnagTheme } from "../theme";
+import { ElementPicker } from "./element-picker";
 import { RequestsList } from "./requests-list";
 import { ScreenshotAnnotator } from "./screenshot-annotator";
 
 const MAX_PROMPT_LENGTH = 2000;
+/** Keep in sync with the relay's `elements` max. */
+const MAX_ELEMENTS = 3;
+
+const overlayPillStyle: CSSProperties = {
+  padding: "4px 8px",
+  borderRadius: 6,
+  background: "rgba(0,0,0,0.65)",
+  color: "#fff",
+  fontSize: 11,
+  fontWeight: 700,
+};
 
 type Tab = "new" | "list";
 type Phase = "editing" | "submitting" | "done";
@@ -52,9 +71,56 @@ export function RequestPanel({
   );
   const [isAnnotated, setIsAnnotated] = useState(false);
   const [annotating, setAnnotating] = useState(false);
+  const [picking, setPicking] = useState(false);
+  const [elements, setElements] = useState<PickedElement[]>([]);
+  const [previewScreenshot, setPreviewScreenshot] = useState<SnagScreenshot | null>(
+    screenshot,
+  );
   const [agentUrl, setAgentUrl] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [listRefreshKey, setListRefreshKey] = useState(0);
+
+  const withHighlights = async (base: SnagScreenshot): Promise<SnagScreenshot> => {
+    try {
+      return await compositeElementHighlights(base, elements, theme.accent);
+    } catch (error) {
+      console.warn("[snag] element highlight failed:", error);
+      return base;
+    }
+  };
+
+  // Annotations live on `workingScreenshot`; element boxes are layered on top
+  // so removing a pick never erases the user's markup.
+  useEffect(() => {
+    if (!workingScreenshot || elements.length === 0) {
+      setPreviewScreenshot(workingScreenshot);
+      return;
+    }
+    let cancelled = false;
+    void compositeElementHighlights(workingScreenshot, elements, theme.accent)
+      .then((result) => {
+        if (!cancelled) setPreviewScreenshot(result);
+      })
+      .catch(() => {
+        if (!cancelled) setPreviewScreenshot(workingScreenshot);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [workingScreenshot, elements, theme.accent]);
+
+  const addElement = (element: Element) => {
+    const picked: PickedElement = { info: describeElement(element), ...pagePosition(element) };
+    setElements((previous) =>
+      previous.some((item) => item.info.selector === picked.info.selector)
+        ? previous
+        : [...previous, picked].slice(0, MAX_ELEMENTS),
+    );
+  };
+
+  const removeElement = (index: number) => {
+    setElements((previous) => previous.filter((_, i) => i !== index));
+  };
 
   const submit = async () => {
     const trimmed = prompt.trim();
@@ -70,7 +136,10 @@ export function RequestPanel({
         prompt: trimmed,
         context,
         screenshot:
-          includeScreenshot && workingScreenshot ? workingScreenshot : undefined,
+          includeScreenshot && workingScreenshot
+            ? await withHighlights(workingScreenshot)
+            : undefined,
+        elements: elements.length > 0 ? elements.map((item) => item.info) : undefined,
         locale: typeof context.locale === "string" ? context.locale : undefined,
       });
       setAgentUrl(response.agent_url);
@@ -80,6 +149,17 @@ export function RequestPanel({
       setErrorMessage(error instanceof Error ? error.message : "Request failed");
       setPhase("editing");
     }
+  };
+
+  const startAnother = () => {
+    setPhase("editing");
+    setPrompt("");
+    setAgentUrl(null);
+    setErrorMessage(null);
+    setIncludeScreenshot(true);
+    setWorkingScreenshot(screenshot);
+    setIsAnnotated(false);
+    setTab("new");
   };
 
   const { open, requestClose } = useSheetMotion(onClose);
@@ -98,6 +178,22 @@ export function RequestPanel({
       />
     );
   }
+
+  if (picking) {
+    return (
+      <ElementPicker
+        theme={theme}
+        onCancel={() => setPicking(false)}
+        onPick={(element) => {
+          addElement(element);
+          setPicking(false);
+        }}
+      />
+    );
+  }
+
+  const canPickMore = elements.length < MAX_ELEMENTS;
+  const pickLabel = elements.length > 0 ? "Add element" : "Select element";
 
   return (
     <div
@@ -169,7 +265,13 @@ export function RequestPanel({
             active={tab === "new"}
             label="New request"
             theme={theme}
-            onClick={() => setTab("new")}
+            onClick={() => {
+              if (phase === "done") {
+                startAnother();
+                return;
+              }
+              setTab("new");
+            }}
           />
           <TabButton
             active={tab === "list"}
@@ -221,6 +323,24 @@ export function RequestPanel({
                 >
                   View requests
                 </button>
+                <button
+                  type="button"
+                  onClick={startAnother}
+                  style={{
+                    display: "block",
+                    marginTop: 10,
+                    width: "100%",
+                    padding: "12px 16px",
+                    borderRadius: 10,
+                    border: "1px solid rgba(255,255,255,0.55)",
+                    background: GLASS_SURFACE,
+                    color: theme.text,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  New request
+                </button>
               </div>
             ) : (
               <>
@@ -269,48 +389,70 @@ export function RequestPanel({
                       padding: 12,
                     }}
                   >
-                    <button
-                      type="button"
-                      onClick={() => setAnnotating(true)}
-                      disabled={phase === "submitting"}
-                      aria-label="Mark up screenshot"
-                      style={{
-                        display: "block",
-                        width: "100%",
-                        padding: 0,
-                        border: "none",
-                        background: "transparent",
-                        cursor: phase === "submitting" ? "not-allowed" : "pointer",
-                        position: "relative",
-                      }}
-                    >
-                      <img
-                        src={`data:image/jpeg;base64,${workingScreenshot.base64}`}
-                        alt="Screenshot preview"
+                    <div style={{ position: "relative" }}>
+                      <button
+                        type="button"
+                        onClick={() => setAnnotating(true)}
+                        disabled={phase === "submitting"}
+                        aria-label="Mark up screenshot"
                         style={{
-                          width: "100%",
-                          maxHeight: 160,
-                          objectFit: "cover",
-                          borderRadius: 8,
                           display: "block",
+                          width: "100%",
+                          padding: 0,
+                          border: "none",
+                          background: "transparent",
+                          cursor: phase === "submitting" ? "not-allowed" : "pointer",
                         }}
-                      />
-                      <span
+                      >
+                        <img
+                          src={`data:image/jpeg;base64,${(previewScreenshot ?? workingScreenshot).base64}`}
+                          alt="Screenshot preview"
+                          style={{
+                            width: "100%",
+                            maxHeight: 160,
+                            objectFit: "cover",
+                            borderRadius: 8,
+                            display: "block",
+                          }}
+                        />
+                      </button>
+                      {/* Pills sit outside the image button; "Mark up" lets clicks fall through to it. */}
+                      <div
                         style={{
                           position: "absolute",
                           left: 10,
                           bottom: 10,
-                          padding: "4px 8px",
-                          borderRadius: 6,
-                          background: "rgba(0,0,0,0.65)",
-                          color: "#fff",
-                          fontSize: 11,
-                          fontWeight: 700,
+                          display: "flex",
+                          gap: 6,
+                          pointerEvents: "none",
                         }}
                       >
-                        {isAnnotated ? "Marked up · Edit" : "Mark up"}
-                      </span>
-                    </button>
+                        <span style={overlayPillStyle}>
+                          {isAnnotated ? "Marked up · Edit" : "Mark up"}
+                        </span>
+                        {canPickMore ? (
+                          <button
+                            type="button"
+                            onClick={() => setPicking(true)}
+                            disabled={phase === "submitting"}
+                            style={{
+                              ...overlayPillStyle,
+                              border: "none",
+                              pointerEvents: "auto",
+                              cursor: phase === "submitting" ? "not-allowed" : "pointer",
+                            }}
+                          >
+                            {pickLabel}
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                    <PickedElementList
+                      elements={elements}
+                      theme={theme}
+                      disabled={phase === "submitting"}
+                      onRemove={removeElement}
+                    />
                     <label
                       style={{
                         display: "flex",
@@ -333,7 +475,35 @@ export function RequestPanel({
                       Include screenshot with request
                     </label>
                   </div>
-                ) : null}
+                ) : (
+                  <div style={{ marginTop: 16 }}>
+                    {canPickMore ? (
+                      <button
+                        type="button"
+                        onClick={() => setPicking(true)}
+                        disabled={phase === "submitting"}
+                        style={{
+                          padding: "8px 12px",
+                          borderRadius: 8,
+                          border: "1px solid rgba(255,255,255,0.55)",
+                          background: GLASS_SURFACE,
+                          color: theme.text,
+                          fontWeight: 700,
+                          fontSize: 12,
+                          cursor: phase === "submitting" ? "not-allowed" : "pointer",
+                        }}
+                      >
+                        {pickLabel}
+                      </button>
+                    ) : null}
+                    <PickedElementList
+                      elements={elements}
+                      theme={theme}
+                      disabled={phase === "submitting"}
+                      onRemove={removeElement}
+                    />
+                  </div>
+                )}
 
                 {errorMessage ? (
                   <p style={{ color: theme.danger, fontSize: 13, marginTop: 12 }}>
@@ -448,6 +618,100 @@ function AnimatedTabBody({
         {children(displayTab)}
       </div>
     </div>
+  );
+}
+
+function PickedElementList({
+  elements,
+  theme,
+  disabled,
+  onRemove,
+}: {
+  elements: PickedElement[];
+  theme: SnagTheme;
+  disabled: boolean;
+  onRemove: (index: number) => void;
+}) {
+  if (elements.length === 0) return null;
+  return (
+    <ul
+      aria-label="Selected elements"
+      style={{
+        listStyle: "none",
+        margin: "10px 0 0",
+        padding: 0,
+        display: "flex",
+        flexDirection: "column",
+        gap: 6,
+      }}
+    >
+      {elements.map((element, index) => (
+        <li
+          key={element.info.selector}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "6px 6px 6px 8px",
+            borderRadius: 8,
+            border: "1px solid rgba(255,255,255,0.55)",
+            background: GLASS_SURFACE,
+          }}
+        >
+          <span
+            aria-hidden="true"
+            style={{
+              flexShrink: 0,
+              width: 20,
+              height: 20,
+              borderRadius: 10,
+              background: theme.accent,
+              color: "#fff",
+              fontSize: 11,
+              fontWeight: 800,
+              lineHeight: "20px",
+              textAlign: "center",
+            }}
+          >
+            {index + 1}
+          </span>
+          <span
+            title={element.info.selector}
+            style={{
+              flex: 1,
+              minWidth: 0,
+              fontSize: 12,
+              color: theme.text,
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
+            {elementLabel(element.info)}
+          </span>
+          <button
+            type="button"
+            onClick={() => onRemove(index)}
+            disabled={disabled}
+            aria-label={`Remove element ${index + 1}`}
+            style={{
+              flexShrink: 0,
+              width: 24,
+              height: 24,
+              borderRadius: 12,
+              border: "none",
+              background: "transparent",
+              color: theme.textMuted,
+              cursor: disabled ? "not-allowed" : "pointer",
+              fontSize: 16,
+              lineHeight: 1,
+            }}
+          >
+            ×
+          </button>
+        </li>
+      ))}
+    </ul>
   );
 }
 

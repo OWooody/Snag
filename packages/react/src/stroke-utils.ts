@@ -79,7 +79,7 @@ export function paintStroke(
   ctx.fill(outlineToPath2D(outline));
 }
 
-function loadImage(src: string): Promise<HTMLImageElement> {
+export function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image();
     image.onload = () => resolve(image);

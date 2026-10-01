@@ -44,6 +44,11 @@ import {
 } from "../_shared/projects.ts";
 import { mapTerminalRequestStatus } from "../_shared/requester_questions.ts";
 import { verifyRequesterToken } from "../_shared/requester_token.ts";
+import {
+  formatSelectedElements,
+  type SelectedElement,
+  selectedElementsSchema,
+} from "../_shared/selected_elements.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 
 const LIST_LIMIT = 20;
@@ -99,6 +104,7 @@ const createSchema = z.object({
       height: z.number().int().positive().max(8000),
     })
     .optional(),
+  elements: selectedElementsSchema.optional(),
   locale: z.string().max(10).optional(),
 });
 
@@ -293,7 +299,9 @@ async function handleCreate(
       requester_verified: verified,
       requester_ip: ip,
       prompt: body.prompt,
-      context: body.context,
+      context: body.elements?.length
+        ? { ...body.context, snag_elements: body.elements }
+        : body.context,
       screenshot_included: !!body.screenshot,
       status: "queued",
       phase: agentMode === "execute" ? "planning" : null,
@@ -323,6 +331,7 @@ async function handleCreate(
       prompt: buildAgentPrompt(
         body.prompt,
         body.context,
+        body.elements,
         body.locale,
         project.prompt_instructions,
         agentMode,
@@ -730,17 +739,20 @@ async function listRequests(
 function buildAgentPrompt(
   prompt: string,
   context: Record<string, unknown>,
+  elements: SelectedElement[] | undefined,
   locale: string | undefined,
   promptInstructions: string,
   agentMode: AgentMode,
   followupsEnabled: boolean,
 ): string {
+  const elementSections = formatSelectedElements(elements);
   const sections = [
     "An internal tester filed an in-app change request via Snag while using a development/staging build. A screenshot of the exact screen is attached when available.",
     "",
     "## Change request",
     prompt,
     "",
+    ...(elementSections.length > 0 ? [...elementSections, ""] : []),
     "## Screen context (captured automatically)",
     "```json",
     JSON.stringify({ ...context, locale: locale ?? context.locale }, null, 2),
