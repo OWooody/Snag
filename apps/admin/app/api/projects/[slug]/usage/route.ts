@@ -48,19 +48,7 @@ export async function GET(
     .order("created_at", { ascending: false })
     .limit(500);
 
-  const stats = computeUsageStats(
-    (requests ?? []).map((r) => ({
-      ...r,
-      project_id: project.id,
-      requester: null,
-      prompt: "",
-      agent_url: null,
-      branch_name: null,
-      summary: null,
-      error: null,
-      updated_at: r.created_at,
-    })),
-  );
+  const stats = computeUsageStats(requests ?? []);
 
   return NextResponse.json({
     limits: {

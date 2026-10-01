@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { SAFE_PROJECT_COLUMNS } from "@snag/shared";
+import {
+  ExecutionSettingsCard,
+  type OrganizationExecutionDefaults,
+} from "@/components/execution-settings-card";
 import { PlatformTenantForm } from "@/components/platform-tenant-form";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requirePlatformAdmin } from "@/lib/auth";
@@ -25,10 +29,17 @@ export default async function PlatformTenantDetailPage({
 
   let orgAgentMode: "plan_only" | "execute" = "plan_only";
   let orgFollowupsEnabled = true;
+  const orgExecution: OrganizationExecutionDefaults = {
+    execute_delivery: "pr_only",
+    default_outcome: "review_before_execution",
+    policy_shadow_mode: false,
+  };
   if (project.organization_id) {
     const { data: org } = await service
       .from("snag_organizations")
-      .select("agent_mode, requester_followups_enabled")
+      .select(
+        "agent_mode, requester_followups_enabled, execute_delivery, default_outcome, policy_shadow_mode",
+      )
       .eq("id", project.organization_id)
       .single();
     if (org?.agent_mode === "execute" || org?.agent_mode === "plan_only") {
@@ -36,6 +47,11 @@ export default async function PlatformTenantDetailPage({
     }
     if (typeof org?.requester_followups_enabled === "boolean") {
       orgFollowupsEnabled = org.requester_followups_enabled;
+    }
+    if (org) {
+      orgExecution.execute_delivery = org.execute_delivery ?? orgExecution.execute_delivery;
+      orgExecution.default_outcome = org.default_outcome ?? orgExecution.default_outcome;
+      orgExecution.policy_shadow_mode = org.policy_shadow_mode ?? false;
     }
   }
 
@@ -60,6 +76,8 @@ export default async function PlatformTenantDetailPage({
         orgAgentMode={orgAgentMode}
         orgFollowupsEnabled={orgFollowupsEnabled}
       />
+
+      <ExecutionSettingsCard project={project} orgDefaults={orgExecution} />
 
       <Card>
         <CardHeader>

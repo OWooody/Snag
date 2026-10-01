@@ -1,5 +1,12 @@
-import { getSnagConfig, isDebugEnabled, resolveRequester } from "./config";
+import {
+  getSnagConfig,
+  isDebugEnabled,
+  resolveRequester,
+  resolveRequesterToken,
+} from "./config";
 import type {
+  ConfirmSnagRequestBody,
+  ConfirmSnagRequestResponse,
   CreateSnagRequestBody,
   CreateSnagRequestResponse,
   RelayStateResponse,
@@ -31,9 +38,15 @@ async function buildHeaders(): Promise<Record<string, string>> {
     headers.Authorization = `Bearer ${userToken}`;
   }
 
-  const requester = await resolveRequester();
+  const [requester, requesterToken] = await Promise.all([
+    resolveRequester(),
+    resolveRequesterToken(),
+  ]);
   if (requester) {
     headers["x-snag-requester"] = requester;
+  }
+  if (requesterToken) {
+    headers["x-snag-requester-token"] = requesterToken;
   }
   return headers;
 }
@@ -109,6 +122,26 @@ export async function replyToSnagRequest(
   if (!response.ok || !payload?.id) {
     debugLog("reply failed", response.status, payload);
     throw new Error(payload?.error ?? `Reply failed (${response.status})`);
+  }
+  return payload;
+}
+
+export async function confirmSnagRequest(
+  body: ConfirmSnagRequestBody,
+): Promise<ConfirmSnagRequestResponse> {
+  const config = getSnagConfig();
+  if (!config) throw new Error("Snag is not initialized");
+  const response = await fetch(config.endpoint, {
+    method: "POST",
+    headers: await buildHeaders(),
+    body: JSON.stringify(body),
+  });
+  const payload = (await response.json().catch(() => null)) as
+    | (ConfirmSnagRequestResponse & { error?: string })
+    | null;
+  if (!response.ok || !payload?.id) {
+    debugLog("confirm failed", response.status, payload);
+    throw new Error(payload?.error ?? `Confirmation failed (${response.status})`);
   }
   return payload;
 }

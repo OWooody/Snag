@@ -22,6 +22,13 @@ export interface SnagConfig {
    */
   getRequester?: () => Promise<string | null> | string | null;
   /**
+   * Optional signed requester token from your backend, sent as
+   * `x-snag-requester-token`. When it verifies against the project's requester
+   * signing secret, its `sub` becomes the verified requester — required for
+   * execute-mode auto-merge. Called per request; cache it on your side.
+   */
+  getRequesterToken?: () => Promise<string | null> | string | null;
+  /**
    * Host context attached to every request: current route, locale, app
    * version, environment name, etc. Keep it free of personal data — it is
    * forwarded verbatim to the coding agent. Merged on top of auto-captured
@@ -86,6 +93,22 @@ export async function resolveRequester(): Promise<string | null> {
     if (typeof value !== "string") return null;
     const trimmed = value.trim();
     if (!trimmed || trimmed.length > MAX_REQUESTER_LENGTH) return null;
+    return trimmed;
+  } catch {
+    return null;
+  }
+}
+
+const MAX_REQUESTER_TOKEN_LENGTH = 1024;
+
+/** Resolve the optional signed requester token; never throws. */
+export async function resolveRequesterToken(): Promise<string | null> {
+  if (!config?.getRequesterToken) return null;
+  try {
+    const value = await config.getRequesterToken();
+    if (typeof value !== "string") return null;
+    const trimmed = value.trim();
+    if (!trimmed || trimmed.length > MAX_REQUESTER_TOKEN_LENGTH) return null;
     return trimmed;
   } catch {
     return null;

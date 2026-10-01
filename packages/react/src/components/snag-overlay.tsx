@@ -57,13 +57,11 @@ export function SnagOverlay() {
     setEnabled(true);
     const followups = state.requester_followups_enabled === true;
     setFollowupsEnabled(followups);
-    if (!followups) {
-      setBadgeCount(0);
-      return;
-    }
     const rows = state.requests ?? [];
     const count = rows.filter((row) => {
-      if (row.status !== "needs_input") return false;
+      const needsRequester =
+        row.status === "awaiting_confirmation" || (followups && row.status === "needs_input");
+      if (!needsRequester) return false;
       if (requester && row.requester) return row.requester === requester;
       return true;
     }).length;
@@ -100,7 +98,7 @@ export function SnagOverlay() {
   }, [initialized, refreshBadge]);
 
   useEffect(() => {
-    if (!enabled || !followupsEnabled) return;
+    if (!enabled) return;
     const tick = () => {
       if (document.hidden) return;
       void refreshBadge();
@@ -114,7 +112,7 @@ export function SnagOverlay() {
       window.clearInterval(id);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [enabled, followupsEnabled, refreshBadge]);
+  }, [enabled, refreshBadge]);
 
   useEffect(() => {
     if (!enabled) return;

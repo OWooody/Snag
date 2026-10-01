@@ -1,5 +1,11 @@
 import { z } from "zod";
 import { AGENT_MODES } from "./agent-mode";
+import {
+  EXECUTE_DELIVERIES,
+  PLAN_FLAGS,
+  PLAN_RISKS,
+  POLICY_OUTCOMES,
+} from "./execute-policy";
 import { DEFAULT_DEV_ORIGINS, normalizeAllowedEntry } from "./origins";
 
 export const slugSchema = z
@@ -52,10 +58,90 @@ export const companyProjectUpdateSchema = z.object({
   allowed_origins: allowedOriginsSchema.optional(),
 });
 
+export const executeDeliverySchema = z.enum(EXECUTE_DELIVERIES);
+
+export const policyOutcomeSchema = z.enum(POLICY_OUTCOMES);
+
 export const companyOrganizationUpdateSchema = z.object({
   organization_id: z.string().uuid(),
   agent_mode: agentModeSchema,
   requester_followups_enabled: z.boolean(),
+  execute_delivery: executeDeliverySchema.optional(),
+  default_outcome: policyOutcomeSchema.optional(),
+  policy_shadow_mode: z.boolean().optional(),
+  /** Required when switching the org default to auto_merge. */
+  acknowledge_auto_merge: z.boolean().optional(),
+});
+
+export const requesterIdSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(128)
+  .regex(/^[\x20-\x7E]+$/, "Requester ids must be printable ASCII");
+
+export const projectExecutionUpdateSchema = z.object({
+  execute_delivery: executeDeliverySchema.nullable(),
+  default_outcome: policyOutcomeSchema.nullable(),
+  policy_shadow_mode: z.boolean().nullable(),
+  trusted_requesters: z.array(requesterIdSchema).max(200),
+  auto_merge_daily_limit: z.number().int().positive().max(500),
+  /** Required the first time a project's effective delivery becomes auto_merge. */
+  acknowledge_auto_merge: z.boolean().optional(),
+});
+
+export const githubTokenUpdateSchema = z.object({
+  github_token: z.string().trim().min(1).max(512),
+});
+
+const globListSchema = z.array(z.string().trim().min(1).max(256)).min(1).max(50);
+
+export const policyConditionSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("path_glob_any"), globs: globListSchema }),
+  z.object({ type: z.literal("path_glob_all"), globs: globListSchema }),
+  z.object({ type: z.literal("max_files"), max: z.number().int().min(0).max(10_000) }),
+  z.object({ type: z.literal("max_lines"), max: z.number().int().min(0).max(1_000_000) }),
+  z.object({ type: z.literal("risk_at_least"), level: z.enum(PLAN_RISKS) }),
+  z.object({ type: z.literal("flag"), flag: z.enum(PLAN_FLAGS) }),
+  z.object({ type: z.literal("requester_unverified") }),
+  z.object({ type: z.literal("requester_not_trusted") }),
+]);
+
+export const policyRuleConditionSchema = z.object({
+  all: z.array(policyConditionSchema).min(1).max(10),
+});
+
+const policyRuleBaseSchema = z.object({
+  name: z.string().trim().min(1).max(128),
+  enabled: z.boolean().default(true),
+  shadow: z.boolean().default(false),
+  condition: policyRuleConditionSchema,
+});
+
+export const policyRuleInputSchema = z.discriminatedUnion("kind", [
+  policyRuleBaseSchema.extend({
+    kind: z.literal("allow"),
+    outcome: z.literal("execute"),
+  }),
+  policyRuleBaseSchema.extend({
+    kind: z.literal("escalate"),
+    outcome: z.enum(["review_before_merge", "review_before_execution"]),
+  }),
+]);
+
+export const policyRuleCreateSchema = z.intersection(
+  policyRuleInputSchema,
+  z.object({ scope: z.enum(["project", "organization"]).default("project") }),
+);
+
+export const policyRuleToggleSchema = z.object({
+  enabled: z.boolean().optional(),
+  shadow: z.boolean().optional(),
+});
+
+export const requestReviewDecisionSchema = z.object({
+  decision: z.enum(["approve", "reject"]),
+  note: z.string().trim().max(2000).optional(),
 });
 
 export const cursorKeyUpdateSchema = z.object({

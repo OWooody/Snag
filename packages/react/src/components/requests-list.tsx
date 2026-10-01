@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { fetchRelayState, replyToSnagRequest } from "../api";
+import { confirmSnagRequest, fetchRelayState, replyToSnagRequest } from "../api";
 import { resolveRequester } from "../config";
 import type { SnagRequestRow, SnagRequestStatus } from "../protocol";
 import { displaySummaryForRequest } from "../requester-questions";
@@ -65,7 +65,8 @@ export function RequestsList({
     if (
       followupsEnabled &&
       needsAttentionOnly &&
-      row.status !== "needs_input"
+      row.status !== "needs_input" &&
+      row.status !== "awaiting_confirmation"
     ) {
       return false;
     }
@@ -77,10 +78,10 @@ export function RequestsList({
 
   const emptyMessage = () => {
     if (followupsEnabled && needsAttentionOnly && mineOnly) {
-      return "Nothing needs your reply right now.";
+      return "Nothing needs you right now.";
     }
     if (followupsEnabled && needsAttentionOnly) {
-      return "Nothing needs a reply right now. Uncheck Needs reply to see all.";
+      return "Nothing needs a reply right now. Uncheck Needs you to see all.";
     }
     if (mineOnly) return "No requests from you yet.";
     return "No requests yet. Tap the button on any screen to file one.";
@@ -115,7 +116,7 @@ export function RequestsList({
               checked={needsAttentionOnly}
               onChange={(event) => setNeedsAttentionOnly(event.target.checked)}
             />
-            Needs reply
+            Needs you
           </label>
         ) : null}
         {currentRequester ? (
@@ -188,7 +189,12 @@ function RequestCard({
   const [reply, setReply] = useState("");
   const [sending, setSending] = useState(false);
   const [replyError, setReplyError] = useState<string | null>(null);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [feedback, setFeedback] = useState("");
+  const [confirming, setConfirming] = useState(false);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
   const canReply = followupsEnabled && row.status === "needs_input";
+  const canConfirm = row.status === "awaiting_confirmation";
   const summaryText = displaySummaryForRequest(row.status, row.summary);
 
   const submitReply = async () => {
@@ -209,6 +215,54 @@ function RequestCard({
       setSending(false);
     }
   };
+
+  const confirm = async (decision: "looks_right" | "not_right") => {
+    const trimmed = feedback.trim();
+    if (decision === "not_right" && !trimmed) {
+      setConfirmError("Tell us what is not right first.");
+      return;
+    }
+    setConfirming(true);
+    setConfirmError(null);
+    try {
+      await confirmSnagRequest(
+        decision === "looks_right"
+          ? { request_id: row.id, decision }
+          : { request_id: row.id, decision, feedback: trimmed },
+      );
+      setFeedback("");
+      setFeedbackOpen(false);
+      onReplied();
+    } catch (error) {
+      setConfirmError(error instanceof Error ? error.message : "Something went wrong");
+    } finally {
+      setConfirming(false);
+    }
+  };
+
+  const fieldStyle = {
+    width: "100%",
+    boxSizing: "border-box" as const,
+    borderRadius: 10,
+    border: "1px solid rgba(255,255,255,0.5)",
+    background: "rgba(255,255,255,0.55)",
+    padding: 10,
+    fontSize: 13,
+    color: theme.text,
+    resize: "vertical" as const,
+  };
+
+  const buttonStyle = (primary: boolean, busy: boolean) => ({
+    flex: 1,
+    padding: "10px 12px",
+    borderRadius: 10,
+    border: primary ? "none" : `1px solid ${theme.accent}`,
+    background: primary ? theme.accent : "transparent",
+    color: primary ? "#fff" : theme.accent,
+    fontWeight: 700,
+    cursor: busy ? "wait" : "pointer",
+    fontSize: 13,
+  });
 
   return (
     <div
@@ -235,7 +289,7 @@ function RequestCard({
             color: statusColor(row.status, theme),
           }}
         >
-          {row.status === "needs_input" ? "NEEDS YOUR REPLY" : row.status.toUpperCase()}
+          {STATUS_LABELS[row.status] ?? row.status.toUpperCase()}
         </span>
         <span style={{ fontSize: 11, color: theme.textMuted }}>
           {new Date(row.created_at).toLocaleString()}
@@ -267,17 +321,7 @@ function RequestCard({
             disabled={sending}
             placeholder="Answer the questions above…"
             rows={3}
-            style={{
-              width: "100%",
-              boxSizing: "border-box",
-              borderRadius: 10,
-              border: "1px solid rgba(255,255,255,0.5)",
-              background: "rgba(255,255,255,0.55)",
-              padding: 10,
-              fontSize: 13,
-              color: theme.text,
-              resize: "vertical",
-            }}
+            style={fieldStyle}
           />
           {replyError ? (
             <p style={{ fontSize: 12, color: theme.danger, margin: "6px 0 0" }}>
@@ -303,6 +347,91 @@ function RequestCard({
           >
             {sending ? "Sending…" : "Send reply"}
           </button>
+        </div>
+      ) : null}
+      {canConfirm ? (
+        <div style={{ marginTop: 10 }}>
+          <p style={{ fontSize: 13, color: theme.text, margin: "0 0 8px" }}>
+            Your change is ready to try. Check the preview, then tell us if it looks right —
+            it goes live once you confirm.
+          </p>
+          {row.preview_url ? (
+            <a
+              href={row.preview_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: "block",
+                textAlign: "center",
+                padding: "10px 12px",
+                borderRadius: 10,
+                background: "rgba(255,255,255,0.55)",
+                color: theme.accent,
+                fontWeight: 700,
+                fontSize: 13,
+                textDecoration: "none",
+                marginBottom: 8,
+              }}
+            >
+              Open preview
+            </a>
+          ) : null}
+          {feedbackOpen ? (
+            <>
+              <textarea
+                value={feedback}
+                onChange={(event) =>
+                  setFeedback(event.target.value.slice(0, MAX_REPLY_LENGTH))
+                }
+                disabled={confirming}
+                placeholder="What should be different?"
+                rows={3}
+                style={fieldStyle}
+              />
+              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => setFeedbackOpen(false)}
+                  disabled={confirming}
+                  style={buttonStyle(false, confirming)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void confirm("not_right")}
+                  disabled={confirming}
+                  style={buttonStyle(true, confirming)}
+                >
+                  {confirming ? "Sending…" : "Send feedback"}
+                </button>
+              </div>
+            </>
+          ) : (
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => setFeedbackOpen(true)}
+                disabled={confirming}
+                style={buttonStyle(false, confirming)}
+              >
+                Not right
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirm("looks_right")}
+                disabled={confirming}
+                style={buttonStyle(true, confirming)}
+              >
+                {confirming ? "Confirming…" : "Looks right"}
+              </button>
+            </div>
+          )}
+          {confirmError ? (
+            <p style={{ fontSize: 12, color: theme.danger, margin: "6px 0 0" }}>
+              {confirmError}
+            </p>
+          ) : null}
         </div>
       ) : null}
       {link ? (
@@ -331,9 +460,22 @@ function RequestCard({
   );
 }
 
+const STATUS_LABELS: Record<SnagRequestStatus, string> = {
+  queued: "QUEUED",
+  running: "IN PROGRESS",
+  needs_input: "NEEDS YOUR REPLY",
+  awaiting_approval: "WAITING FOR A DEVELOPER",
+  awaiting_review: "IN DEVELOPER REVIEW",
+  awaiting_confirmation: "READY FOR YOU TO CHECK",
+  finished: "FINISHED",
+  merged: "LIVE",
+  error: "ERROR",
+};
+
 function statusColor(status: SnagRequestStatus, theme: SnagTheme): string {
   switch (status) {
     case "finished":
+    case "merged":
       return theme.success;
     case "error":
       return theme.danger;

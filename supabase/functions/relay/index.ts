@@ -5,8 +5,9 @@
  * Security boundary = project key resolution + per-project rate limits + origin allowlist.
  *
  * GET  → { enabled, requester_followups_enabled, requests? }
- * POST create → { prompt, context, … } — insert + launch agent
- * POST reply  → { request_id, reply } — follow-up on existing agent
+ * POST create  → { prompt, context, … } — insert + launch agent
+ * POST reply   → { request_id, reply } — follow-up on existing agent
+ * POST confirm → { request_id, decision, feedback? } — requester verdict on a preview
  *
  * Never log prompt or screenshot contents — log entity ids and reasons only.
  */
@@ -21,11 +22,28 @@ import {
   type AgentProvider,
 } from "../_shared/agent_provider.ts";
 import { decryptSecret, getEncryptionSecret } from "../_shared/crypto.ts";
+import {
+  implementingReplyWrapper,
+  planningInstructions,
+  planningReplyWrapper,
+  previewFeedbackPrompt,
+} from "../_shared/execute_prompts.ts";
+import {
+  claimTransition,
+  handleAgentTerminal,
+  type LifecycleRow,
+  REQUEST_LIFECYCLE_COLUMNS,
+} from "../_shared/lifecycle.ts";
 import { checkOriginAllowlist, corsAllowOrigin, corsPreflightAllowOrigin } from "../_shared/origins.ts";
 import {
-  mapTerminalRequestStatus,
-  resolveEffectiveRequesterFollowups,
-} from "../_shared/requester_questions.ts";
+  type AgentMode,
+  decryptProjectSecret,
+  PROJECT_SELECT,
+  type ProjectRow,
+  projectSettings,
+} from "../_shared/projects.ts";
+import { mapTerminalRequestStatus } from "../_shared/requester_questions.ts";
+import { verifyRequesterToken } from "../_shared/requester_token.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 
 const LIST_LIMIT = 20;
@@ -36,7 +54,7 @@ const MAX_SCREENSHOT_BASE64_LENGTH = 2_800_000;
 const CORS_BASE_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers":
-    "authorization, content-type, x-snag-key, x-snag-requester, x-snag-app-id",
+    "authorization, content-type, x-snag-key, x-snag-requester, x-snag-requester-token, x-snag-app-id",
 };
 
 function buildPreflightCorsHeaders(req: Request): Record<string, string> {
@@ -89,41 +107,24 @@ const replySchema = z.object({
   reply: z.string().trim().min(1).max(2000),
 });
 
-interface ProjectRow {
-  id: string;
-  name: string;
-  slug: string;
-  publishable_key: string;
-  repo_url: string;
-  repo_ref: string;
-  model: string | null;
-  cursor_api_key_encrypted: string;
-  prompt_instructions: string;
-  enabled: boolean;
-  per_ip_hourly_limit: number;
-  hourly_limit: number;
-  daily_limit: number;
-  allowed_origins: string[];
-  agent_mode: "plan_only" | "execute" | null;
-  requester_followups_enabled: boolean | null;
-  snag_organizations: {
-    agent_mode: "plan_only" | "execute";
-    requester_followups_enabled: boolean;
-  } | null;
-}
-
-type AgentMode = "plan_only" | "execute";
+const confirmSchema = z.discriminatedUnion("decision", [
+  z.object({
+    request_id: z.string().uuid(),
+    decision: z.literal("looks_right"),
+  }),
+  z.object({
+    request_id: z.string().uuid(),
+    decision: z.literal("not_right"),
+    feedback: z.string().trim().min(1).max(2000),
+  }),
+]);
 
 function resolveEffectiveAgentMode(project: ProjectRow): AgentMode {
-  const orgMode = project.snag_organizations?.agent_mode;
-  return project.agent_mode ?? orgMode ?? "plan_only";
+  return projectSettings(project).agentMode;
 }
 
 function projectFollowupsEnabled(project: ProjectRow): boolean {
-  return resolveEffectiveRequesterFollowups(
-    project.requester_followups_enabled,
-    project.snag_organizations?.requester_followups_enabled,
-  );
+  return projectSettings(project).followupsEnabled;
 }
 
 function json(
@@ -184,12 +185,7 @@ Deno.serve(async (req) => {
     const followupsEnabled = projectFollowupsEnabled(project);
 
     if (req.method === "GET") {
-      const requests = await listRequests(
-        serviceClient,
-        provider,
-        project.id,
-        followupsEnabled,
-      );
+      const requests = await listRequests(serviceClient, provider, project);
       return json(
         {
           enabled: true,
@@ -202,6 +198,19 @@ Deno.serve(async (req) => {
     }
 
     const rawBody = await req.json();
+    if (
+      rawBody && typeof rawBody === "object" && "request_id" in rawBody &&
+      "decision" in rawBody
+    ) {
+      return await handleConfirm(
+        req,
+        confirmSchema.parse(rawBody),
+        serviceClient,
+        provider,
+        project,
+        corsHeaders,
+      );
+    }
     if (rawBody && typeof rawBody === "object" && "request_id" in rawBody) {
       return await handleReply(
         req,
@@ -237,9 +246,7 @@ async function resolveProject(
 ): Promise<ProjectRow | null> {
   const { data, error } = await serviceClient
     .from("snag_projects")
-    .select(
-      "id, name, slug, publishable_key, repo_url, repo_ref, model, cursor_api_key_encrypted, prompt_instructions, enabled, per_ip_hourly_limit, hourly_limit, daily_limit, allowed_origins, agent_mode, requester_followups_enabled, snag_organizations(agent_mode, requester_followups_enabled)",
-    )
+    .select(PROJECT_SELECT)
     .eq("publishable_key", publishableKey)
     .eq("enabled", true)
     .maybeSingle();
@@ -273,19 +280,23 @@ async function handleCreate(
     return json({ error: "Rate limited" }, 429, corsHeaders);
   }
 
-  const requester = await resolveOptionalRequester(req);
+  const { requester, verified } = await resolveRequesterIdentity(req, project);
   const followupsEnabled = projectFollowupsEnabled(project);
+  const agentMode = resolveEffectiveAgentMode(project);
 
   const { data: row, error: insertError } = await serviceClient
     .from("snag_requests")
     .insert({
       project_id: project.id,
       requester,
+      requester_verified: verified,
       requester_ip: ip,
       prompt: body.prompt,
       context: body.context,
       screenshot_included: !!body.screenshot,
       status: "queued",
+      phase: agentMode === "execute" ? "planning" : null,
+      phase_started_at: agentMode === "execute" ? new Date().toISOString() : null,
     })
     .select("id")
     .single();
@@ -307,7 +318,6 @@ async function handleCreate(
       : [];
 
     const webhookSecret = Deno.env.get("SNAG_WEBHOOK_SECRET");
-    const agentMode = resolveEffectiveAgentMode(project);
     const task = await provider.createTask({
       prompt: buildAgentPrompt(
         body.prompt,
@@ -376,16 +386,8 @@ async function handleReply(
     return json({ error: "Rate limited" }, 429, corsHeaders);
   }
 
-  const { data: row, error: loadError } = await serviceClient
-    .from("snag_requests")
-    .select("id, agent_id, status, requester, requester_ip")
-    .eq("id", body.request_id)
-    .eq("project_id", project.id)
-    .maybeSingle();
-
-  if (loadError || !row) {
-    return json({ error: "Request not found" }, 404, corsHeaders);
-  }
+  const row = await loadOwnedRequest(req, serviceClient, project, body.request_id, ip);
+  if (row instanceof Response) return withCors(row, corsHeaders);
 
   if (row.status !== "needs_input") {
     return json({ error: "Request is not waiting for a reply" }, 409, corsHeaders);
@@ -395,44 +397,148 @@ async function handleReply(
     return json({ error: "Request has no agent" }, 409, corsHeaders);
   }
 
-  const headerRequester = await resolveOptionalRequester(req);
-  if (row.requester) {
-    if (!headerRequester || headerRequester !== row.requester) {
-      return json({ error: "Forbidden" }, 403, corsHeaders);
-    }
-  } else if (row.requester_ip && row.requester_ip !== ip) {
-    return json({ error: "Forbidden" }, 403, corsHeaders);
+  const wrappedReply = row.phase === "planning"
+    ? planningReplyWrapper(body.reply)
+    : row.phase === "implementing"
+    ? implementingReplyWrapper(body.reply)
+    : [
+      "The original requester answered your open questions via Snag:",
+      "",
+      body.reply,
+      "",
+      "Continue with this clarification.",
+      'If you are still blocked on product/UX/scope decisions, list remaining questions under "## Questions for requester" at the top of your summary.',
+      'Put technical notes under "## Notes for developers".',
+      "If no further requester questions remain, omit the requester heading.",
+    ].join("\n");
+
+  const claimed = await claimTransition(serviceClient, row, {
+    status: "running",
+    error: null,
+    plan_summary: row.summary,
+    phase_started_at: new Date().toISOString(),
+  });
+  if (!claimed) {
+    return json({ error: "Request changed; refresh and try again" }, 409, corsHeaders);
   }
 
-  const wrappedReply = [
-    "The original requester answered your open questions via Snag:",
-    "",
-    body.reply,
-    "",
-    "Continue with this clarification.",
-    'If you are still blocked on product/UX/scope decisions, list remaining questions under "## Questions for requester" at the top of your summary.',
-    'Put technical notes under "## Notes for developers".',
-    "If no further requester questions remain, omit the requester heading.",
-  ].join("\n");
-
   try {
-    await provider.followUp(row.agent_id as string, wrappedReply);
+    await provider.followUp(row.agent_id, wrappedReply);
   } catch (error) {
     console.error("snag-relay follow-up failed:", error);
     const message = userFacingLaunchError(error);
+    await claimTransition(serviceClient, row, { status: "needs_input", error: message });
     return json({ error: message }, 502, corsHeaders);
   }
 
-  await serviceClient
-    .from("snag_requests")
-    .update({
+  return json({ id: row.id, status: "running" }, 200, corsHeaders);
+}
+
+async function handleConfirm(
+  req: Request,
+  body: z.infer<typeof confirmSchema>,
+  serviceClient: SupabaseClient,
+  provider: AgentProvider,
+  project: ProjectRow,
+  corsHeaders: Record<string, string>,
+): Promise<Response> {
+  const ip =
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+
+  const limited = await checkRateLimits(serviceClient, project, ip);
+  if (limited) {
+    console.warn(`snag-relay confirm rejected: ${limited} project=${project.id}`);
+    return json({ error: "Rate limited" }, 429, corsHeaders);
+  }
+
+  const row = await loadOwnedRequest(req, serviceClient, project, body.request_id, ip);
+  if (row instanceof Response) return withCors(row, corsHeaders);
+
+  if (row.status !== "awaiting_confirmation" || row.phase !== "delivering") {
+    return json({ error: "Request is not waiting for confirmation" }, 409, corsHeaders);
+  }
+
+  if (body.decision === "looks_right") {
+    const claimed = await claimTransition(serviceClient, row, {
       status: "running",
-      error: null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", row.id);
+      confirmed_at: new Date().toISOString(),
+    });
+    if (!claimed) {
+      return json({ error: "Request changed; refresh and try again" }, 409, corsHeaders);
+    }
+    return json({ id: row.id, status: "running" }, 200, corsHeaders);
+  }
+
+  if (!row.agent_id) {
+    return json({ error: "Request has no agent" }, 409, corsHeaders);
+  }
+
+  const claimed = await claimTransition(serviceClient, row, {
+    status: "running",
+    phase: "implementing",
+    phase_started_at: new Date().toISOString(),
+    preview_url: null,
+    confirmed_at: null,
+    plan_summary: row.summary,
+  });
+  if (!claimed) {
+    return json({ error: "Request changed; refresh and try again" }, 409, corsHeaders);
+  }
+
+  try {
+    await provider.followUp(row.agent_id, previewFeedbackPrompt(body.feedback));
+  } catch (error) {
+    console.error("snag-relay preview feedback failed:", error);
+    const message = userFacingLaunchError(error);
+    await claimTransition(serviceClient, row, { status: "error", error: message });
+    return json({ error: message }, 502, corsHeaders);
+  }
 
   return json({ id: row.id, status: "running" }, 200, corsHeaders);
+}
+
+function withCors(response: Response, corsHeaders: Record<string, string>): Response {
+  const headers = new Headers(response.headers);
+  for (const [key, value] of Object.entries(corsHeaders)) headers.set(key, value);
+  return new Response(response.body, { status: response.status, headers });
+}
+
+/**
+ * Load a request and check the caller filed it. Requests filed with a verified
+ * requester token can only be acted on with a valid token for the same id.
+ */
+async function loadOwnedRequest(
+  req: Request,
+  serviceClient: SupabaseClient,
+  project: ProjectRow,
+  requestId: string,
+  ip: string,
+): Promise<LifecycleRow | Response> {
+  const { data, error } = await serviceClient
+    .from("snag_requests")
+    .select(REQUEST_LIFECYCLE_COLUMNS)
+    .eq("id", requestId)
+    .eq("project_id", project.id)
+    .maybeSingle();
+
+  if (error || !data) {
+    return json({ error: "Request not found" }, 404);
+  }
+  const row = data as LifecycleRow;
+
+  const identity = await resolveRequesterIdentity(req, project);
+  if (row.requester_verified) {
+    if (!identity.verified || identity.requester !== row.requester) {
+      return json({ error: "Forbidden" }, 403);
+    }
+  } else if (row.requester) {
+    if (!identity.requester || identity.requester !== row.requester) {
+      return json({ error: "Forbidden" }, 403);
+    }
+  } else if (row.requester_ip && row.requester_ip !== ip) {
+    return json({ error: "Forbidden" }, 403);
+  }
+  return row;
 }
 
 async function checkRateLimits(
@@ -475,7 +581,7 @@ async function countSince(
   return count ?? 0;
 }
 
-async function resolveOptionalRequester(req: Request): Promise<string | null> {
+function resolveOptionalRequester(req: Request): string | null {
   const raw = req.headers.get("x-snag-requester");
   if (!raw) return null;
   const trimmed = raw.trim();
@@ -484,18 +590,35 @@ async function resolveOptionalRequester(req: Request): Promise<string | null> {
   return trimmed;
 }
 
+/**
+ * A valid `x-snag-requester-token` (signed by the host backend with the
+ * project's requester secret) wins over the self-reported `x-snag-requester`.
+ */
+async function resolveRequesterIdentity(
+  req: Request,
+  project: ProjectRow,
+): Promise<{ requester: string | null; verified: boolean }> {
+  const headerRequester = resolveOptionalRequester(req);
+  const token = req.headers.get("x-snag-requester-token");
+  if (token && project.requester_signing_secret_encrypted) {
+    const secret = await decryptProjectSecret(project.requester_signing_secret_encrypted);
+    const subject = secret ? await verifyRequesterToken(token, secret) : null;
+    if (subject) return { requester: subject, verified: true };
+    console.warn(`snag-relay requester token rejected project=${project.id}`);
+  }
+  return { requester: headerRequester, verified: false };
+}
+
 async function listRequests(
   serviceClient: SupabaseClient,
   provider: AgentProvider,
-  projectId: string,
-  followupsEnabled: boolean,
+  project: ProjectRow,
 ) {
+  const followupsEnabled = projectFollowupsEnabled(project);
   const { data: rows, error } = await serviceClient
     .from("snag_requests")
-    .select(
-      "id, prompt, status, agent_id, agent_url, branch_name, pr_url, summary, error, requester, created_at, updated_at",
-    )
-    .eq("project_id", projectId)
+    .select(`${REQUEST_LIFECYCLE_COLUMNS}, error, created_at`)
+    .eq("project_id", project.id)
     .order("created_at", { ascending: false })
     .limit(LIST_LIMIT);
 
@@ -504,7 +627,9 @@ async function listRequests(
     throw error;
   }
 
-  const requests = rows ?? [];
+  const requests = (rows ?? []) as Array<
+    LifecycleRow & { error: string | null; created_at: string }
+  >;
   const staleCutoff = Date.now() - STALE_RUNNING_MS;
   let conversationBackfills = 0;
   const MAX_CONVERSATION_BACKFILLS = 3;
@@ -512,58 +637,54 @@ async function listRequests(
   for (const row of requests) {
     if (!row.agent_id) continue;
 
-    const isActive = row.status === "queued" || row.status === "running";
-    const needsSummaryBackfill =
-      row.status === "finished" &&
+    const isActive = (row.status === "queued" || row.status === "running") &&
+      row.phase !== "delivering";
+    const needsSummaryBackfill = row.status === "finished" && !row.phase &&
       !(typeof row.summary === "string" && row.summary.trim());
 
     if (isActive) {
-      if (new Date(row.updated_at as string).getTime() > staleCutoff) continue;
+      if (new Date(row.updated_at).getTime() > staleCutoff) continue;
 
-      const task = await provider.getStatus(row.agent_id as string);
-      const update: Record<string, unknown> = {
-        updated_at: new Date().toISOString(),
-      };
-      if (task) {
-        let summary =
-          (task.summary?.trim() || null) ??
-          (typeof row.summary === "string" && row.summary.trim()
-            ? row.summary
-            : null);
-        if (
-          (task.status === "finished" || task.status === "error") &&
-          !summary &&
-          conversationBackfills < MAX_CONVERSATION_BACKFILLS
-        ) {
+      const task = await provider.getStatus(row.agent_id);
+      if (!task) continue;
+
+      if (task.status === "finished" || task.status === "error") {
+        let summary = task.summary?.trim() || null;
+        if (!summary && conversationBackfills < MAX_CONVERSATION_BACKFILLS) {
           conversationBackfills += 1;
           summary = await resolveSummaryWithConversationFallback(
             provider,
-            row.agent_id as string,
+            row.agent_id,
             task.summary,
           );
         }
-        update.status = mapTerminalRequestStatus(
-          task.status,
+        await handleAgentTerminal({ service: serviceClient, provider, project }, row, {
+          status: task.status,
           summary,
-          followupsEnabled,
-        );
-        if (task.url) update.agent_url = task.url;
-        if (task.branchName) update.branch_name = task.branchName;
-        if (task.prUrl) update.pr_url = task.prUrl;
-        if (summary) update.summary = summary;
-        Object.assign(row, {
-          status: update.status,
-          agent_url: task.url ?? row.agent_url,
-          branch_name: task.branchName ?? row.branch_name,
-          pr_url: task.prUrl ?? row.pr_url,
-          summary: summary ?? row.summary,
+          url: task.url,
+          branchName: task.branchName,
+          prUrl: task.prUrl,
         });
+        continue;
       }
-      await serviceClient.from("snag_requests").update(update).eq("id", row.id);
+
+      const update: Record<string, unknown> = {
+        status: "running",
+        updated_at: new Date().toISOString(),
+      };
+      if (task.url) update.agent_url = task.url;
+      if (task.branchName) update.branch_name = task.branchName;
+      if (task.prUrl) update.pr_url = task.prUrl;
+      Object.assign(row, update);
+      await serviceClient
+        .from("snag_requests")
+        .update(update)
+        .eq("id", row.id)
+        .eq("lifecycle_version", row.lifecycle_version);
       continue;
     }
 
-    // Backfill finished rows that never got a Cursor summary (v0 API gap).
+    // Backfill finished plan-only rows that never got a Cursor summary (v0 API gap).
     if (
       needsSummaryBackfill &&
       conversationBackfills < MAX_CONVERSATION_BACKFILLS
@@ -571,7 +692,7 @@ async function listRequests(
       conversationBackfills += 1;
       const summary = await resolveSummaryWithConversationFallback(
         provider,
-        row.agent_id as string,
+        row.agent_id,
         null,
       );
       if (!summary) continue;
@@ -597,6 +718,7 @@ async function listRequests(
     agent_url: row.agent_url,
     branch_name: row.branch_name,
     pr_url: row.pr_url,
+    preview_url: row.preview_url,
     summary: row.summary,
     error: row.error,
     requester: row.requester ?? null,
@@ -639,12 +761,8 @@ function buildAgentPrompt(
       "   - Risks and edge cases",
     );
   } else {
-    sections.push(
-      "1. PLAN FIRST: locate the exact code behind the request and write a short plan (files, edits, risks).",
-      "2. Implement only if the request is small and unambiguous. If it is vague, conflicting, or touches sensitive data, stop after the plan.",
-      "3. Respect existing conventions in the repository.",
-      "4. Keep the change minimal — no drive-by refactors.",
-    );
+    sections.push(...planningInstructions(followupsEnabled));
+    return sections.join("\n");
   }
 
   if (followupsEnabled) {
@@ -658,21 +776,15 @@ function buildAgentPrompt(
       "  ## Notes for developers",
       "  (architecture, data model, risks, implementation). Do not put these in the requester section.",
     );
-    if (agentMode === "plan_only") {
-      sections.push(
-        "3. DO NOT edit files, commit changes, or open a pull request. This tenant is in plan-only mode — the development team will implement manually.",
-        "4. Respect existing conventions when describing the approach.",
-      );
-    }
-  } else if (agentMode === "plan_only") {
     sections.push(
-      "   - Open questions for the developer",
       "3. DO NOT edit files, commit changes, or open a pull request. This tenant is in plan-only mode — the development team will implement manually.",
       "4. Respect existing conventions when describing the approach.",
     );
   } else {
     sections.push(
-      "If blocked, list open questions for the developer in your summary instead of implementing.",
+      "   - Open questions for the developer",
+      "3. DO NOT edit files, commit changes, or open a pull request. This tenant is in plan-only mode — the development team will implement manually.",
+      "4. Respect existing conventions when describing the approach.",
     );
   }
 

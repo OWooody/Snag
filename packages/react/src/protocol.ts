@@ -12,7 +12,15 @@ export type SnagRequestStatus =
   | "running"
   | "finished"
   | "error"
-  | "needs_input";
+  | "needs_input"
+  /** Execute mode: the plan is waiting for a developer's approval. */
+  | "awaiting_approval"
+  /** Execute mode: the PR is waiting for a developer to review and merge. */
+  | "awaiting_review"
+  /** Execute mode: the preview is ready; the requester confirms or sends feedback. */
+  | "awaiting_confirmation"
+  /** Execute mode: Snag merged the PR. */
+  | "merged";
 
 export interface SnagScreenshot {
   /** JPEG image data, base64-encoded (no data-URI prefix). */
@@ -48,6 +56,16 @@ export interface ReplySnagRequestResponse {
   status: "running";
 }
 
+/** POST <endpoint> — answer awaiting_confirmation after checking the preview */
+export type ConfirmSnagRequestBody =
+  | { request_id: string; decision: "looks_right" }
+  | { request_id: string; decision: "not_right"; feedback: string };
+
+export interface ConfirmSnagRequestResponse {
+  id: string;
+  status: "running";
+}
+
 export interface SnagRequestRow {
   id: string;
   prompt: string;
@@ -55,6 +73,8 @@ export interface SnagRequestRow {
   agent_url: string | null;
   branch_name: string | null;
   pr_url: string | null;
+  /** Preview deployment for the PR, set while awaiting_confirmation. */
+  preview_url?: string | null;
   summary: string | null;
   error: string | null;
   /** Host-supplied display id from `getRequester`, when provided. */
