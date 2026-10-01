@@ -18,7 +18,7 @@ alwaysApply: false
 - Company reads: Supabase user session + RLS
 - Company writes: Route Handler + `canManageProject()` (owner/admin only)
 - Platform operations: Route Handler + `isPlatformAdminUser()` + service role client
-- Impersonation is read-only: `canManageProject` returns false while impersonating; log start/stop via `impersonation.start` / `impersonation.stop`
+- Impersonating platform admins may edit only the impersonated organization (`canManageProject` / `canManageOrganization` scope to it); `writeAuditLog` tags those entries with `impersonating_org_id`; log start/stop via `impersonation.start` / `impersonation.stop`
 - Platform pages call `requirePlatformAdmin()` in Server Components
 
 ## UI

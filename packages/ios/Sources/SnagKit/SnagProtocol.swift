@@ -107,23 +107,33 @@ public struct SnagRequestRow: Decodable, Identifiable, Sendable {
 public struct RelayStateResponse: Decodable, Sendable {
     public let enabled: Bool
     public let requesterFollowupsEnabled: Bool?
+    /// Effective agent mode: `"plan_only"` or `"execute"`.
+    public let agentMode: String?
     public let requests: [SnagRequestRow]?
 
     public static let disabled = RelayStateResponse(
         enabled: false,
         requesterFollowupsEnabled: nil,
+        agentMode: nil,
         requests: nil
     )
 
-    init(enabled: Bool, requesterFollowupsEnabled: Bool?, requests: [SnagRequestRow]?) {
+    init(
+        enabled: Bool,
+        requesterFollowupsEnabled: Bool?,
+        agentMode: String? = nil,
+        requests: [SnagRequestRow]?
+    ) {
         self.enabled = enabled
         self.requesterFollowupsEnabled = requesterFollowupsEnabled
+        self.agentMode = agentMode
         self.requests = requests
     }
 
     enum CodingKeys: String, CodingKey {
         case enabled
         case requesterFollowupsEnabled = "requester_followups_enabled"
+        case agentMode = "agent_mode"
         case requests
     }
 }

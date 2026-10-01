@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { confirmSnagRequest, fetchRelayState, replyToSnagRequest } from "../api";
 import { resolveRequester } from "../config";
@@ -8,8 +8,9 @@ import { LightMarkdown } from "../light-markdown";
 import { GLASS_SURFACE } from "../sheet";
 import type { SnagTheme } from "../theme";
 
-const POLL_INTERVAL_MS = 20_000;
+const POLL_INTERVAL_MS = 10_000;
 const MAX_REPLY_LENGTH = 2000;
+const COLLAPSED_SUMMARY_MAX_HEIGHT = 64;
 
 interface RequestsListProps {
   theme: SnagTheme;
@@ -27,8 +28,13 @@ export function RequestsList({
   const [refreshing, setRefreshing] = useState(false);
   const [currentRequester, setCurrentRequester] = useState<string | null>(null);
   const [mineOnly, setMineOnly] = useState(true);
-  // Default on: show needs_input first; user can uncheck to see all.
-  const [needsAttentionOnly, setNeedsAttentionOnly] = useState(true);
+  const [agentMode, setAgentMode] = useState<"plan_only" | "execute" | null>(null);
+  // null until the user toggles it: execute projects default to showing all
+  // requests (progress matters there), plan-only projects to "Needs you".
+  const [needsAttentionChoice, setNeedsAttentionChoice] = useState<boolean | null>(null);
+  const needsAttentionOnly = needsAttentionChoice ?? agentMode !== "execute";
+  // Per-card expand/collapse chosen by the user; kept across polls.
+  const [expandedOverrides, setExpandedOverrides] = useState<Record<string, boolean>>({});
 
   const load = useCallback(async () => {
     setRefreshing(true);
@@ -37,6 +43,7 @@ export function RequestsList({
       resolveRequester(),
     ]);
     setRows(state.requests ?? []);
+    if (state.agent_mode) setAgentMode(state.agent_mode);
     setCurrentRequester(requester);
     setRefreshing(false);
   }, []);
@@ -114,7 +121,7 @@ export function RequestsList({
             <input
               type="checkbox"
               checked={needsAttentionOnly}
-              onChange={(event) => setNeedsAttentionOnly(event.target.checked)}
+              onChange={(event) => setNeedsAttentionChoice(event.target.checked)}
             />
             Needs you
           </label>
@@ -160,15 +167,24 @@ export function RequestsList({
           {emptyMessage()}
         </p>
       ) : (
-        visibleRows.map((row) => (
-          <RequestCard
-            key={row.id}
-            row={row}
-            theme={theme}
-            followupsEnabled={followupsEnabled}
-            onReplied={() => void load()}
-          />
-        ))
+        visibleRows.map((row) => {
+          const needsRequester =
+            row.status === "awaiting_confirmation" ||
+            (followupsEnabled && row.status === "needs_input");
+          return (
+            <RequestCard
+              key={row.id}
+              row={row}
+              theme={theme}
+              followupsEnabled={followupsEnabled}
+              expanded={expandedOverrides[row.id] ?? needsRequester}
+              onToggleExpanded={(next) =>
+                setExpandedOverrides((current) => ({ ...current, [row.id]: next }))
+              }
+              onReplied={() => void load()}
+            />
+          );
+        })
       )}
     </div>
   );
@@ -178,11 +194,15 @@ function RequestCard({
   row,
   theme,
   followupsEnabled,
+  expanded,
+  onToggleExpanded,
   onReplied,
 }: {
   row: SnagRequestRow;
   theme: SnagTheme;
   followupsEnabled: boolean;
+  expanded: boolean;
+  onToggleExpanded: (expanded: boolean) => void;
   onReplied: () => void;
 }) {
   const link = row.pr_url ?? row.agent_url;
@@ -196,6 +216,16 @@ function RequestCard({
   const canReply = followupsEnabled && row.status === "needs_input";
   const canConfirm = row.status === "awaiting_confirmation";
   const summaryText = displaySummaryForRequest(row.status, row.summary);
+  const summaryRef = useRef<HTMLDivElement>(null);
+  const [summaryOverflows, setSummaryOverflows] = useState(false);
+
+  useEffect(() => {
+    const node = summaryRef.current;
+    setSummaryOverflows(node != null && node.scrollHeight > COLLAPSED_SUMMARY_MAX_HEIGHT + 4);
+  }, [summaryText]);
+
+  const canToggle = summaryOverflows || canReply || canConfirm;
+  const showActions = expanded || !canToggle;
 
   const submitReply = async () => {
     const trimmed = reply.trim();
@@ -304,16 +334,49 @@ function RequestCard({
         </p>
       ) : null}
       {summaryText ? (
-        <div style={{ marginTop: 6 }}>
+        <div
+          ref={summaryRef}
+          style={{
+            marginTop: 6,
+            position: "relative",
+            overflow: "hidden",
+            maxHeight: expanded ? undefined : COLLAPSED_SUMMARY_MAX_HEIGHT,
+            ...(expanded || !summaryOverflows
+              ? {}
+              : {
+                  maskImage: "linear-gradient(to bottom, #000 55%, transparent)",
+                  WebkitMaskImage: "linear-gradient(to bottom, #000 55%, transparent)",
+                }),
+          }}
+        >
           <LightMarkdown text={summaryText} color={theme.textMuted} fontSize={12} />
         </div>
+      ) : null}
+      {canToggle ? (
+        <button
+          type="button"
+          onClick={() => onToggleExpanded(!expanded)}
+          aria-expanded={expanded}
+          style={{
+            border: "none",
+            background: "transparent",
+            padding: 0,
+            marginTop: 6,
+            color: theme.accent,
+            fontWeight: 700,
+            fontSize: 12,
+            cursor: "pointer",
+          }}
+        >
+          {expanded ? "Show less" : "Show more"}
+        </button>
       ) : null}
       {row.error ? (
         <p style={{ fontSize: 12, color: theme.danger, marginTop: 6, marginBottom: 0 }}>
           {row.error}
         </p>
       ) : null}
-      {canReply ? (
+      {canReply && showActions ? (
         <div style={{ marginTop: 10 }}>
           <textarea
             value={reply}
@@ -349,7 +412,7 @@ function RequestCard({
           </button>
         </div>
       ) : null}
-      {canConfirm ? (
+      {canConfirm && showActions ? (
         <div style={{ marginTop: 10 }}>
           <p style={{ fontSize: 13, color: theme.text, margin: "0 0 8px" }}>
             Your change is ready to try. Check the preview, then tell us if it looks right —

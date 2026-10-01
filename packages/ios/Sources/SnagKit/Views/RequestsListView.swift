@@ -3,7 +3,7 @@ import Combine
 import SwiftUI
 
 /// Mirrors `packages/react/src/components/requests-list.tsx`: polls the relay
-/// every 20s while visible and lists request status, links, and branch.
+/// every 10s while visible and lists request status, links, and branch.
 struct RequestsListView: View {
     let theme: SnagTheme
     let refreshKey: Int
@@ -12,7 +12,7 @@ struct RequestsListView: View {
     @StateObject private var model: RequestsListModel
     @Environment(\.scenePhase) private var scenePhase
 
-    private let pollTimer = Timer.publish(every: 20, on: .main, in: .common)
+    private let pollTimer = Timer.publish(every: 10, on: .main, in: .common)
         .autoconnect()
 
     init(
@@ -36,7 +36,7 @@ struct RequestsListView: View {
                         label: "Needs you",
                         isOn: model.needsAttentionOnly
                     ) {
-                        model.needsAttentionOnly.toggle()
+                        model.needsAttentionChoice = !model.needsAttentionOnly
                     }
                 }
                 if model.currentRequester != nil {
@@ -69,6 +69,8 @@ struct RequestsListView: View {
                         theme: theme,
                         followupsEnabled: followupsEnabled,
                         client: model.client,
+                        expanded: model.isExpanded(row, followupsEnabled: followupsEnabled),
+                        onToggleExpanded: { model.expandedOverrides[row.id] = $0 },
                         onReplied: { Task { await model.load() } }
                     )
                     .padding(.bottom, 10)
@@ -125,7 +127,22 @@ final class RequestsListModel: ObservableObject {
     @Published var refreshing = false
     @Published var currentRequester: String?
     @Published var mineOnly = true
-    @Published var needsAttentionOnly = true
+    @Published var agentMode: String?
+    /// nil until the user toggles it: execute projects default to showing all
+    /// requests, plan-only projects to "Needs you".
+    @Published var needsAttentionChoice: Bool?
+    /// Per-card expand/collapse chosen by the user; kept across polls.
+    @Published var expandedOverrides: [String: Bool] = [:]
+
+    var needsAttentionOnly: Bool {
+        needsAttentionChoice ?? (agentMode != "execute")
+    }
+
+    func isExpanded(_ row: SnagRequestRow, followupsEnabled: Bool) -> Bool {
+        if let override = expandedOverrides[row.id] { return override }
+        return row.status == .awaitingConfirmation
+            || (followupsEnabled && row.status == .needsInput)
+    }
 
     private let overlay: OverlayModel
 
@@ -155,6 +172,7 @@ final class RequestsListModel: ObservableObject {
         let state = await overlay.client.fetchState()
         let requester = await overlay.requester()
         rows = state.requests ?? []
+        if let mode = state.agentMode { agentMode = mode }
         currentRequester = requester
         refreshing = false
     }
@@ -165,6 +183,8 @@ struct RequestCardView: View {
     let theme: SnagTheme
     let followupsEnabled: Bool
     let client: RelayClient
+    let expanded: Bool
+    let onToggleExpanded: (Bool) -> Void
     let onReplied: () -> Void
 
     @State private var reply = ""
@@ -185,6 +205,19 @@ struct RequestCardView: View {
 
     private var summaryText: String? {
         RequesterQuestions.displaySummary(status: row.status, summary: row.summary)
+    }
+
+    private var summaryIsLong: Bool {
+        guard let summaryText else { return false }
+        return summaryText.count > 180 || summaryText.split(separator: "\n").count > 3
+    }
+
+    private var canToggle: Bool {
+        summaryIsLong || canReply || canConfirm
+    }
+
+    private var showActions: Bool {
+        expanded || !canToggle
     }
 
     var body: some View {
@@ -209,13 +242,33 @@ struct RequestCardView: View {
             }
             if let summaryText {
                 SummaryMarkdownView(text: summaryText, color: theme.textMuted)
+                    .frame(maxHeight: expanded || !summaryIsLong ? nil : 64, alignment: .top)
+                    .clipped()
+                    .mask(
+                        LinearGradient(
+                            stops: expanded || !summaryIsLong
+                                ? [.init(color: .black, location: 0), .init(color: .black, location: 1)]
+                                : [.init(color: .black, location: 0.55), .init(color: .clear, location: 1)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+            }
+            if canToggle {
+                Button {
+                    onToggleExpanded(!expanded)
+                } label: {
+                    Text(expanded ? "Show less" : "Show more")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(theme.accent)
+                }
             }
             if let error = row.error {
                 Text(error)
                     .font(.system(size: 12))
                     .foregroundColor(theme.danger)
             }
-            if canReply {
+            if canReply && showActions {
                 ZStack(alignment: .topLeading) {
                     TextEditor(text: $reply)
                         .frame(minHeight: 72)
@@ -256,7 +309,7 @@ struct RequestCardView: View {
                 }
                 .disabled(sending)
             }
-            if canConfirm {
+            if canConfirm && showActions {
                 confirmSection
             }
             if let link = row.prUrl ?? row.agentUrl, let url = URL(string: link) {
@@ -439,28 +492,99 @@ struct RequestCardView: View {
     }
 }
 
-/// Renders agent summaries with Markdown (bold/lists); falls back to plain text.
+/// Renders agent summaries: headings, fenced code blocks, and inline Markdown
+/// (bold/italic/code) per line. Mirrors `packages/react/src/light-markdown.tsx`.
 private struct SummaryMarkdownView: View {
     let text: String
     let color: Color
 
     var body: some View {
-        Group {
-            if let attributed = try? AttributedString(
-                markdown: text,
-                options: AttributedString.MarkdownParsingOptions(
-                    interpretedSyntax: .full
-                )
-            ) {
-                Text(attributed)
-            } else {
-                Text(text)
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(Array(SummaryBlock.parse(text).enumerated()), id: \.offset) { _, block in
+                switch block {
+                case .heading(let value):
+                    inline(value).font(.system(size: 13, weight: .bold))
+                case .code(let value):
+                    Text(value)
+                        .font(.system(size: 11, design: .monospaced))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(RoundedRectangle(cornerRadius: 6).fill(Color.black.opacity(0.06)))
+                case .text(let value):
+                    inline(value).font(.system(size: 12))
+                }
             }
         }
-        .font(.system(size: 12))
         .foregroundColor(color)
         .frame(maxWidth: .infinity, alignment: .leading)
         .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func inline(_ value: String) -> Text {
+        if let attributed = try? AttributedString(
+            markdown: value,
+            options: AttributedString.MarkdownParsingOptions(
+                interpretedSyntax: .inlineOnlyPreservingWhitespace
+            )
+        ) {
+            return Text(attributed)
+        }
+        return Text(value)
+    }
+}
+
+enum SummaryBlock: Equatable {
+    case heading(String)
+    case code(String)
+    case text(String)
+
+    static func parse(_ source: String) -> [SummaryBlock] {
+        var blocks: [SummaryBlock] = []
+        var textLines: [String] = []
+        var codeLines: [String]?
+
+        func flushText() {
+            let joined = textLines.joined(separator: "\n")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            textLines = []
+            if !joined.isEmpty { blocks.append(.text(joined)) }
+        }
+
+        for rawLine in source.replacingOccurrences(of: "\r\n", with: "\n")
+            .components(separatedBy: "\n") {
+            let trimmed = rawLine.trimmingCharacters(in: .whitespaces)
+            if var code = codeLines {
+                if trimmed.hasPrefix("```") {
+                    blocks.append(.code(code.joined(separator: "\n")))
+                    codeLines = nil
+                } else {
+                    code.append(rawLine)
+                    codeLines = code
+                }
+                continue
+            }
+            if trimmed.hasPrefix("```") {
+                flushText()
+                codeLines = []
+                continue
+            }
+            if let match = trimmed.range(of: #"^#{1,6}\s+"#, options: .regularExpression) {
+                flushText()
+                blocks.append(.heading(String(trimmed[match.upperBound...])))
+                continue
+            }
+            if trimmed.isEmpty {
+                flushText()
+                continue
+            }
+            textLines.append(trimmed)
+        }
+        if let code = codeLines {
+            blocks.append(.code(code.joined(separator: "\n")))
+        }
+        flushText()
+        return blocks
     }
 }
 #endif

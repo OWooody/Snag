@@ -382,7 +382,12 @@ final class OverlayModel: ObservableObject {
     }
 
     func refreshBadge(using state: RelayStateResponse? = nil) async {
-        let relay = state ?? await client.fetchState()
+        let relay: RelayStateResponse
+        if let state {
+            relay = state
+        } else {
+            relay = await client.fetchState()
+        }
         guard relay.enabled else {
             badgeCount = 0
             followupsEnabled = false

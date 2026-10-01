@@ -7,6 +7,7 @@ final class ProtocolTests: XCTestCase {
         {
           "enabled": true,
           "requester_followups_enabled": true,
+          "agent_mode": "execute",
           "requests": [
             {
               "id": "6f1d9d7e-9b1f-4f7e-8a3c-2f4b8f0f2b11",
@@ -29,6 +30,7 @@ final class ProtocolTests: XCTestCase {
         )
         XCTAssertTrue(state.enabled)
         XCTAssertEqual(state.requesterFollowupsEnabled, true)
+        XCTAssertEqual(state.agentMode, "execute")
         let row = try XCTUnwrap(state.requests?.first)
         XCTAssertEqual(row.status, .running)
         XCTAssertEqual(row.agentUrl, "https://cursor.com/agents?id=abc")

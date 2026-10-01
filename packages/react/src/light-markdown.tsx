@@ -2,7 +2,8 @@ import type { CSSProperties, ReactNode } from "react";
 
 /**
  * Minimal Markdown renderer for agent question summaries.
- * Supports paragraphs, lists, **bold**, *italic*, and `code` — no HTML.
+ * Supports headings, paragraphs, lists, fenced code blocks, **bold**,
+ * *italic*, and `code` — no HTML.
  */
 
 type InlinePart =
@@ -12,6 +13,8 @@ type InlinePart =
   | { type: "code"; value: string };
 
 type Block =
+  | { type: "heading"; parts: InlinePart[] }
+  | { type: "codeblock"; value: string }
   | { type: "paragraph"; parts: InlinePart[] }
   | { type: "ul"; items: InlinePart[][] }
   | { type: "ol"; items: InlinePart[][] };
@@ -44,12 +47,39 @@ export function parseLightMarkdown(source: string): Block[] {
     listItems = [];
   };
 
+  let codeLines: string[] | null = null;
+
   for (const rawLine of lines) {
     const line = rawLine.trimEnd();
     const trimmed = line.trim();
+
+    if (codeLines) {
+      if (trimmed.startsWith("```")) {
+        blocks.push({ type: "codeblock", value: codeLines.join("\n") });
+        codeLines = null;
+      } else {
+        codeLines.push(line);
+      }
+      continue;
+    }
+    if (trimmed.startsWith("```")) {
+      flushParagraph();
+      flushList();
+      codeLines = [];
+      continue;
+    }
+
     if (!trimmed) {
       flushParagraph();
       flushList();
+      continue;
+    }
+
+    const headingMatch = trimmed.match(/^#{1,6}\s+(.+)$/);
+    if (headingMatch) {
+      flushParagraph();
+      flushList();
+      blocks.push({ type: "heading", parts: parseInline(headingMatch[1]) });
       continue;
     }
 
@@ -75,6 +105,9 @@ export function parseLightMarkdown(source: string): Block[] {
     paragraphLines.push(trimmed);
   }
 
+  if (codeLines) {
+    blocks.push({ type: "codeblock", value: codeLines.join("\n") });
+  }
   flushParagraph();
   flushList();
   return blocks;
@@ -156,6 +189,32 @@ export function LightMarkdown({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       {blocks.map((block, blockIndex) => {
+        if (block.type === "heading") {
+          return (
+            <p key={blockIndex} style={{ ...base, fontWeight: 700, fontSize: fontSize + 1 }}>
+              {renderInline(block.parts, `h${blockIndex}`)}
+            </p>
+          );
+        }
+        if (block.type === "codeblock") {
+          return (
+            <pre
+              key={blockIndex}
+              style={{
+                ...base,
+                fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+                fontSize: fontSize - 1,
+                background: "rgba(0,0,0,0.06)",
+                borderRadius: 6,
+                padding: "6px 8px",
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
+              }}
+            >
+              {block.value}
+            </pre>
+          );
+        }
         if (block.type === "paragraph") {
           return (
             <p key={blockIndex} style={base}>

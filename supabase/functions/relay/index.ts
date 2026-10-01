@@ -4,7 +4,7 @@
  * Public (no JWT verification): host apps may be reachable logged-out.
  * Security boundary = project key resolution + per-project rate limits + origin allowlist.
  *
- * GET  → { enabled, requester_followups_enabled, requests? }
+ * GET  → { enabled, requester_followups_enabled, agent_mode, requests? }
  * POST create  → { prompt, context, … } — insert + launch agent
  * POST reply   → { request_id, reply } — follow-up on existing agent
  * POST confirm → { request_id, decision, feedback? } — requester verdict on a preview
@@ -190,6 +190,7 @@ Deno.serve(async (req) => {
         {
           enabled: true,
           requester_followups_enabled: followupsEnabled,
+          agent_mode: resolveEffectiveAgentMode(project),
           requests,
         },
         200,

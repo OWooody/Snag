@@ -90,5 +90,6 @@ export interface SnagRequestRow {
 export interface RelayStateResponse {
   enabled: boolean;
   requester_followups_enabled?: boolean;
+  agent_mode?: "plan_only" | "execute";
   requests?: SnagRequestRow[];
 }
