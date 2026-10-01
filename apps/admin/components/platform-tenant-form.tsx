@@ -3,7 +3,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { platformTenantUpdateSchema, parseOriginsTextarea } from "@snag/shared";
 import type { AgentMode, SnagProjectSafe } from "@snag/shared";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -130,9 +129,12 @@ export function PlatformTenantForm({
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-3">
-        <Button variant="outline" asChild>
-          <Link href={`/platform/impersonate/${project.slug}`}>View as company</Link>
-        </Button>
+        {/* POST form, not a link: Next.js prefetches visible links with GET, which would start impersonation silently. */}
+        <form method="post" action={`/platform/impersonate/${project.slug}`}>
+          <Button type="submit" variant="outline">
+            View as company
+          </Button>
+        </form>
         <AlertDialog>
           <AlertDialogTrigger asChild>
             <Button variant="destructive" disabled={rotating}>

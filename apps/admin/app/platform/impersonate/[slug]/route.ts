@@ -4,7 +4,8 @@ import { requirePlatformAdmin } from "@/lib/auth";
 import { IMPERSONATE_COOKIE } from "@/lib/impersonation";
 import { createServiceClient } from "@/lib/service";
 
-export async function GET(
+/** POST only: a GET handler would run on Next.js link prefetches. */
+export async function POST(
   request: Request,
   { params }: { params: Promise<{ slug: string }> },
 ) {
@@ -21,7 +22,7 @@ export async function GET(
   const base = new URL(request.url).origin;
 
   if (!project?.organization_id) {
-    return NextResponse.redirect(`${base}/platform/tenants`);
+    return NextResponse.redirect(`${base}/platform/tenants`, 303);
   }
 
   await writeAuditLog({
@@ -32,7 +33,7 @@ export async function GET(
     metadata: { project_slug: slug, project_id: project.id },
   });
 
-  const response = NextResponse.redirect(`${base}/dashboard`);
+  const response = NextResponse.redirect(`${base}/dashboard`, 303);
   response.cookies.set(IMPERSONATE_COOKIE, project.organization_id, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
