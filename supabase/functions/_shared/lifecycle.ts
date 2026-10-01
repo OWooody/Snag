@@ -262,13 +262,10 @@ async function finishImplementation(
   const { project } = ctx;
   const settings = projectSettings(project);
   const record: PolicyDecisionRecord = { ...(row.policy_decision ?? {}) };
-  const planOutcome: PolicyOutcome = row.approved_at
-    ? "review_before_merge"
-    : record.plan?.outcome ?? "review_before_merge";
 
   const github = await projectGitHub(project);
   if (!github) {
-    const final = planOutcome === "review_before_execution" ? "review_before_merge" : planOutcome;
+    const final = planStageOutcome(row);
     await claimTransition(ctx.service, row, {
       ...base,
       status: final === "execute" && settings.delivery === "pr_only"
@@ -296,29 +293,13 @@ async function finishImplementation(
     }
 
     const pr = await github.client.getPullRequest(github.repo, prNumber);
-    const diff = await github.client.getPullRequestDiff(github.repo, prNumber);
-    const diffDecision = evaluatePolicy({
-      stage: "diff",
-      files: diff.files,
-      linesChanged: diff.linesChanged,
-      risk: row.plan?.risk ?? null,
-      flags: row.plan?.flags ?? [],
-      planFiles: row.plan?.files ?? null,
-      planMissing: false,
-      editedDuringPlanning: record.plan?.matched.some(
-        (rule) => rule.id === "builtin:edited_during_planning",
-      ) ?? false,
-      requester: requesterContext(row, project),
-      rules: await loadPolicyRules(ctx.service, project),
-      defaultOutcome: settings.defaultOutcome,
-      delivery: settings.delivery,
-      projectShadow: settings.shadow,
-      headSha: pr.headSha,
-    });
-
-    const final = strictestOutcome(
-      planOutcome === "review_before_execution" ? "review_before_merge" : planOutcome,
-      diffDecision.outcome,
+    const { decision: diffDecision, final } = await evaluateDiff(
+      ctx.service,
+      project,
+      github,
+      row,
+      prNumber,
+      pr.headSha,
     );
     const nextRecord: PolicyDecisionRecord = {
       ...record,
@@ -358,6 +339,51 @@ async function finishImplementation(
       policy_decision: { ...record, final_outcome: "review_before_merge" },
     });
   }
+}
+
+/**
+ * What the plan stage allows once code exists: a developer-approved plan (or a
+ * plan that waited for approval) still needs a developer to review the PR.
+ */
+function planStageOutcome(row: LifecycleRow): PolicyOutcome {
+  if (row.approved_at) return "review_before_merge";
+  const outcome = row.policy_decision?.plan?.outcome ?? "review_before_merge";
+  return outcome === "review_before_execution" ? "review_before_merge" : outcome;
+}
+
+/** Evaluate the rules against the PR's real diff and combine with the plan stage. */
+export async function evaluateDiff(
+  service: SupabaseClient,
+  project: ProjectRow,
+  github: NonNullable<Awaited<ReturnType<typeof projectGitHub>>>,
+  row: LifecycleRow,
+  prNumber: number,
+  headSha: string,
+): Promise<{ decision: PolicyStageDecision; final: PolicyOutcome }> {
+  const settings = projectSettings(project);
+  const diff = await github.client.getPullRequestDiff(github.repo, prNumber);
+  const decision = evaluatePolicy({
+    stage: "diff",
+    files: diff.files,
+    linesChanged: diff.linesChanged,
+    risk: row.plan?.risk ?? null,
+    flags: row.plan?.flags ?? [],
+    planFiles: row.plan?.files ?? null,
+    planMissing: false,
+    editedDuringPlanning: row.policy_decision?.plan?.matched.some(
+      (rule) => rule.id === "builtin:edited_during_planning",
+    ) ?? false,
+    requester: requesterContext(row, project),
+    rules: await loadPolicyRules(service, project),
+    defaultOutcome: settings.defaultOutcome,
+    delivery: settings.delivery,
+    projectShadow: settings.shadow,
+    headSha,
+  });
+  return {
+    decision,
+    final: strictestOutcome(planStageOutcome(row), decision.outcome),
+  };
 }
 
 async function resolvePullRequest(

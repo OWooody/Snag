@@ -24,3 +24,6 @@ verify_jwt = false
 
 [functions.webhook]
 verify_jwt = false
+
+[functions.delivery-worker]
+verify_jwt = false
