@@ -196,6 +196,11 @@ export function RequestDetail({
           ) : null}
         </div>
         {request.error ? <p className="text-sm text-red-600">{request.error}</p> : null}
+        {request.status === "rejected" && request.rejection_note ? (
+          <p className="whitespace-pre-wrap text-sm text-zinc-600">
+            Rejection note: {request.rejection_note}
+          </p>
+        ) : null}
         {request.merged_at ? (
           <p className="text-sm text-emerald-700">
             Merged {new Date(request.merged_at).toLocaleString()}
@@ -219,7 +224,10 @@ export function RequestDetail({
             {canDecide ? (
               <>
                 <div className="space-y-2">
-                  <Label htmlFor="decision_note">Note to the agent (optional)</Label>
+                  <Label htmlFor="decision_note">Note (optional)</Label>
+                  <p className="text-xs text-zinc-500">
+                    Sent to the agent when you approve. Shown to the requester when you reject.
+                  </p>
                   <Textarea
                     id="decision_note"
                     rows={3}
@@ -242,8 +250,9 @@ export function RequestDetail({
                       <AlertDialogHeader>
                         <AlertDialogTitle>Reject this plan?</AlertDialogTitle>
                         <AlertDialogDescription>
-                          The request ends without changes. The requester sees it as rejected
-                          and can file a new request.
+                          The request ends without changes. The requester sees it as not
+                          approved{note.trim() ? ", along with your note," : ""} and can file a
+                          new request.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>

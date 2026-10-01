@@ -124,7 +124,7 @@ Rules marked **Check these paths** use common path guesses; adjust them to the r
 **Requests** has filters for **Plan approval** (`awaiting_approval`) and **PR review** (`awaiting_review`); the dashboard shows a banner when anything is waiting. Open a request to see the plan (files, risk, flags), each rule decision with the matched rules and reasons, and the agent summary.
 
 - **Approve and implement** sends the agent back to implement the plan, with an optional note. Approved plans always end in **Review before merge**.
-- **Reject** ends the request; the requester sees it as rejected.
+- **Reject** ends the request with status `rejected`; the requester sees it as **Not approved**, along with the note if you wrote one.
 - PRs in `awaiting_review` are merged by developers on GitHub; the delivery worker marks the request `merged` (or `error` if the PR is closed).
 
 All rule, setting, token, secret, and approval changes are written to `snag_audit_log` (without prompts, notes, or secrets).

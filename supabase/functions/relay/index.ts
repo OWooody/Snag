@@ -627,7 +627,7 @@ async function listRequests(
   const followupsEnabled = projectFollowupsEnabled(project);
   const { data: rows, error } = await serviceClient
     .from("snag_requests")
-    .select(`${REQUEST_LIFECYCLE_COLUMNS}, error, created_at`)
+    .select(`${REQUEST_LIFECYCLE_COLUMNS}, error, rejection_note, created_at`)
     .eq("project_id", project.id)
     .order("created_at", { ascending: false })
     .limit(LIST_LIMIT);
@@ -638,7 +638,7 @@ async function listRequests(
   }
 
   const requests = (rows ?? []) as Array<
-    LifecycleRow & { error: string | null; created_at: string }
+    LifecycleRow & { error: string | null; rejection_note: string | null; created_at: string }
   >;
   const staleCutoff = Date.now() - STALE_RUNNING_MS;
   let conversationBackfills = 0;
@@ -731,6 +731,7 @@ async function listRequests(
     preview_url: row.preview_url,
     summary: row.summary,
     error: row.error,
+    rejection_note: row.status === "rejected" ? row.rejection_note : null,
     requester: row.requester ?? null,
     created_at: row.created_at,
   }));

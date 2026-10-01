@@ -376,6 +376,21 @@ function RequestCard({
           {row.error}
         </p>
       ) : null}
+      {row.status === "rejected" ? (
+        <p
+          style={{
+            fontSize: 12,
+            color: theme.textMuted,
+            marginTop: 6,
+            marginBottom: 0,
+            whiteSpace: "pre-wrap",
+          }}
+        >
+          {row.rejection_note
+            ? `A developer decided not to make this change: ${row.rejection_note}`
+            : "A developer decided not to make this change. File a new request if it is still needed."}
+        </p>
+      ) : null}
       {canReply && showActions ? (
         <div style={{ marginTop: 10 }}>
           <textarea
@@ -533,6 +548,7 @@ const STATUS_LABELS: Record<SnagRequestStatus, string> = {
   finished: "FINISHED",
   merged: "LIVE",
   error: "ERROR",
+  rejected: "NOT APPROVED",
 };
 
 function statusColor(status: SnagRequestStatus, theme: SnagTheme): string {
@@ -542,6 +558,8 @@ function statusColor(status: SnagRequestStatus, theme: SnagTheme): string {
       return theme.success;
     case "error":
       return theme.danger;
+    case "rejected":
+      return theme.textMuted;
     case "needs_input":
       return theme.accent;
     default:

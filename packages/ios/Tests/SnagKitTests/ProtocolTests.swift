@@ -160,6 +160,27 @@ final class ProtocolTests: XCTestCase {
         XCTAssertNil(rows[1].previewUrl)
     }
 
+    func testDecodesRejectedStatusAndNote() throws {
+        let json = """
+        {
+          "id": "c",
+          "prompt": "Remove the footer",
+          "status": "rejected",
+          "agent_url": null,
+          "branch_name": null,
+          "pr_url": null,
+          "summary": null,
+          "error": null,
+          "rejection_note": "The footer is required for legal.",
+          "requester": null,
+          "created_at": "2026-07-24T14:20:33Z"
+        }
+        """
+        let row = try JSONDecoder().decode(SnagRequestRow.self, from: Data(json.utf8))
+        XCTAssertEqual(row.status, .rejected)
+        XCTAssertEqual(row.rejectionNote, "The footer is required for legal.")
+    }
+
     func testDisplaySummaryStripsSnagPlan() {
         let summary = """
         I'll update the button label.

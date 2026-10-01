@@ -268,6 +268,12 @@ struct RequestCardView: View {
                     .font(.system(size: 12))
                     .foregroundColor(theme.danger)
             }
+            if row.status == .rejected {
+                Text(rejectionText)
+                    .font(.system(size: 12))
+                    .foregroundColor(theme.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if canReply && showActions {
                 ZStack(alignment: .topLeading) {
                     TextEditor(text: $reply)
@@ -343,7 +349,15 @@ struct RequestCardView: View {
         case .finished: return "FINISHED"
         case .merged: return "LIVE"
         case .error: return "ERROR"
+        case .rejected: return "NOT APPROVED"
         }
+    }
+
+    private var rejectionText: String {
+        if let note = row.rejectionNote, !note.isEmpty {
+            return "A developer decided not to make this change: \(note)"
+        }
+        return "A developer decided not to make this change. File a new request if it is still needed."
     }
 
     @ViewBuilder
@@ -467,6 +481,8 @@ struct RequestCardView: View {
             return theme.success
         case .error:
             return theme.danger
+        case .rejected:
+            return theme.textMuted
         case .queued, .running, .needsInput, .awaitingApproval, .awaitingReview,
              .awaitingConfirmation, .unknown:
             return theme.accent

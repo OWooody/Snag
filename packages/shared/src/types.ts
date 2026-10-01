@@ -16,7 +16,8 @@ export type SnagRequestStatus =
   | "awaiting_approval"
   | "awaiting_review"
   | "awaiting_confirmation"
-  | "merged";
+  | "merged"
+  | "rejected";
 
 export type SnagRequestPhase = "planning" | "implementing" | "delivering";
 
@@ -98,6 +99,8 @@ export interface SnagRequestRow {
   preview_url: string | null;
   summary: string | null;
   error: string | null;
+  /** Developer's note when the plan was rejected; shown to the requester. */
+  rejection_note: string | null;
   plan: SnagPlan | null;
   policy_decision: PolicyDecisionRecord | null;
   approved_at: string | null;

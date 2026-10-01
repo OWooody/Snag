@@ -75,8 +75,9 @@ export async function POST(
   if (decision === "reject") {
     const updated = await transition(
       {
-        status: "error",
-        error: "Plan rejected by a developer",
+        status: "rejected",
+        error: null,
+        rejection_note: note || null,
         policy_decision: policyDecision,
       },
       row.lifecycle_version,
