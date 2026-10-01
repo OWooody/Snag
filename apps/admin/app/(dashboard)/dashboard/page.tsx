@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/status-badge";
 import { getActiveProject, getUserContext } from "@/lib/auth";
-import { computeUsageStats, fetchProjectRequests } from "@/lib/requests";
+import { REVIEW_STATUSES, computeUsageStats, fetchProjectRequests } from "@/lib/requests";
 
 export default async function DashboardPage() {
   const ctx = await getUserContext();
@@ -22,11 +22,13 @@ export default async function DashboardPage() {
   const requests = await fetchProjectRequests(project.id, 10, {
     useServiceRole: Boolean(ctx.impersonatingOrgId),
   });
-  const stats = computeUsageStats(
-    await fetchProjectRequests(project.id, 200, {
-      useServiceRole: Boolean(ctx.impersonatingOrgId),
-    }),
-  );
+  const recent = await fetchProjectRequests(project.id, 200, {
+    useServiceRole: Boolean(ctx.impersonatingOrgId),
+  });
+  const stats = computeUsageStats(recent);
+  const needsDeveloper = recent.filter((r) =>
+    (REVIEW_STATUSES as readonly string[]).includes(r.status),
+  ).length;
 
   return (
     <div className="space-y-6">
@@ -34,6 +36,16 @@ export default async function DashboardPage() {
         <h1 className="text-2xl font-semibold">{project.name}</h1>
         <p className="text-sm text-zinc-500">Project overview and recent activity</p>
       </div>
+
+      {needsDeveloper > 0 ? (
+        <Link
+          href="/requests"
+          className="block rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 hover:bg-amber-100"
+        >
+          {needsDeveloper} request{needsDeveloper === 1 ? "" : "s"} waiting for a developer —
+          review plans and PRs on the Requests page.
+        </Link>
+      ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
