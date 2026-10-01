@@ -103,6 +103,12 @@ export const policyConditionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("max_lines"), max: z.number().int().min(0).max(1_000_000) }),
   z.object({ type: z.literal("risk_at_least"), level: z.enum(PLAN_RISKS) }),
   z.object({ type: z.literal("flag"), flag: z.enum(PLAN_FLAGS) }),
+  z.object({
+    type: z.literal("risky_sql"),
+    globs: globListSchema,
+    max_added_columns: z.number().int().min(0).max(1_000),
+  }),
+  z.object({ type: z.literal("files_removed") }),
   z.object({ type: z.literal("requester_unverified") }),
   z.object({ type: z.literal("requester_not_trusted") }),
 ]);
@@ -133,6 +139,13 @@ export const policyRuleCreateSchema = z.intersection(
   policyRuleInputSchema,
   z.object({ scope: z.enum(["project", "organization"]).default("project") }),
 );
+
+/** Saves a reviewed template: every rule is created, or none are. */
+export const policyRuleBulkCreateSchema = z.object({
+  scope: z.enum(["project", "organization"]).default("project"),
+  template_id: z.string().trim().min(1).max(64).optional(),
+  rules: z.array(policyRuleInputSchema).min(1).max(20),
+});
 
 export const policyRuleToggleSchema = z.object({
   enabled: z.boolean().optional(),

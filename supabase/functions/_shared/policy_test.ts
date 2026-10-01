@@ -3,6 +3,7 @@ import {
   type ChangedFile,
   evaluatePolicy,
   matchGlob,
+  migrationIsRisky,
   type PolicyInput,
   type PolicyRule,
   strictestOutcome,
@@ -293,6 +294,129 @@ Deno.test("edited during planning escalates to review before merge", () => {
     input({ rules: [allowCopy], editedDuringPlanning: true }),
   );
   assertEquals(decision.outcome, "review_before_merge");
+});
+
+function migration(sql: string, status: ChangedFile["status"] = "added"): ChangedFile {
+  return {
+    path: "supabase/migrations/20261001_change.sql",
+    status,
+    patch: ["@@ -0,0 +1 @@", ...sql.split("\n").map((line) => `+${line}`)].join("\n"),
+  };
+}
+
+Deno.test("migrationIsRisky allows adding up to N columns", () => {
+  assert(!migrationIsRisky([migration("alter table orders add column note text;")], 2));
+  assert(
+    !migrationIsRisky([
+      migration(
+        "alter table orders add column note text;\nalter table orders add if not exists tag text;",
+      ),
+    ], 2),
+  );
+  assert(
+    migrationIsRisky([
+      migration(
+        "alter table orders add column a text, add column b text, add column c text;",
+      ),
+    ], 2),
+  );
+  assert(!migrationIsRisky([migration("create table notes (id uuid primary key, body text);")], 2));
+  assert(
+    !migrationIsRisky([migration("alter table orders add constraint orders_ref unique (ref);")], 2),
+  );
+});
+
+Deno.test("migrationIsRisky flags destructive, altering, and permission SQL", () => {
+  for (
+    const sql of [
+      "alter table orders drop column note;",
+      "drop table orders;",
+      "alter table orders alter column total type numeric;",
+      "alter table orders rename column a to b;",
+      "truncate orders;",
+      "delete from orders where true;",
+      "update orders set status = 'x';",
+      "grant select on orders to anon;",
+      "create policy p on orders for select using (true);",
+      "alter table orders disable row level security;",
+    ]
+  ) {
+    assert(migrationIsRisky([migration(sql)], 2), sql);
+  }
+  assert(!migrationIsRisky([migration("-- drop table later\nalter table o add column n int;")], 2));
+});
+
+Deno.test("migrationIsRisky fails closed on edited migrations and missing diffs", () => {
+  assert(migrationIsRisky([migration("alter table o add column n int;", "modified")], 2));
+  assert(migrationIsRisky([migration("", "removed")], 2));
+  assert(
+    migrationIsRisky([{ path: "supabase/migrations/1.sql", status: "added", patch: null }], 2),
+  );
+});
+
+Deno.test("migrationIsRisky treats removed ORM schema lines as risky", () => {
+  const prisma = (patch: string): ChangedFile => ({
+    path: "prisma/schema.prisma",
+    status: "modified",
+    patch,
+  });
+  assert(!migrationIsRisky([prisma("@@ -1,2 +1,3 @@\n model Order {\n+  note String?\n }")], 2));
+  assert(migrationIsRisky([prisma("@@ -1,3 +1,2 @@\n model Order {\n-  note String?\n }")], 2));
+});
+
+Deno.test("risky_sql and files_removed only match at diff stage", () => {
+  const riskySql: PolicyRule = {
+    id: "r-sql",
+    name: "Risky migration",
+    enabled: true,
+    shadow: false,
+    kind: "escalate",
+    outcome: "review_before_merge",
+    condition: {
+      all: [{ type: "risky_sql", globs: ["**/migrations/**"], max_added_columns: 2 }],
+    },
+  };
+  const removed: PolicyRule = {
+    ...riskySql,
+    id: "r-removed",
+    name: "Deletes files",
+    condition: { all: [{ type: "files_removed" }] },
+  };
+  const allowAll: PolicyRule = {
+    ...allowCopy,
+    condition: { all: [{ type: "path_glob_any", globs: ["**"] }] },
+  };
+  const drop = migration("alter table orders drop column note;");
+
+  assertEquals(
+    evaluatePolicy(input({ files: [drop], rules: [allowAll, riskySql, removed] })).outcome,
+    "execute",
+  );
+  assertEquals(
+    evaluatePolicy(input({ stage: "diff", files: [drop], rules: [allowAll, riskySql] }))
+      .outcome,
+    "review_before_merge",
+  );
+  assertEquals(
+    evaluatePolicy(
+      input({
+        stage: "diff",
+        files: [migration("alter table orders add column note text;")],
+        rules: [allowAll, riskySql, removed],
+      }),
+    ).outcome,
+    "execute",
+  );
+  assertEquals(
+    evaluatePolicy(
+      input({
+        stage: "diff",
+        files: [{ path: "src/old.ts", status: "removed" }],
+        rules: [allowAll, removed],
+      }),
+    ).outcome,
+    "review_before_merge",
+  );
 });
 
 Deno.test("parseSnagPlan mirrors the shared parser", () => {

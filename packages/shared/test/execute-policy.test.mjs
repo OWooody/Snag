@@ -5,6 +5,8 @@ import {
   SNAG_PLAN_HEADING,
   buildImplementationPrompt,
   parseSnagPlan,
+  POLICY_TEMPLATES,
+  policyRuleBulkCreateSchema,
   policyRuleCreateSchema,
   projectExecutionUpdateSchema,
   resolveEffectiveDefaultOutcome,
@@ -135,4 +137,20 @@ test("buildImplementationPrompt names the base ref and forbids merging", () => {
   assert.ok(prompt.includes("`main`"));
   assert.ok(prompt.includes("Do NOT merge"));
   assert.ok(prompt.includes("Keep the old color as a fallback."));
+});
+
+test("every policy template passes rule validation", () => {
+  for (const template of POLICY_TEMPLATES) {
+    const parsed = policyRuleBulkCreateSchema.safeParse({
+      scope: "project",
+      template_id: template.id,
+      rules: template.rules.map(({ name, kind, outcome, condition }) => ({
+        name,
+        kind,
+        outcome,
+        condition,
+      })),
+    });
+    assert.equal(parsed.success, true, template.id);
+  }
 });

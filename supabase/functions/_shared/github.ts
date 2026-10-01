@@ -188,6 +188,7 @@ export function githubClient(options: { token: string }) {
             additions?: number;
             deletions?: number;
             previous_filename?: string;
+            patch?: string;
           }>
         >(
           `/repos/${repo.owner}/${repo.repo}/pulls/${number}/files?per_page=100&page=${page}`,
@@ -197,6 +198,7 @@ export function githubClient(options: { token: string }) {
             path: file.filename,
             status: mapFileStatus(file.status),
             previousPath: file.previous_filename ?? null,
+            patch: file.patch ?? null,
           });
           linesChanged += (file.additions ?? 0) + (file.deletions ?? 0);
         }

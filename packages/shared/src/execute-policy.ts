@@ -96,6 +96,8 @@ export type PolicyConditionType =
   | "max_lines"
   | "risk_at_least"
   | "flag"
+  | "risky_sql"
+  | "files_removed"
   | "requester_unverified"
   | "requester_not_trusted";
 
@@ -106,9 +108,20 @@ export const POLICY_CONDITION_LABELS: Record<PolicyConditionType, string> = {
   max_lines: "More than N lines changed (diff only)",
   risk_at_least: "Agent-reported risk is at least",
   flag: "Agent flagged the plan as",
+  risky_sql: "Database migration is risky (diff only)",
+  files_removed: "Deletes any file (diff only)",
   requester_unverified: "Requester identity is not verified",
   requester_not_trusted: "Requester is not on the trusted list",
 };
+
+/**
+ * What `risky_sql` treats as risky in matching migration files: drops,
+ * alters, renames, data deletes/updates, grants and policies, edits to an
+ * existing migration, or more than `max_added_columns` new columns.
+ * Implemented in supabase/functions/_shared/policy.ts (migrationIsRisky).
+ */
+export const RISKY_SQL_DESCRIPTION =
+  "Drops, alters, or renames anything; deletes or updates rows; changes grants, roles, or RLS policies; edits an existing migration; or adds more than the allowed number of columns. Adding a few columns or new tables is fine.";
 
 export type PolicyCondition =
   | { type: "path_glob_any"; globs: string[] }
@@ -117,6 +130,8 @@ export type PolicyCondition =
   | { type: "max_lines"; max: number }
   | { type: "risk_at_least"; level: PlanRisk }
   | { type: "flag"; flag: PlanFlag }
+  | { type: "risky_sql"; globs: string[]; max_added_columns: number }
+  | { type: "files_removed" }
   | { type: "requester_unverified" }
   | { type: "requester_not_trusted" };
 

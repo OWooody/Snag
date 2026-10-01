@@ -96,6 +96,28 @@ The same card appears on **Platform → Tenants → (tenant)** for platform admi
 - When several rules match, the strictest outcome wins. Built-in escalations always apply.
 - **Shadow** on a rule records what it would have done without enforcing it — the request detail page shows shadow matches separately.
 - Rules are checked against the agent's plan and again against the PR diff before merge; file and line conditions use the real diff at the second check.
+- **Database migration is risky** reads the SQL in the PR diff for files matching its globs. It matches drops, alters, renames, row deletes/updates, grants, roles, RLS policy changes, edits to an existing migration, removed lines in an ORM schema (e.g. `schema.prisma`), or more new columns than allowed. New tables and a few new columns pass. If GitHub omits a file's diff (very large files), it matches.
+- **Deletes any file** matches when the PR removes a file.
+
+#### Templates
+
+**Start from a template** fills in a reviewed set of rules; nothing is saved until you click **Save**. Edit, remove, or set the scope and shadow mode first. Saving creates every rule in one step (or none, if any is invalid), audit-logged with the `template_id`.
+
+**Fast Lane** — ships straight to production, pulls over for database, roles, and deletions:
+
+| Rule | When it matches |
+|---|---|
+| Fast Lane: allow everything | Execute now |
+| Deletes data (agent flag) | Review before execution |
+| Deletes files | Review before merge |
+| Risky database migration (up to 2 new columns allowed) | Review before merge |
+| Database change rated medium risk or higher | Review before merge |
+| Roles and permissions (agent flag) | Review before merge |
+| Role and permission files (`**/*role*`, `**/*permission*`, `**/*rbac*`, `**/middleware.*`) | Review before merge |
+| Security-sensitive (agent flag) | Review before merge |
+| More than 15 files / more than 400 lines | Review before merge |
+
+Rules marked **Check these paths** use common path guesses; adjust them to the repository's layout.
 
 ### Review queue
 

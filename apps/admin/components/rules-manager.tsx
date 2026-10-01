@@ -2,11 +2,13 @@
 
 import {
   BUILTIN_POLICY_RULES,
+  MIGRATION_GLOBS,
   PLAN_FLAGS,
   PLAN_FLAG_LABELS,
   PLAN_RISKS,
   POLICY_CONDITION_LABELS,
   POLICY_OUTCOME_LABELS,
+  RISKY_SQL_DESCRIPTION,
   type PolicyCondition,
   type PolicyConditionType,
   type PolicyOutcome,
@@ -15,7 +17,7 @@ import {
 } from "@snag/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Lock, Plus, Trash2, X } from "lucide-react";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { toast } from "sonner";
 import { selectClassName } from "@/components/execution-selects";
 import {
@@ -53,12 +55,14 @@ export function describeCondition(condition: PolicyCondition): string {
       return `${label} ${condition.level}`;
     case "flag":
       return `${label} “${PLAN_FLAG_LABELS[condition.flag]}”`;
+    case "risky_sql":
+      return `${label}: more than ${condition.max_added_columns} new columns, or any drop/alter/delete/permission change in ${condition.globs.join(", ")}`;
     default:
       return label;
   }
 }
 
-function defaultCondition(type: PolicyConditionType): PolicyCondition {
+export function defaultCondition(type: PolicyConditionType): PolicyCondition {
   switch (type) {
     case "path_glob_any":
     case "path_glob_all":
@@ -71,6 +75,10 @@ function defaultCondition(type: PolicyConditionType): PolicyCondition {
       return { type, level: "medium" };
     case "flag":
       return { type, flag: "schema" };
+    case "risky_sql":
+      return { type, globs: [...MIGRATION_GLOBS], max_added_columns: 2 };
+    case "files_removed":
+      return { type: "files_removed" };
     case "requester_unverified":
       return { type: "requester_unverified" };
     case "requester_not_trusted":
@@ -78,7 +86,14 @@ function defaultCondition(type: PolicyConditionType): PolicyCondition {
   }
 }
 
-function ConditionEditor({
+function parseGlobs(text: string): string[] {
+  return text
+    .split(/[\n,]/)
+    .map((glob) => glob.trim())
+    .filter(Boolean);
+}
+
+export function ConditionEditor({
   condition,
   onChange,
   onRemove,
@@ -100,7 +115,7 @@ function ConditionEditor({
         value={condition.type}
         onChange={(e) => {
           const next = defaultCondition(e.target.value as PolicyConditionType);
-          setGlobText("");
+          setGlobText("globs" in next ? next.globs.join(", ") : "");
           onChange(next);
         }}
       >
@@ -117,16 +132,39 @@ function ConditionEditor({
             value={globText}
             onChange={(e) => {
               setGlobText(e.target.value);
-              onChange({
-                ...condition,
-                globs: e.target.value
-                  .split(/[\n,]/)
-                  .map((glob) => glob.trim())
-                  .filter(Boolean),
-              });
+              onChange({ ...condition, globs: parseGlobs(e.target.value) });
             }}
             className="font-mono"
           />
+        ) : condition.type === "risky_sql" ? (
+          <div className="space-y-2">
+            <Input
+              aria-label="Migration files"
+              placeholder="**/*.sql, **/schema.prisma"
+              value={globText}
+              onChange={(e) => {
+                setGlobText(e.target.value);
+                onChange({ ...condition, globs: parseGlobs(e.target.value) });
+              }}
+              className="font-mono"
+            />
+            <label className="flex items-center gap-2 text-sm text-zinc-600">
+              New columns allowed
+              <Input
+                type="number"
+                min={0}
+                className="w-20"
+                value={condition.max_added_columns}
+                onChange={(e) =>
+                  onChange({
+                    ...condition,
+                    max_added_columns: Math.max(0, Number(e.target.value) || 0),
+                  })
+                }
+              />
+            </label>
+            <p className="text-xs text-zinc-500">{RISKY_SQL_DESCRIPTION}</p>
+          </div>
         ) : condition.type === "max_files" || condition.type === "max_lines" ? (
           <Input
             type="number"
@@ -428,7 +466,16 @@ function RuleRow({
   );
 }
 
-export function RulesManager({ projectSlug, canEdit }: { projectSlug: string; canEdit: boolean }) {
+export function RulesManager({
+  projectSlug,
+  canEdit,
+  templates,
+}: {
+  projectSlug: string;
+  canEdit: boolean;
+  /** Rendered above "New rule" for editors. */
+  templates?: ReactNode;
+}) {
   const queryClient = useQueryClient();
   const { data: rules = [], isLoading } = useQuery({
     queryKey: ["policy-rules", projectSlug],
@@ -474,6 +521,8 @@ export function RulesManager({ projectSlug, canEdit }: { projectSlug: string; ca
           )}
         </CardContent>
       </Card>
+
+      {canEdit ? templates : null}
 
       {canEdit ? (
         <Card>

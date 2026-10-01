@@ -1,3 +1,4 @@
+import { RuleTemplates } from "@/components/rule-templates";
 import { RulesManager } from "@/components/rules-manager";
 import { canEditProject, getActiveProject, getUserContext } from "@/lib/auth";
 
@@ -23,7 +24,11 @@ export default async function RulesPage() {
           a developer — before implementation or before merge.
         </p>
       </div>
-      <RulesManager projectSlug={project.slug} canEdit={canEditProject(ctx, project)} />
+      <RulesManager
+        projectSlug={project.slug}
+        canEdit={canEditProject(ctx, project)}
+        templates={<RuleTemplates projectSlug={project.slug} />}
+      />
     </div>
   );
 }

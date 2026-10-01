@@ -49,6 +49,8 @@ export interface ChangedFile {
   path: string;
   status: "added" | "modified" | "removed" | "renamed" | "unknown";
   previousPath?: string | null;
+  /** Unified diff from GitHub. Missing at plan stage and for very large files. */
+  patch?: string | null;
 }
 
 export interface PolicyRequester {
@@ -214,6 +216,74 @@ function anyFileMatches(files: ChangedFile[], globs: string[]): boolean {
   );
 }
 
+/**
+ * Statements that change or remove existing schema, data, or permissions.
+ * Matched against added lines with SQL comments stripped.
+ */
+const RISKY_SQL_PATTERNS: RegExp[] = [
+  /\bdrop\b/i,
+  /\balter\s+column\b/i,
+  /\brename\b/i,
+  /\bset\s+data\s+type\b/i,
+  /\balter\s+type\b/i,
+  /\btruncate\b/i,
+  /\bdelete\s+from\b/i,
+  /\bupdate\s+[\w."]+\s+set\b/i,
+  /\bgrant\b/i,
+  /\brevoke\b/i,
+  /\b(?:create|alter)\s+(?:policy|role|user)\b/i,
+  /\bdisable\s+row\s+level\s+security\b/i,
+  /\bsecurity\s+definer\b/i,
+];
+
+const ADD_COLUMN_RE =
+  /\badd\s+(?:column\s+)?(?:if\s+not\s+exists\s+)?(?!(?:constraint|primary|foreign|unique|check|index|exclude|value)\b)["\w]+/gi;
+
+/** Lines of an ORM schema (e.g. schema.prisma) that are structure, not columns. */
+const SCHEMA_STRUCTURE_LINE = /^(?:model|enum|type|view|generator|datasource)\b|^[{}]|^@@|^\/\//;
+
+function patchLines(patch: string, marker: "+" | "-"): string[] {
+  const header = marker.repeat(3);
+  return patch
+    .split("\n")
+    .filter((line) => line.startsWith(marker) && !line.startsWith(header))
+    .map((line) => line.slice(1).trim())
+    .filter((line) => line.length > 0);
+}
+
+function stripSqlComments(line: string): string {
+  return line.replace(/--.*$/, "").trim();
+}
+
+/**
+ * True when migration files in the diff do more than add a few columns:
+ * they drop, alter, rename, delete, or touch permissions; edit an existing
+ * migration; or add more than `maxAddedColumns` columns. Fails closed when a
+ * file's diff is unavailable.
+ */
+export function migrationIsRisky(files: ChangedFile[], maxAddedColumns: number): boolean {
+  let addedColumns = 0;
+  for (const file of files) {
+    const isSql = file.path.toLowerCase().endsWith(".sql");
+    if (file.status === "removed" || file.status === "renamed") return true;
+    if (isSql && file.status !== "added") return true;
+    if (typeof file.patch !== "string") return true;
+
+    const added = patchLines(file.patch, "+");
+    if (isSql) {
+      const sql = added.map(stripSqlComments).filter(Boolean).join("\n");
+      if (RISKY_SQL_PATTERNS.some((pattern) => pattern.test(sql))) return true;
+      addedColumns += sql.match(ADD_COLUMN_RE)?.length ?? 0;
+    } else {
+      const removed = patchLines(file.patch, "-")
+        .filter((line) => !line.startsWith("//"));
+      if (removed.length > 0) return true;
+      addedColumns += added.filter((line) => !SCHEMA_STRUCTURE_LINE.test(line)).length;
+    }
+  }
+  return addedColumns > maxAddedColumns;
+}
+
 type ConditionResult = boolean | "invalid";
 
 function evaluateCondition(
@@ -247,6 +317,16 @@ function evaluateCondition(
     case "flag":
       if (typeof c.flag !== "string") return "invalid";
       return input.flags.includes(c.flag);
+    case "risky_sql":
+      if (!globs?.length || typeof c.max_added_columns !== "number") return "invalid";
+      if (input.stage !== "diff") return false;
+      return migrationIsRisky(
+        input.files.filter((file) => anyFileMatches([file], globs)),
+        c.max_added_columns,
+      );
+    case "files_removed":
+      return input.stage === "diff" &&
+        input.files.some((file) => file.status === "removed");
     case "requester_unverified":
       return !input.requester.verified;
     case "requester_not_trusted":
