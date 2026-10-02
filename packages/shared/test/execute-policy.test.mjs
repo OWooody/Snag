@@ -5,6 +5,9 @@ import {
   SNAG_PLAN_HEADING,
   buildImplementationPrompt,
   buildPlanRevisionPrompt,
+  classifyExecutionPosture,
+  classifyProjectPosture,
+  executionPostureSettings,
   parseSnagPlan,
   POLICY_TEMPLATES,
   policyRuleBulkCreateSchema,
@@ -109,6 +112,91 @@ test("policy rule schema ties kind to outcome", () => {
     condition: { all: [{ type: "requester_unverified" }] },
   });
   assert.equal(escalateExecute.success, false);
+});
+
+test("simple postures are the two agreed combinations", () => {
+  assert.equal(
+    classifyExecutionPosture(executionPostureSettings("review_required")),
+    "review_required",
+  );
+  assert.deepEqual(executionPostureSettings("review_required"), {
+    agent_mode: "execute",
+    execute_delivery: "pr_only",
+    default_outcome: "review_before_execution",
+    policy_shadow_mode: false,
+  });
+  assert.equal(
+    classifyExecutionPosture(executionPostureSettings("execute_within_rules")),
+    "execute_within_rules",
+  );
+  assert.equal(
+    executionPostureSettings("execute_within_rules").execute_delivery,
+    "auto_merge",
+  );
+});
+
+test("posture is custom when the combination leaves the two simple choices", () => {
+  assert.equal(
+    classifyExecutionPosture({
+      agent_mode: "plan_only",
+      execute_delivery: "pr_only",
+      default_outcome: "review_before_execution",
+      policy_shadow_mode: false,
+    }),
+    "custom",
+  );
+  assert.equal(
+    classifyExecutionPosture({
+      agent_mode: "execute",
+      execute_delivery: "preview_confirm",
+      default_outcome: "review_before_execution",
+      policy_shadow_mode: false,
+    }),
+    "custom",
+  );
+  assert.equal(
+    classifyExecutionPosture({
+      agent_mode: "execute",
+      execute_delivery: "pr_only",
+      default_outcome: "review_before_merge",
+      policy_shadow_mode: false,
+    }),
+    "custom",
+  );
+  assert.equal(
+    classifyExecutionPosture({
+      ...executionPostureSettings("review_required"),
+      policy_shadow_mode: true,
+    }),
+    "custom",
+  );
+});
+
+test("project posture is inherit only when every override is unset", () => {
+  assert.equal(
+    classifyProjectPosture({
+      agent_mode: null,
+      execute_delivery: null,
+      default_outcome: null,
+      policy_shadow_mode: null,
+    }),
+    "inherit",
+  );
+  assert.equal(
+    classifyProjectPosture({
+      agent_mode: "execute",
+      execute_delivery: null,
+      default_outcome: null,
+      policy_shadow_mode: null,
+    }),
+    "custom",
+  );
+  assert.equal(
+    classifyProjectPosture({
+      ...executionPostureSettings("execute_within_rules"),
+    }),
+    "execute_within_rules",
+  );
 });
 
 test("projectExecutionUpdateSchema validates requester ids", () => {

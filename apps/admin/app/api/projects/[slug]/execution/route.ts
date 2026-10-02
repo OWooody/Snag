@@ -56,6 +56,7 @@ export async function PATCH(
   const { data, error: updateError } = await service
     .from("snag_projects")
     .update({
+      ...(input.agent_mode !== undefined ? { agent_mode: input.agent_mode } : {}),
       execute_delivery: input.execute_delivery,
       default_outcome: input.default_outcome,
       policy_shadow_mode: input.policy_shadow_mode,
@@ -81,6 +82,7 @@ export async function PATCH(
     targetId: project.id,
     metadata: {
       slug,
+      agent_mode: input.agent_mode,
       execute_delivery: input.execute_delivery,
       effective_delivery: effectiveDelivery,
       default_outcome: input.default_outcome,

@@ -29,9 +29,9 @@ export default async function PlatformTenantDetailPage({
 
   if (!project) notFound();
 
-  let orgAgentMode: "plan_only" | "execute" = "plan_only";
   let orgFollowupsEnabled = true;
   const orgExecution: OrganizationExecutionDefaults = {
+    agent_mode: "plan_only",
     execute_delivery: "pr_only",
     default_outcome: "review_before_execution",
     policy_shadow_mode: false,
@@ -45,7 +45,7 @@ export default async function PlatformTenantDetailPage({
       .eq("id", project.organization_id)
       .single();
     if (org?.agent_mode === "execute" || org?.agent_mode === "plan_only") {
-      orgAgentMode = org.agent_mode;
+      orgExecution.agent_mode = org.agent_mode;
     }
     if (typeof org?.requester_followups_enabled === "boolean") {
       orgFollowupsEnabled = org.requester_followups_enabled;
@@ -82,11 +82,7 @@ export default async function PlatformTenantDetailPage({
         facts={facts}
       />
 
-      <PlatformTenantForm
-        project={project}
-        orgAgentMode={orgAgentMode}
-        orgFollowupsEnabled={orgFollowupsEnabled}
-      />
+      <PlatformTenantForm project={project} orgFollowupsEnabled={orgFollowupsEnabled} />
 
       <ExecutionSettingsCard project={project} orgDefaults={orgExecution} />
 

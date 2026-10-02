@@ -24,15 +24,20 @@ export async function PATCH(
   }
 
   const service = createServiceClient();
+  const { agent_mode, ...projectFields } = parsed.data;
+  const updates: Record<string, unknown> = {
+    ...projectFields,
+    model: parsed.data.model ?? null,
+    requester_followups_enabled: parsed.data.requester_followups_enabled ?? null,
+    updated_at: new Date().toISOString(),
+  };
+  // Omitted agent_mode is owned by the request-handling card. Null inherits.
+  if (agent_mode !== undefined) {
+    updates.agent_mode = agent_mode;
+  }
   const { data, error: updateError } = await service
     .from("snag_projects")
-    .update({
-      ...parsed.data,
-      model: parsed.data.model ?? null,
-      agent_mode: parsed.data.agent_mode ?? null,
-      requester_followups_enabled: parsed.data.requester_followups_enabled ?? null,
-      updated_at: new Date().toISOString(),
-    })
+    .update(updates)
     .eq("slug", slug)
     .select(SAFE_PROJECT_COLUMNS)
     .single();

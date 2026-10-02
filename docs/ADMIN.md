@@ -70,13 +70,18 @@ Applies to projects whose agent mode is **Execute**. Operational setup (GitHub t
 
 ### Settings → Organization defaults
 
-- **Delivery** — PR only, Preview then merge on requester confirmation, or Merge directly to production. Switching the org default to direct merge asks for an explicit acknowledgement.
-- **When no allow rule matches** — the default outcome (`Review before execution` out of the box).
-- **Rules shadow mode** — evaluate and record rules, but send every request to a developer.
+Two simple choices. Each one sets agent mode, delivery, the outcome when no allow rule matches, and shadow mode. **Advanced** still has those controls. Changing one of them shows **Custom** instead of a simple choice.
 
-### Settings → Execution and delivery (per project)
+- **Review required** — a developer approves the plan before the agent writes code, and a developer merges the pull request. Agent mode is Plan and execute, delivery is PR only, the default outcome is Review before execution, and shadow mode is off.
+- **Execute to production if within rules** — when a request matches an allow rule and no escalation, Snag merges it once CI passes. Anything else waits for a developer. Delivery is Merge directly to production; the other three settings match Review required. Switching to this asks for the existing auto-merge acknowledgement.
+- **Custom** — Plan only, preview-then-merge, other outcomes, and shadow mode. Shown when the saved combination is not one of the two choices.
+- **Requester follow-ups** stays outside this choice.
 
-Overrides for the three org defaults, plus:
+### Settings → Request handling (per project)
+
+The same two choices, plus **Inherit from organization** (the project default). Choosing a simple option pins agent mode, delivery, default outcome, and shadow mode for this project. Inherit clears those four overrides. A partial override shows as **Custom**.
+
+When the effective delivery is merge directly to production, trusted requesters and the daily auto-merge limit stay on the card. Otherwise they sit under Advanced.
 
 - **Trusted requesters** — requester ids (the `sub` of signed requester tokens) allowed to auto-merge.
 - **Daily auto-merge limit** — rule-approved merges per rolling 24 hours (default 10); beyond it PRs go to a developer.

@@ -81,6 +81,8 @@ export const requesterIdSchema = z
   .regex(/^[\x20-\x7E]+$/, "Requester ids must be printable ASCII");
 
 export const projectExecutionUpdateSchema = z.object({
+  /** Omitted leaves the project's agent mode unchanged. Null inherits the organization. */
+  agent_mode: projectAgentModeOverrideSchema.optional(),
   execute_delivery: executeDeliverySchema.nullable(),
   default_outcome: policyOutcomeSchema.nullable(),
   policy_shadow_mode: z.boolean().nullable(),
