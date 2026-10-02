@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { SAFE_PROJECT_COLUMNS } from "@snag/shared";
+import { ActivationChecklist } from "@/components/activation-checklist";
 import {
   ExecutionSettingsCard,
   type OrganizationExecutionDefaults,
 } from "@/components/execution-settings-card";
 import { PlatformTenantForm } from "@/components/platform-tenant-form";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { buildActivationChecklist, loadActivationFacts } from "@/lib/activation-checklist";
 import { requirePlatformAdmin } from "@/lib/auth";
 import { createServiceClient } from "@/lib/service";
 
@@ -55,12 +57,17 @@ export default async function PlatformTenantDetailPage({
     }
   }
 
-  const { data: auditLog } = await service
-    .from("snag_audit_log")
-    .select("id, action, actor_id, metadata, created_at")
-    .eq("target_id", project.id)
-    .order("created_at", { ascending: false })
-    .limit(20);
+  const [{ data: auditLog }, facts] = await Promise.all([
+    service
+      .from("snag_audit_log")
+      .select("id, action, actor_id, metadata, created_at")
+      .eq("target_id", project.id)
+      .order("created_at", { ascending: false })
+      .limit(20),
+    loadActivationFacts(service, project),
+  ]);
+
+  const activation = buildActivationChecklist(project, orgExecution.execute_delivery, facts);
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -70,6 +77,8 @@ export default async function PlatformTenantDetailPage({
         </Link>
         <h1 className="mt-2 text-2xl font-semibold">{project.name}</h1>
       </div>
+
+      <ActivationChecklist model={activation} />
 
       <PlatformTenantForm
         project={project}
