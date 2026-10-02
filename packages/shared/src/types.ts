@@ -23,6 +23,12 @@ export type SnagRequestPhase = "planning" | "implementing" | "delivering";
 
 export type OrgMemberRole = "owner" | "admin" | "viewer";
 
+/** Where the host app is deployed. NULL means the checklist stays generic. */
+export type HostRuntime = "vercel";
+
+/** How host-app users sign in. NULL means the checklist stays generic. */
+export type AuthProvider = "supabase";
+
 /** Columns safe to expose in admin UI and API responses. */
 export interface SnagProjectSafe {
   id: string;
@@ -50,6 +56,8 @@ export interface SnagProjectSafe {
   github_token_updated_at: string | null;
   requester_secret_updated_at: string | null;
   cursor_key_updated_at: string | null;
+  host_runtime: HostRuntime | null;
+  auth_provider: AuthProvider | null;
   created_at: string;
   updated_at: string;
 }
@@ -186,7 +194,7 @@ export interface SnagAuditLogEntry {
 }
 
 export const SAFE_PROJECT_COLUMNS =
-  "id, name, slug, publishable_key, repo_url, repo_ref, model, prompt_instructions, enabled, per_ip_hourly_limit, hourly_limit, daily_limit, allowed_origins, organization_id, agent_mode, requester_followups_enabled, execute_delivery, default_outcome, policy_shadow_mode, trusted_requesters, auto_merge_daily_limit, auto_merge_acknowledged_at, github_token_updated_at, requester_secret_updated_at, cursor_key_updated_at, created_at, updated_at" as const;
+  "id, name, slug, publishable_key, repo_url, repo_ref, model, prompt_instructions, enabled, per_ip_hourly_limit, hourly_limit, daily_limit, allowed_origins, organization_id, agent_mode, requester_followups_enabled, execute_delivery, default_outcome, policy_shadow_mode, trusted_requesters, auto_merge_daily_limit, auto_merge_acknowledged_at, github_token_updated_at, requester_secret_updated_at, cursor_key_updated_at, host_runtime, auth_provider, created_at, updated_at" as const;
 
 export const ORGANIZATION_COLUMNS =
   "id, name, slug, agent_mode, requester_followups_enabled, execute_delivery, default_outcome, policy_shadow_mode, created_at, updated_at" as const;

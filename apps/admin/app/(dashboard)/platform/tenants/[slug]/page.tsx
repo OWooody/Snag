@@ -8,7 +8,7 @@ import {
 } from "@/components/execution-settings-card";
 import { PlatformTenantForm } from "@/components/platform-tenant-form";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { buildActivationChecklist, loadActivationFacts } from "@/lib/activation-checklist";
+import { loadActivationFacts } from "@/lib/activation-facts";
 import { requirePlatformAdmin } from "@/lib/auth";
 import { createServiceClient } from "@/lib/service";
 
@@ -67,8 +67,6 @@ export default async function PlatformTenantDetailPage({
     loadActivationFacts(service, project),
   ]);
 
-  const activation = buildActivationChecklist(project, orgExecution.execute_delivery, facts);
-
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div>
@@ -78,7 +76,11 @@ export default async function PlatformTenantDetailPage({
         <h1 className="mt-2 text-2xl font-semibold">{project.name}</h1>
       </div>
 
-      <ActivationChecklist model={activation} />
+      <ActivationChecklist
+        project={project}
+        orgDelivery={orgExecution.execute_delivery}
+        facts={facts}
+      />
 
       <PlatformTenantForm
         project={project}

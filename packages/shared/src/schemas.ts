@@ -202,4 +202,6 @@ export const platformTenantUpdateSchema = z.object({
     z.string().trim().min(1).max(512).optional(),
   ),
   allowed_origins: allowedOriginsSchema.optional(),
+  host_runtime: z.enum(["vercel"]).nullable().optional(),
+  auth_provider: z.enum(["supabase"]).nullable().optional(),
 });

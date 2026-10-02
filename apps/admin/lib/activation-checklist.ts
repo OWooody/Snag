@@ -1,9 +1,10 @@
 import {
   resolveEffectiveExecuteDelivery,
+  type AuthProvider,
   type ExecuteDelivery,
+  type HostRuntime,
   type SnagProjectSafe,
 } from "@snag/shared";
-import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type ActivationFacts = {
   ownerInvitedAt: string | null;
@@ -34,6 +35,7 @@ export type ActivationChecklistModel = {
   doneCount: number;
   totalCount: number;
   complete: boolean;
+  footnote: string;
 };
 
 function step(
@@ -58,6 +60,65 @@ function isLocalDevOrigin(entry: string): boolean {
   }
 }
 
+function installDetail(host: HostRuntime | null): string {
+  const marked = "Marked when the first request arrives.";
+  if (host === "vercel") {
+    return `Install @snag-tech/react, set NEXT_PUBLIC_SNAG_ENDPOINT and NEXT_PUBLIC_SNAG_PROJECT_KEY on the Vercel project, and mount SnagOverlay in the root layout. ${marked}`;
+  }
+  return `Install the SDK, set the relay endpoint and project key, and mount the overlay. ${marked}`;
+}
+
+function originsDetail(host: HostRuntime | null, onlyLocalOrigins: boolean): string {
+  if (host === "vercel") {
+    return onlyLocalOrigins
+      ? "Only local dev origins are listed. Add the stable Vercel staging URL. Each preview deploy has its own host, so leave those off this list."
+      : "Add the stable Vercel staging URL. Each preview deploy has its own host, so the staging domain is the one to allow.";
+  }
+  return onlyLocalOrigins
+    ? "Only local dev origins are listed. Add the staging origin, or app:// bundle id, before the host app leaves localhost."
+    : "Add at least one web origin or app:// bundle id. An empty list blocks every client.";
+}
+
+function deliveryDetail(host: HostRuntime | null, deliveryReady: boolean, autoMerge: boolean): string {
+  if (deliveryReady) {
+    return autoMerge
+      ? "Delivery is merge directly to production."
+      : "Delivery is preview, then merge.";
+  }
+  if (host === "vercel") {
+    return "Vercel posts a preview URL on the pull request. Switch to Preview, then merge to use it. PR only leaves that URL unused.";
+  }
+  return "Switch off PR only. Otherwise the GitHub token is unused and the agent only opens a pull request.";
+}
+
+function signingSecretDetail(host: HostRuntime | null, auth: AuthProvider | null): string {
+  if (host === "vercel" && auth === "supabase") {
+    return "Generate it here, then set SNAG_REQUESTER_SECRET on the Vercel project. A Supabase route signs the Auth user id with it. It is shown once.";
+  }
+  if (host === "vercel") {
+    return "Generate it here, then set SNAG_REQUESTER_SECRET on the Vercel project. It is shown once.";
+  }
+  if (auth === "supabase") {
+    return "Give it to the host backend as SNAG_REQUESTER_SECRET. A Supabase route signs the Auth user id with it. It is shown once.";
+  }
+  return "Give it to the host app's backend. It is shown once.";
+}
+
+function signedRequestsDetail(host: HostRuntime | null, auth: AuthProvider | null): string {
+  if (auth === "supabase") {
+    const secret = host === "vercel" ? " with SNAG_REQUESTER_SECRET" : "";
+    return `Add a route that signs the logged-in Supabase user's id${secret}, and send that token with each request. Unsigned requests still file, but they stay unverified.`;
+  }
+  return "The app sends the signed token with each request. Unsigned requests still file, but they stay unverified.";
+}
+
+function checklistFootnote(host: HostRuntime | null): string {
+  if (host === "vercel") {
+    return "Snag does not record connecting the Cursor account to GitHub, CI on the production branch, or branch protection that lets the token user merge. Vercel posts the preview URL on the pull request, so that is not a separate step.";
+  }
+  return "Snag does not record connecting the Cursor account to GitHub, preview deployments on pull requests, CI on the production branch, or branch protection that lets the token user merge. Those stay outside this list.";
+}
+
 export function buildActivationChecklist(
   project: SnagProjectSafe,
   orgDelivery: ExecuteDelivery,
@@ -68,6 +129,8 @@ export function buildActivationChecklist(
   const onlyLocalOrigins = originsSet && origins.every(isLocalDevOrigin);
   const delivery = resolveEffectiveExecuteDelivery(project.execute_delivery, orgDelivery);
   const deliveryReady = delivery === "preview_confirm" || delivery === "auto_merge";
+  const host = project.host_runtime;
+  const auth = project.auth_provider;
 
   const sections: ActivationSection[] = [
     {
@@ -77,8 +140,7 @@ export function buildActivationChecklist(
         step({
           id: "install",
           title: "Install Snag in the host app",
-          detail:
-            "Install the SDK, set the relay endpoint and project key, and mount the overlay. Marked when the first request arrives.",
+          detail: installDetail(host),
           done: Boolean(facts.firstRequestAt),
           at: facts.firstRequestAt,
           atLabel: "First request",
@@ -86,9 +148,7 @@ export function buildActivationChecklist(
         step({
           id: "origins",
           title: "Allow the host client",
-          detail: onlyLocalOrigins
-            ? "Only local dev origins are listed. Add the staging origin, or app:// bundle id, before the host app leaves localhost."
-            : "Add at least one web origin or app:// bundle id. An empty list blocks every client.",
+          detail: originsDetail(host, onlyLocalOrigins),
           done: originsSet,
         }),
       ],
@@ -155,11 +215,7 @@ export function buildActivationChecklist(
         step({
           id: "delivery",
           title: "Choose a merge delivery",
-          detail: deliveryReady
-            ? delivery === "auto_merge"
-              ? "Delivery is merge directly to production."
-              : "Delivery is preview, then merge."
-            : "Switch off PR only. Otherwise the GitHub token is unused and the agent only opens a pull request.",
+          detail: deliveryDetail(host, deliveryReady, delivery === "auto_merge"),
           done: deliveryReady,
         }),
       ],
@@ -171,7 +227,7 @@ export function buildActivationChecklist(
         step({
           id: "signing-secret",
           title: "Generate a requester signing secret",
-          detail: "Give it to the host app's backend. It is shown once.",
+          detail: signingSecretDetail(host, auth),
           done: Boolean(project.requester_secret_updated_at),
           at: project.requester_secret_updated_at,
           atLabel: "Generated",
@@ -179,8 +235,7 @@ export function buildActivationChecklist(
         step({
           id: "signed-requests",
           title: "Host app signs requester tokens",
-          detail:
-            "The app sends the signed token with each request. Unsigned requests still file, but they stay unverified.",
+          detail: signedRequestsDetail(host, auth),
           done: Boolean(facts.firstVerifiedRequestAt),
           at: facts.firstVerifiedRequestAt,
           atLabel: "First verified request",
@@ -219,67 +274,6 @@ export function buildActivationChecklist(
     doneCount,
     totalCount: steps.length,
     complete: doneCount === steps.length,
-  };
-}
-
-export async function loadActivationFacts(
-  service: SupabaseClient,
-  project: { id: string; organization_id: string | null },
-): Promise<ActivationFacts> {
-  const firstRequest = service
-    .from("snag_requests")
-    .select("created_at")
-    .eq("project_id", project.id)
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  const firstVerified = service
-    .from("snag_requests")
-    .select("created_at")
-    .eq("project_id", project.id)
-    .eq("requester_verified", true)
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  const owner = project.organization_id
-    ? service
-        .from("snag_org_members")
-        .select("created_at")
-        .eq("organization_id", project.organization_id)
-        .eq("role", "owner")
-        .order("created_at", { ascending: true })
-        .limit(1)
-        .maybeSingle()
-    : Promise.resolve({ data: null });
-
-  const rules = project.organization_id
-    ? service
-        .from("snag_policy_rules")
-        .select("created_at, project_id")
-        .eq("organization_id", project.organization_id)
-        .eq("kind", "allow")
-        .eq("enabled", true)
-        .eq("shadow", false)
-        .order("created_at", { ascending: true })
-    : Promise.resolve({ data: [] as { created_at: string; project_id: string | null }[] });
-
-  const [requestResult, verifiedResult, ownerResult, rulesResult] = await Promise.all([
-    firstRequest,
-    firstVerified,
-    owner,
-    rules,
-  ]);
-
-  const firstAllow = (rulesResult.data ?? []).find(
-    (rule) => rule.project_id == null || rule.project_id === project.id,
-  );
-
-  return {
-    ownerInvitedAt: ownerResult.data?.created_at ?? null,
-    firstRequestAt: requestResult.data?.created_at ?? null,
-    firstVerifiedRequestAt: verifiedResult.data?.created_at ?? null,
-    firstAllowRuleAt: firstAllow?.created_at ?? null,
+    footnote: checklistFootnote(host),
   };
 }
