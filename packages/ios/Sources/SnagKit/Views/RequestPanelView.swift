@@ -21,25 +21,29 @@ struct RequestPanelView: View {
         VStack(spacing: 0) {
             header
             tabs
-            ScrollView {
-                Group {
-                    switch model.tab {
-                    case .list:
-                        RequestsListView(
-                            overlay: overlay,
-                            theme: overlay.theme,
-                            refreshKey: model.listRefreshKey,
-                            followupsEnabled: overlay.followupsEnabled
-                        )
-                    case .new:
-                        if model.phase == .done {
-                            doneBody
-                        } else {
-                            composeBody
+            ScrollViewReader { proxy in
+                ScrollView {
+                    Group {
+                        switch model.tab {
+                        case .list:
+                            RequestsListView(
+                                overlay: overlay,
+                                theme: overlay.theme,
+                                refreshKey: model.listRefreshKey,
+                                followupsEnabled: overlay.followupsEnabled,
+                                focusRequestId: model.focusRequestId,
+                                scrollProxy: proxy
+                            )
+                        case .new:
+                            if model.phase == .done {
+                                doneBody
+                            } else {
+                                composeBody
+                            }
                         }
                     }
+                    .padding(20)
                 }
-                .padding(20)
             }
         }
         .background(overlay.theme.background.ignoresSafeArea())
@@ -91,6 +95,7 @@ struct RequestPanelView: View {
                 if tab == .new, model.phase == .done {
                     model.startAnother()
                 } else {
+                    model.focusRequestId = nil
                     model.tab = tab
                 }
             }
@@ -222,9 +227,19 @@ struct RequestPanelView: View {
 
     private var doneBody: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Request submitted. An agent is working on it.")
-                .font(.system(size: 15))
-                .foregroundColor(overlay.theme.text)
+            Text(
+                overlay.agentMode == "execute"
+                    ? "Request submitted. The agent plans the change first."
+                    : "Request submitted. An agent is working on it."
+            )
+            .font(.system(size: 15))
+            .foregroundColor(overlay.theme.text)
+            if overlay.agentMode == "execute" {
+                Text(executeNextSteps)
+                    .font(.system(size: 13))
+                    .foregroundColor(overlay.theme.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if let agentUrl = model.agentUrl, let url = URL(string: agentUrl) {
                 Link("Open agent", destination: url)
                     .font(.system(size: 15, weight: .bold))
@@ -232,10 +247,11 @@ struct RequestPanelView: View {
             }
             Button {
                 withAnimation(.easeInOut(duration: 0.2)) {
+                    model.focusRequestId = model.submittedId
                     model.tab = .list
                 }
             } label: {
-                Text("View requests")
+                Text(model.submittedId != nil ? "Track this request" : "View requests")
                     .font(.system(size: 15, weight: .bold))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 13)
@@ -263,6 +279,14 @@ struct RequestPanelView: View {
             }
         }
     }
+
+    private var executeNextSteps: String {
+        let questions = overlay.followupsEnabled
+            ? "If anything is unclear you'll get questions here. "
+            : ""
+        return questions
+            + "Depending on the change, a developer may check it first, or you may be asked to try a preview before it goes live. Progress shows on the request card."
+    }
 }
 
 @MainActor
@@ -275,6 +299,10 @@ final class PanelModel: ObservableObject {
     @Published var prompt = ""
     @Published var includeScreenshot = true
     @Published var agentUrl: String?
+    /// Id of the request just submitted, for "Track this request".
+    @Published var submittedId: String?
+    /// Request the list should expand and scroll to.
+    @Published var focusRequestId: String?
     @Published var errorMessage: String?
     /// Bumped after submit to force the list tab to reload.
     @Published var listRefreshKey = 0
@@ -300,6 +328,8 @@ final class PanelModel: ObservableObject {
         prompt = ""
         includeScreenshot = true
         agentUrl = nil
+        submittedId = nil
+        focusRequestId = nil
         errorMessage = nil
         tab = .new
     }
@@ -321,6 +351,7 @@ final class PanelModel: ObservableObject {
                 locale: context["locale"] as? String
             )
             agentUrl = response.agentUrl
+            submittedId = response.id
             phase = .done
             listRefreshKey += 1
         } catch {

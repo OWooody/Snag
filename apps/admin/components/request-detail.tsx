@@ -143,7 +143,11 @@ export function RequestDetail({
       query.state.data && ACTIVE_STATUSES.includes(query.state.data.status) ? 30_000 : false,
   });
 
-  async function decide(decision: "approve" | "reject") {
+  async function decide(decision: "approve" | "reject" | "revise") {
+    if (decision === "revise" && !note.trim()) {
+      toast.error("Write what the agent should change in the plan first.");
+      return;
+    }
     setDeciding(true);
     const res = await fetch(`/api/projects/${projectSlug}/requests/${requestId}/decision`, {
       method: "POST",
@@ -157,7 +161,13 @@ export function RequestDetail({
       void queryClient.invalidateQueries({ queryKey });
       return;
     }
-    toast.success(decision === "approve" ? "Plan approved — the agent is implementing it" : "Plan rejected");
+    toast.success(
+      decision === "approve"
+        ? "Plan approved — the agent is implementing it"
+        : decision === "revise"
+          ? "Plan sent back — the agent is revising it"
+          : "Plan rejected",
+    );
     setNote("");
     queryClient.setQueryData(queryKey, body as SnagRequestRow);
     void queryClient.invalidateQueries({ queryKey: ["requests", projectSlug] });
@@ -196,6 +206,11 @@ export function RequestDetail({
           ) : null}
         </div>
         {request.error ? <p className="text-sm text-red-600">{request.error}</p> : null}
+        {request.status === "rejected" && request.rejection_note ? (
+          <p className="whitespace-pre-wrap text-sm text-zinc-600">
+            Rejection note: {request.rejection_note}
+          </p>
+        ) : null}
         {request.merged_at ? (
           <p className="text-sm text-emerald-700">
             Merged {new Date(request.merged_at).toLocaleString()}
@@ -212,14 +227,19 @@ export function RequestDetail({
             <CardTitle>Approve the plan?</CardTitle>
             <CardDescription>
               The agent stopped after planning. Approving sends it back to implement the plan
-              below; the resulting PR always waits for a developer to merge.
+              below; the resulting PR always waits for a developer to merge. Sending it back asks
+              the agent for a revised plan, which the rules check again.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {canDecide ? (
               <>
                 <div className="space-y-2">
-                  <Label htmlFor="decision_note">Note to the agent (optional)</Label>
+                  <Label htmlFor="decision_note">Note (optional)</Label>
+                  <p className="text-xs text-zinc-500">
+                    Sent to the agent when you approve or send the plan back (required for that).
+                    Shown to the requester when you reject.
+                  </p>
                   <Textarea
                     id="decision_note"
                     rows={3}
@@ -228,9 +248,18 @@ export function RequestDetail({
                     onChange={(e) => setNote(e.target.value)}
                   />
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <Button type="button" onClick={() => void decide("approve")} disabled={deciding}>
                     {deciding ? "Sending…" : "Approve and implement"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void decide("revise")}
+                    disabled={deciding || !note.trim()}
+                    title={note.trim() ? undefined : "Write what should change first"}
+                  >
+                    Send back to plan
                   </Button>
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
@@ -242,8 +271,9 @@ export function RequestDetail({
                       <AlertDialogHeader>
                         <AlertDialogTitle>Reject this plan?</AlertDialogTitle>
                         <AlertDialogDescription>
-                          The request ends without changes. The requester sees it as rejected
-                          and can file a new request.
+                          The request ends without changes. The requester sees it as not
+                          approved{note.trim() ? ", along with your note," : ""} and can file a
+                          new request.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
@@ -272,6 +302,14 @@ export function RequestDetail({
               on GitHub. Snag tracks it and marks the request merged or closed.
             </CardDescription>
           </CardHeader>
+          {request.handoff_reason ? (
+            <CardContent>
+              <p className="text-sm text-zinc-700">
+                <span className="font-medium">Why it was handed off:</span>{" "}
+                {request.handoff_reason}
+              </p>
+            </CardContent>
+          ) : null}
         </Card>
       ) : null}
 

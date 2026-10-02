@@ -17,12 +17,15 @@ interface RequestsListProps {
   /** Bump to force an immediate reload (e.g. after submit). */
   refreshKey?: number;
   followupsEnabled?: boolean;
+  /** Request to show expanded and scroll to, e.g. the one just submitted. */
+  focusRequestId?: string | null;
 }
 
 export function RequestsList({
   theme,
   refreshKey = 0,
   followupsEnabled = false,
+  focusRequestId = null,
 }: RequestsListProps) {
   const [rows, setRows] = useState<SnagRequestRow[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -35,6 +38,8 @@ export function RequestsList({
   const needsAttentionOnly = needsAttentionChoice ?? agentMode !== "execute";
   // Per-card expand/collapse chosen by the user; kept across polls.
   const [expandedOverrides, setExpandedOverrides] = useState<Record<string, boolean>>({});
+  const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const scrolledToFocus = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     setRefreshing(true);
@@ -68,7 +73,16 @@ export function RequestsList({
     };
   }, [load]);
 
+  useEffect(() => {
+    if (!focusRequestId || scrolledToFocus.current === focusRequestId) return;
+    const node = cardRefs.current[focusRequestId];
+    if (!node) return;
+    scrolledToFocus.current = focusRequestId;
+    node.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [focusRequestId, rows]);
+
   const visibleRows = rows.filter((row) => {
+    if (row.id === focusRequestId) return true;
     if (
       followupsEnabled &&
       needsAttentionOnly &&
@@ -171,18 +185,26 @@ export function RequestsList({
           const needsRequester =
             row.status === "awaiting_confirmation" ||
             (followupsEnabled && row.status === "needs_input");
+          const focused = row.id === focusRequestId;
           return (
-            <RequestCard
+            <div
               key={row.id}
-              row={row}
-              theme={theme}
-              followupsEnabled={followupsEnabled}
-              expanded={expandedOverrides[row.id] ?? needsRequester}
-              onToggleExpanded={(next) =>
-                setExpandedOverrides((current) => ({ ...current, [row.id]: next }))
-              }
-              onReplied={() => void load()}
-            />
+              ref={(node) => {
+                cardRefs.current[row.id] = node;
+              }}
+            >
+              <RequestCard
+                row={row}
+                theme={theme}
+                followupsEnabled={followupsEnabled}
+                focused={focused}
+                expanded={expandedOverrides[row.id] ?? (needsRequester || focused)}
+                onToggleExpanded={(next) =>
+                  setExpandedOverrides((current) => ({ ...current, [row.id]: next }))
+                }
+                onReplied={() => void load()}
+              />
+            </div>
           );
         })
       )}
@@ -194,6 +216,7 @@ function RequestCard({
   row,
   theme,
   followupsEnabled,
+  focused = false,
   expanded,
   onToggleExpanded,
   onReplied,
@@ -201,6 +224,7 @@ function RequestCard({
   row: SnagRequestRow;
   theme: SnagTheme;
   followupsEnabled: boolean;
+  focused?: boolean;
   expanded: boolean;
   onToggleExpanded: (expanded: boolean) => void;
   onReplied: () => void;
@@ -301,7 +325,7 @@ function RequestCard({
         padding: 12,
         marginBottom: 10,
         background: GLASS_SURFACE,
-        border: "1px solid rgba(255,255,255,0.4)",
+        border: focused ? `1px solid ${theme.accent}` : "1px solid rgba(255,255,255,0.4)",
       }}
     >
       <div
@@ -320,6 +344,11 @@ function RequestCard({
           }}
         >
           {STATUS_LABELS[row.status] ?? row.status.toUpperCase()}
+          {row.stage_label ? (
+            <span style={{ fontWeight: 600, letterSpacing: 0, color: theme.textMuted }}>
+              {` · ${row.stage_label}`}
+            </span>
+          ) : null}
         </span>
         <span style={{ fontSize: 11, color: theme.textMuted }}>
           {new Date(row.created_at).toLocaleString()}
@@ -374,6 +403,26 @@ function RequestCard({
       {row.error ? (
         <p style={{ fontSize: 12, color: theme.danger, marginTop: 6, marginBottom: 0 }}>
           {row.error}
+        </p>
+      ) : null}
+      {row.handoff_reason ? (
+        <p style={{ fontSize: 12, color: theme.textMuted, marginTop: 6, marginBottom: 0 }}>
+          {`A developer will take it from here. ${row.handoff_reason}`}
+        </p>
+      ) : null}
+      {row.status === "rejected" ? (
+        <p
+          style={{
+            fontSize: 12,
+            color: theme.textMuted,
+            marginTop: 6,
+            marginBottom: 0,
+            whiteSpace: "pre-wrap",
+          }}
+        >
+          {row.rejection_note
+            ? `A developer decided not to make this change: ${row.rejection_note}`
+            : "A developer decided not to make this change. File a new request if it is still needed."}
         </p>
       ) : null}
       {canReply && showActions ? (
@@ -533,6 +582,7 @@ const STATUS_LABELS: Record<SnagRequestStatus, string> = {
   finished: "FINISHED",
   merged: "LIVE",
   error: "ERROR",
+  rejected: "NOT APPROVED",
 };
 
 function statusColor(status: SnagRequestStatus, theme: SnagTheme): string {
@@ -542,6 +592,8 @@ function statusColor(status: SnagRequestStatus, theme: SnagTheme): string {
       return theme.success;
     case "error":
       return theme.danger;
+    case "rejected":
+      return theme.textMuted;
     case "needs_input":
       return theme.accent;
     default:

@@ -4,11 +4,13 @@ import { test } from "node:test";
 import {
   SNAG_PLAN_HEADING,
   buildImplementationPrompt,
+  buildPlanRevisionPrompt,
   parseSnagPlan,
   POLICY_TEMPLATES,
   policyRuleBulkCreateSchema,
   policyRuleCreateSchema,
   projectExecutionUpdateSchema,
+  requestReviewDecisionSchema,
   resolveEffectiveDefaultOutcome,
   resolveEffectiveExecuteDelivery,
   strictestOutcome,
@@ -137,6 +139,26 @@ test("buildImplementationPrompt names the base ref and forbids merging", () => {
   assert.ok(prompt.includes("`main`"));
   assert.ok(prompt.includes("Do NOT merge"));
   assert.ok(prompt.includes("Keep the old color as a fallback."));
+});
+
+test("buildPlanRevisionPrompt keeps the agent planning and asks for a new plan block", () => {
+  const prompt = buildPlanRevisionPrompt("  Use the existing Button component.  ");
+  assert.ok(prompt.includes("Use the existing Button component."));
+  assert.ok(prompt.includes("Do NOT edit files"));
+  assert.ok(prompt.includes(SNAG_PLAN_HEADING));
+});
+
+test("sending a plan back requires a note", () => {
+  assert.equal(requestReviewDecisionSchema.safeParse({ decision: "revise" }).success, false);
+  assert.equal(
+    requestReviewDecisionSchema.safeParse({ decision: "revise", note: "   " }).success,
+    false,
+  );
+  assert.equal(
+    requestReviewDecisionSchema.safeParse({ decision: "revise", note: "Smaller change" }).success,
+    true,
+  );
+  assert.equal(requestReviewDecisionSchema.safeParse({ decision: "reject" }).success, true);
 });
 
 test("every policy template passes rule validation", () => {

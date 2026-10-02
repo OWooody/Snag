@@ -8,9 +8,13 @@ struct RequestsListView: View {
     let theme: SnagTheme
     let refreshKey: Int
     let followupsEnabled: Bool
+    /// Request to show expanded and scroll to, e.g. the one just submitted.
+    let focusRequestId: String?
+    let scrollProxy: ScrollViewProxy?
 
     @StateObject private var model: RequestsListModel
     @Environment(\.scenePhase) private var scenePhase
+    @State private var scrolledToFocus: String?
 
     private let pollTimer = Timer.publish(every: 10, on: .main, in: .common)
         .autoconnect()
@@ -19,11 +23,15 @@ struct RequestsListView: View {
         overlay: OverlayModel,
         theme: SnagTheme,
         refreshKey: Int,
-        followupsEnabled: Bool
+        followupsEnabled: Bool,
+        focusRequestId: String? = nil,
+        scrollProxy: ScrollViewProxy? = nil
     ) {
         self.theme = theme
         self.refreshKey = refreshKey
         self.followupsEnabled = followupsEnabled
+        self.focusRequestId = focusRequestId
+        self.scrollProxy = scrollProxy
         _model = StateObject(wrappedValue: RequestsListModel(overlay: overlay))
     }
 
@@ -55,7 +63,7 @@ struct RequestsListView: View {
             }
             .padding(.bottom, 12)
 
-            if model.visibleRows(followupsEnabled: followupsEnabled).isEmpty {
+            if model.visibleRows(followupsEnabled: followupsEnabled, focusRequestId: focusRequestId).isEmpty {
                 Text(emptyMessage)
                     .font(.system(size: 14))
                     .foregroundColor(theme.textMuted)
@@ -63,21 +71,30 @@ struct RequestsListView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.top, 32)
             } else {
-                ForEach(model.visibleRows(followupsEnabled: followupsEnabled)) { row in
+                ForEach(model.visibleRows(followupsEnabled: followupsEnabled, focusRequestId: focusRequestId)) { row in
                     RequestCardView(
                         row: row,
                         theme: theme,
                         followupsEnabled: followupsEnabled,
                         client: model.client,
-                        expanded: model.isExpanded(row, followupsEnabled: followupsEnabled),
+                        focused: row.id == focusRequestId,
+                        expanded: model.isExpanded(
+                            row,
+                            followupsEnabled: followupsEnabled,
+                            focusRequestId: focusRequestId
+                        ),
                         onToggleExpanded: { model.expandedOverrides[row.id] = $0 },
                         onReplied: { Task { await model.load() } }
                     )
+                    .id(row.id)
                     .padding(.bottom, 10)
                 }
             }
         }
         .task { await model.load() }
+        .onChange(of: model.rows.map(\.id)) { _ in
+            scrollToFocusIfNeeded()
+        }
         .onChange(of: refreshKey) { _ in
             Task { await model.load() }
         }
@@ -88,6 +105,16 @@ struct RequestsListView: View {
             if phase == .active {
                 Task { await model.load() }
             }
+        }
+    }
+
+    private func scrollToFocusIfNeeded() {
+        guard let focusRequestId, scrolledToFocus != focusRequestId,
+              model.rows.contains(where: { $0.id == focusRequestId }),
+              let scrollProxy else { return }
+        scrolledToFocus = focusRequestId
+        withAnimation(.easeInOut(duration: 0.25)) {
+            scrollProxy.scrollTo(focusRequestId, anchor: .top)
         }
     }
 
@@ -138,9 +165,14 @@ final class RequestsListModel: ObservableObject {
         needsAttentionChoice ?? (agentMode != "execute")
     }
 
-    func isExpanded(_ row: SnagRequestRow, followupsEnabled: Bool) -> Bool {
+    func isExpanded(
+        _ row: SnagRequestRow,
+        followupsEnabled: Bool,
+        focusRequestId: String? = nil
+    ) -> Bool {
         if let override = expandedOverrides[row.id] { return override }
-        return row.status == .awaitingConfirmation
+        return row.id == focusRequestId
+            || row.status == .awaitingConfirmation
             || (followupsEnabled && row.status == .needsInput)
     }
 
@@ -154,8 +186,9 @@ final class RequestsListModel: ObservableObject {
         self.overlay = overlay
     }
 
-    func visibleRows(followupsEnabled: Bool) -> [SnagRequestRow] {
+    func visibleRows(followupsEnabled: Bool, focusRequestId: String? = nil) -> [SnagRequestRow] {
         rows.filter { row in
+            if row.id == focusRequestId { return true }
             if followupsEnabled && needsAttentionOnly
                 && row.status != .needsInput && row.status != .awaitingConfirmation {
                 return false
@@ -183,6 +216,7 @@ struct RequestCardView: View {
     let theme: SnagTheme
     let followupsEnabled: Bool
     let client: RelayClient
+    var focused = false
     let expanded: Bool
     let onToggleExpanded: (Bool) -> Void
     let onReplied: () -> Void
@@ -222,11 +256,16 @@ struct RequestCardView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack {
+            HStack(spacing: 0) {
                 Text(statusLabel)
                     .font(.system(size: 11, weight: .heavy))
                     .kerning(0.5)
                     .foregroundColor(statusColor)
+                if let stage = row.stageLabel, !stage.isEmpty {
+                    Text(" · \(stage)")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(theme.textMuted)
+                }
                 Spacer()
                 Text(formattedDate)
                     .font(.system(size: 11))
@@ -267,6 +306,18 @@ struct RequestCardView: View {
                 Text(error)
                     .font(.system(size: 12))
                     .foregroundColor(theme.danger)
+            }
+            if let reason = row.handoffReason, !reason.isEmpty {
+                Text("A developer will take it from here. \(reason)")
+                    .font(.system(size: 12))
+                    .foregroundColor(theme.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if row.status == .rejected {
+                Text(rejectionText)
+                    .font(.system(size: 12))
+                    .foregroundColor(theme.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             if canReply && showActions {
                 ZStack(alignment: .topLeading) {
@@ -330,6 +381,10 @@ struct RequestCardView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
         .background(RoundedRectangle(cornerRadius: 12).fill(theme.surface))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(focused ? theme.accent : Color.clear, lineWidth: 1)
+        )
     }
 
     private var statusLabel: String {
@@ -343,7 +398,15 @@ struct RequestCardView: View {
         case .finished: return "FINISHED"
         case .merged: return "LIVE"
         case .error: return "ERROR"
+        case .rejected: return "NOT APPROVED"
         }
+    }
+
+    private var rejectionText: String {
+        if let note = row.rejectionNote, !note.isEmpty {
+            return "A developer decided not to make this change: \(note)"
+        }
+        return "A developer decided not to make this change. File a new request if it is still needed."
     }
 
     @ViewBuilder
@@ -467,6 +530,8 @@ struct RequestCardView: View {
             return theme.success
         case .error:
             return theme.danger
+        case .rejected:
+            return theme.textMuted
         case .queued, .running, .needsInput, .awaitingApproval, .awaitingReview,
              .awaitingConfirmation, .unknown:
             return theme.accent

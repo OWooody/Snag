@@ -117,6 +117,7 @@ function row(overrides: Partial<LifecycleRow> = {}): LifecycleRow {
     branch_name: "cursor/fix-copy",
     pr_url: "https://github.com/acme/web/pull/7",
     preview_url: null,
+    handoff_reason: null,
     summary: null,
     plan: { files: ["src/copy.json"], risk: "low", flags: [], summary: null },
     plan_summary: null,
@@ -243,7 +244,8 @@ Deno.test("daily auto-merge cap hands off instead of merging", async () => {
   const { github, calls } = fakeGitHub({ checks: "success" });
   await advanceDelivery(service, project(), row(), { mergedProjects: new Set() }, NOW, { github });
   assertEquals(calls.includes("squashMerge"), false);
-  assertEquals(updates.at(-1)?.error, "Daily automatic merge limit reached.");
+  assertEquals(updates.at(-1)?.handoff_reason, "Daily automatic merge limit reached.");
+  assertEquals(updates.at(-1)?.error, undefined);
 });
 
 Deno.test("preview_confirm waits for a preview, then for the requester", async () => {

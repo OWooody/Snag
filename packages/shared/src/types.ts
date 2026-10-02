@@ -16,7 +16,8 @@ export type SnagRequestStatus =
   | "awaiting_approval"
   | "awaiting_review"
   | "awaiting_confirmation"
-  | "merged";
+  | "merged"
+  | "rejected";
 
 export type SnagRequestPhase = "planning" | "implementing" | "delivering";
 
@@ -98,6 +99,10 @@ export interface SnagRequestRow {
   preview_url: string | null;
   summary: string | null;
   error: string | null;
+  /** Developer's note when the plan was rejected; shown to the requester. */
+  rejection_note: string | null;
+  /** Why Snag handed the request to a developer (awaiting_review). */
+  handoff_reason: string | null;
   plan: SnagPlan | null;
   policy_decision: PolicyDecisionRecord | null;
   approved_at: string | null;
@@ -105,6 +110,33 @@ export interface SnagRequestRow {
   merge_commit_sha: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface DurationStats {
+  count: number;
+  p50_seconds: number | null;
+  p90_seconds: number | null;
+}
+
+/** Result of the snag_execute_metrics SQL function: aggregates only, no prompts or summaries. */
+export interface ExecuteMetrics {
+  range_days: number;
+  total: number;
+  outcomes: Partial<Record<PolicyOutcome | "rejected" | "undecided", number>>;
+  merged: { by_snag: number; by_developer: number };
+  top_escalations: {
+    id: string;
+    name: string;
+    kind: PolicyRuleKind | "builtin";
+    requests: number;
+  }[];
+  shadow: { decided: number; disagreements: number };
+  handoff_reasons: { reason: string; requests: number }[];
+  waits: Partial<
+    Record<"awaiting_approval" | "awaiting_review" | "awaiting_confirmation", DurationStats>
+  >;
+  submit_to_merge: DurationStats;
+  history_started_at: string | null;
 }
 
 export interface SnagOrganization {

@@ -1,4 +1,6 @@
+import { resolveEffectiveAgentMode } from "@snag/shared";
 import Link from "next/link";
+import { ExecuteMetricsSection } from "@/components/execute-metrics";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/status-badge";
 import { getActiveProject, getUserContext } from "@/lib/auth";
@@ -29,6 +31,9 @@ export default async function DashboardPage() {
   const needsDeveloper = recent.filter((r) =>
     (REVIEW_STATUSES as readonly string[]).includes(r.status),
   ).length;
+  const org = ctx.organizations.find((o) => o.id === project.organization_id);
+  const isExecuteMode =
+    resolveEffectiveAgentMode(project.agent_mode, org?.agent_mode) === "execute";
 
   return (
     <div className="space-y-6">
@@ -79,6 +84,8 @@ export default async function DashboardPage() {
           </CardHeader>
         </Card>
       </div>
+
+      {isExecuteMode ? <ExecuteMetricsSection projectSlug={project.slug} /> : null}
 
       <Card>
         <CardHeader>

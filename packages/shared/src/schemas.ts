@@ -152,10 +152,15 @@ export const policyRuleToggleSchema = z.object({
   shadow: z.boolean().optional(),
 });
 
-export const requestReviewDecisionSchema = z.object({
-  decision: z.enum(["approve", "reject"]),
-  note: z.string().trim().max(2000).optional(),
-});
+export const requestReviewDecisionSchema = z
+  .object({
+    decision: z.enum(["approve", "reject", "revise"]),
+    note: z.string().trim().max(2000).optional(),
+  })
+  .refine((value) => value.decision !== "revise" || Boolean(value.note), {
+    message: "Tell the agent what to change in the plan",
+    path: ["note"],
+  });
 
 export const cursorKeyUpdateSchema = z.object({
   cursor_api_key: z.string().trim().min(1).max(512),

@@ -338,6 +338,8 @@ final class OverlayModel: ObservableObject {
     @Published var screenshot: SnagScreenshot?
     @Published var badgeCount = 0
     @Published var followupsEnabled = false
+    /// Effective agent mode from the relay: `"plan_only"` or `"execute"`.
+    @Published var agentMode: String?
     @Published var preferListTab = false
 
     let configuration: SnagConfiguration
@@ -362,6 +364,7 @@ final class OverlayModel: ObservableObject {
 
     func applyRelayState(_ state: RelayStateResponse) {
         followupsEnabled = state.requesterFollowupsEnabled == true
+        if let mode = state.agentMode { agentMode = mode }
         Task { await refreshBadge(using: state) }
     }
 
@@ -394,6 +397,7 @@ final class OverlayModel: ObservableObject {
             return
         }
         followupsEnabled = relay.requesterFollowupsEnabled == true
+        if let mode = relay.agentMode { agentMode = mode }
         let followups = followupsEnabled
         let requester = await requester()
         let rows = relay.requests ?? []

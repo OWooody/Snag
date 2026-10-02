@@ -20,7 +20,9 @@ export type SnagRequestStatus =
   /** Execute mode: the preview is ready; the requester confirms or sends feedback. */
   | "awaiting_confirmation"
   /** Execute mode: Snag merged the PR. */
-  | "merged";
+  | "merged"
+  /** Execute mode: a developer rejected the plan; nothing was changed. */
+  | "rejected";
 
 export interface SnagScreenshot {
   /** JPEG image data, base64-encoded (no data-URI prefix). */
@@ -99,6 +101,14 @@ export interface SnagRequestRow {
   preview_url?: string | null;
   summary: string | null;
   error: string | null;
+  /** The developer's note when the plan was rejected. */
+  rejection_note?: string | null;
+  /** Why the request went to a developer while awaiting_review. Informational, not an error. */
+  handoff_reason?: string | null;
+  /** Execute mode: planning, implementing, or delivering. Null in plan-only mode. */
+  phase?: "planning" | "implementing" | "delivering" | null;
+  /** Short description of an in-progress step, e.g. "Planning" or "Waiting for checks". */
+  stage_label?: string | null;
   /** Host-supplied display id from `getRequester`, when provided. */
   requester: string | null;
   created_at: string;

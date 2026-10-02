@@ -34,7 +34,7 @@ import {
 import { isTrustedRequester } from "./requester_token.ts";
 
 export const REQUEST_LIFECYCLE_COLUMNS =
-  "id, project_id, prompt, status, phase, phase_started_at, lifecycle_version, agent_id, agent_url, branch_name, pr_url, preview_url, summary, plan, plan_summary, policy_decision, requester, requester_verified, requester_ip, approved_at, confirmed_at, merged_at, updated_at";
+  "id, project_id, prompt, status, phase, phase_started_at, lifecycle_version, agent_id, agent_url, branch_name, pr_url, preview_url, handoff_reason, summary, plan, plan_summary, policy_decision, requester, requester_verified, requester_ip, approved_at, confirmed_at, merged_at, updated_at";
 
 export interface PolicyDecisionRecord {
   plan?: PolicyStageDecision;
@@ -56,6 +56,7 @@ export interface LifecycleRow {
   branch_name: string | null;
   pr_url: string | null;
   preview_url: string | null;
+  handoff_reason: string | null;
   summary: string | null;
   plan: SnagPlan | null;
   plan_summary: string | null;
@@ -286,7 +287,7 @@ async function finishImplementation(
       await claimTransition(ctx.service, row, {
         ...base,
         status: "awaiting_review",
-        error: "The agent finished without opening a pull request.",
+        handoff_reason: "The agent finished without opening a pull request.",
         policy_decision: { ...record, final_outcome: "review_before_merge" },
       });
       return;
@@ -333,7 +334,7 @@ async function finishImplementation(
     await claimTransition(ctx.service, row, {
       ...base,
       status: "awaiting_review",
-      error: error instanceof GitHubError
+      handoff_reason: error instanceof GitHubError
         ? "Snag could not read the pull request from GitHub."
         : "Snag could not check the pull request.",
       policy_decision: { ...record, final_outcome: "review_before_merge" },
