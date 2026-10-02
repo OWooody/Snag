@@ -43,6 +43,13 @@ ${root} .snag-sheet-scroll::-webkit-scrollbar {
   width: 0;
   height: 0;
 }
+/* Form controls keep the OS UI face unless told to inherit. Match the sheet copy. */
+${root} button,
+${root} input,
+${root} textarea,
+${root} select {
+  font-family: inherit;
+}
 @keyframes snag-tab-glow {
   0%, 100% { box-shadow: 0 0 3px 0 ${withAlpha(theme.danger, 0.4)}; }
   50% { box-shadow: 0 0 8px 1px ${withAlpha(theme.danger, 0.7)}, 0 0 16px 3px ${withAlpha(theme.danger, 0.22)}; }

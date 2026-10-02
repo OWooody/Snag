@@ -192,7 +192,6 @@ export function ElementPicker({ theme, onPick, onCancel }: ElementPickerProps) {
                 color: "#fff",
                 fontSize: 12,
                 fontWeight: 600,
-                fontFamily: "system-ui, -apple-system, sans-serif",
                 whiteSpace: "nowrap",
                 overflow: "hidden",
                 textOverflow: "ellipsis",
@@ -223,7 +222,6 @@ export function ElementPicker({ theme, onPick, onCancel }: ElementPickerProps) {
           WebkitBackdropFilter: "blur(20px)",
           border: "1px solid rgba(255,255,255,0.55)",
           boxShadow: "0 8px 30px rgba(0,0,0,0.18)",
-          fontFamily: "system-ui, -apple-system, sans-serif",
         }}
       >
         <div aria-live="polite" style={{ minWidth: 0 }}>
