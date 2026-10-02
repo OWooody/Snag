@@ -43,6 +43,8 @@ npm install
 npm run dev
 ```
 
+Overlay UI review, with no relay: `npm run dev`, then open [http://localhost:5173/preview](http://localhost:5173/preview). That page renders the request sheet from `packages/react/src` with sample requests. See `.cursor/skills/preview-react-sdk/SKILL.md`.
+
 ## Security
 
 - The **publishable key** (`snag_pk_...`) is visible in the JS bundle / app binary — treat it like a Segment write key, not a secret.

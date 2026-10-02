@@ -5,6 +5,7 @@ import {
   useState,
   type CSSProperties,
   type ReactNode,
+  type RefObject,
 } from "react";
 
 import { createSnagRequest } from "../api";
@@ -30,6 +31,7 @@ import {
   useMorphMotion,
   type TabShape,
 } from "../sheet";
+import { withAlpha } from "../styles";
 import type { SnagTheme } from "../theme";
 import { Switch } from "./controls";
 import { ElementPicker } from "./element-picker";
@@ -108,6 +110,7 @@ export function RequestPanel({
   const [focusRequestId, setFocusRequestId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [listRefreshKey, setListRefreshKey] = useState(0);
+  const sheetScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (phase !== "submitting") {
@@ -357,16 +360,24 @@ export function RequestPanel({
           </div>
         ) : null}
         <div
+          style={{
+            position: "relative",
+            marginRight: fullFlare,
+            maxHeight: "85vh",
+            opacity: contentReveal,
+            transform: `translateY(${(1 - contentReveal) * 10}px)`,
+            pointerEvents: contentReveal > 0.9 ? "auto" : "none",
+          }}
+        >
+        <div
+          ref={sheetScrollRef}
           className="snag-sheet-scroll"
           style={{
             position: "relative",
             overflow: "auto",
             maxHeight: "85vh",
             boxSizing: "border-box",
-            padding: `20px ${26 + fullFlare}px 28px ${20 + fullFlare}px`,
-            opacity: contentReveal,
-            transform: `translateY(${(1 - contentReveal) * 10}px)`,
-            pointerEvents: contentReveal > 0.9 ? "auto" : "none",
+            padding: `20px 20px 28px ${20 + fullFlare}px`,
           }}
         >
           <div
@@ -698,6 +709,8 @@ export function RequestPanel({
             }
           </AnimatedTabBody>
         </div>
+        <SheetScrollThumb scrollerRef={sheetScrollRef} color={withAlpha(theme.text, 0.38)} />
+        </div>
       </div>
     </div>
   );
@@ -707,6 +720,70 @@ export function RequestPanel({
  * Crossfades tab content and morphs height so New ↔ Requests expands/collapses
  * smoothly instead of snapping.
  */
+function SheetScrollThumb({
+  scrollerRef,
+  color,
+}: {
+  scrollerRef: RefObject<HTMLDivElement | null>;
+  color: string;
+}) {
+  const [thumb, setThumb] = useState<{ top: number; height: number } | null>(null);
+
+  useEffect(() => {
+    const node = scrollerRef.current;
+    if (!node) return;
+
+    const update = () => {
+      const { scrollTop, scrollHeight, clientHeight } = node;
+      if (scrollHeight <= clientHeight + 1) {
+        setThumb(null);
+        return;
+      }
+      const inset = 14;
+      const track = Math.max(0, clientHeight - inset * 2);
+      const proportional = Math.round((clientHeight / scrollHeight) * track);
+      const height = Math.min(48, Math.max(28, proportional));
+      const maxTop = Math.max(0, track - height);
+      const top =
+        inset +
+        (scrollHeight === clientHeight
+          ? 0
+          : (scrollTop / (scrollHeight - clientHeight)) * maxTop);
+      setThumb({ top, height });
+    };
+
+    update();
+    node.addEventListener("scroll", update, { passive: true });
+    const observer = new ResizeObserver(update);
+    observer.observe(node);
+    const mutations = new MutationObserver(update);
+    mutations.observe(node, { childList: true, subtree: true });
+    return () => {
+      node.removeEventListener("scroll", update);
+      observer.disconnect();
+      mutations.disconnect();
+    };
+  }, [scrollerRef]);
+
+  if (!thumb) return null;
+
+  return (
+    <div
+      aria-hidden
+      style={{
+        position: "absolute",
+        top: thumb.top,
+        right: 0,
+        width: 4,
+        height: thumb.height,
+        borderRadius: "999px 0 0 999px",
+        background: color,
+        pointerEvents: "none",
+      }}
+    />
+  );
+}
+
 function AnimatedTabBody({
   tab,
   children,
