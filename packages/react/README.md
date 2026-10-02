@@ -83,7 +83,7 @@ export function App() {
 ## That’s it
 
 - If env vars are set and your project is enabled, a slim glass tab appears at the bottom center of the screen. Hover (or tab to it with the keyboard) and it rises to show **What's on your mind?**; click or tap to open the request panel.
-- The tab's line shows status at a glance: a purple highlight sweeps across it while one of your requests is queued or running, and it glows red when requests are waiting on you. Hovering turns the red line into a count.
+- The tab's line shows status at a glance. It glows red when requests are waiting on you, turns green when a request finished since you last opened **Requests**, and shows a purple sweep while one of your requests is queued or running (in that order of priority). Hovering turns red and green into counts, side by side when both apply. Which finished requests you've seen is remembered in `localStorage`, per requester.
 - If not, nothing renders — safe to ship the code in all builds.
 - To turn Snag off remotely, your admin disables the project — no deploy needed on your side.
 
@@ -97,7 +97,7 @@ export function App() {
 | `getRequester` | Display id for who filed the request — shown in the list; **Mine** defaults on when set. When follow-ups are on, **Needs you** also defaults on (`needs_input` and requests waiting for your confirmation) |
 | `getRequesterToken` | Signed requester token from your backend, sent as `x-snag-requester-token`. Verifies who filed the request — required for execute-mode auto-merge (see below) |
 | `getAuthToken` | Send `Authorization: Bearer` when the user is logged in |
-| `theme` | Override tab/panel colors (`accent` drives the in-progress sweep, `danger` the waiting-on-you glow) |
+| `theme` | Override tab/panel colors (`accent` drives the in-progress sweep, `danger` the waiting-on-you glow, `success` the finished state) |
 | `debug: true` | Log probe/request details to the console |
 
 ### Pointing at an element

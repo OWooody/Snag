@@ -85,6 +85,8 @@ export interface TabShape {
 export const TAB_REST_SHAPE: TabShape = { w: 108, h: 12, f: 12, r: 12 };
 export const TAB_PEEK_SHAPE: TabShape = { w: 180, h: 40, f: 14, r: 16 };
 export const TAB_PEEK_SHAPE_WITH_BADGE: TabShape = { ...TAB_PEEK_SHAPE, w: 210 };
+export const TAB_PEEK_SHAPE_WITH_DONE: TabShape = { ...TAB_PEEK_SHAPE, w: 222 };
+export const TAB_PEEK_SHAPE_WITH_BOTH: TabShape = { ...TAB_PEEK_SHAPE, w: 262 };
 
 export function tabShapeWidth(shape: TabShape): number {
   return shape.w + 2 * (shape.f + shape.r);

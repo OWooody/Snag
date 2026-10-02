@@ -19,6 +19,7 @@ export function SnagStyles({ theme }: { theme: SnagTheme }) {
   const root = "[data-snag-overlay]";
   const css = `
 ${root} .snag-tab-glow { animation: snag-tab-glow 2.2s ease-in-out infinite; }
+${root} .snag-tab-done-glow { animation: snag-tab-done-glow 3.4s ease-in-out infinite; }
 ${root} .snag-tab-sweep { animation: snag-tab-sweep 2.6s cubic-bezier(.65,0,.35,1) infinite; }
 ${root} .snag-shimmer {
   background: linear-gradient(90deg, rgba(15,15,25,0.07) 30%, rgba(255,255,255,0.75) 50%, rgba(15,15,25,0.07) 70%);
@@ -37,6 +38,10 @@ ${root} .snag-visually-hidden {
 @keyframes snag-tab-glow {
   0%, 100% { box-shadow: 0 0 3px 0 ${withAlpha(theme.danger, 0.4)}; }
   50% { box-shadow: 0 0 8px 1px ${withAlpha(theme.danger, 0.7)}, 0 0 16px 3px ${withAlpha(theme.danger, 0.22)}; }
+}
+@keyframes snag-tab-done-glow {
+  0%, 100% { box-shadow: 0 0 2px 0 ${withAlpha(theme.success, 0.3)}; }
+  50% { box-shadow: 0 0 7px 1px ${withAlpha(theme.success, 0.55)}, 0 0 14px 3px ${withAlpha(theme.success, 0.16)}; }
 }
 @keyframes snag-tab-sweep {
   0% { transform: translateX(-14px); }

@@ -23,6 +23,8 @@ interface RequestsListProps {
   focusRequestId?: string | null;
   /** Switch to the New request tab (empty-state call to action). */
   onNewRequest?: () => void;
+  /** Receives the rows from every successful load. */
+  onLoaded?: (rows: SnagRequestRow[]) => void;
 }
 
 export function RequestsList({
@@ -31,7 +33,10 @@ export function RequestsList({
   followupsEnabled = false,
   focusRequestId = null,
   onNewRequest,
+  onLoaded,
 }: RequestsListProps) {
+  const onLoadedRef = useRef(onLoaded);
+  onLoadedRef.current = onLoaded;
   const [rows, setRows] = useState<SnagRequestRow[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -54,6 +59,7 @@ export function RequestsList({
       resolveRequester(),
     ]);
     setRows(state.requests ?? []);
+    if (state.enabled) onLoadedRef.current?.(state.requests ?? []);
     if (state.agent_mode) setAgentMode(state.agent_mode);
     setCurrentRequester(requester);
     setRefreshing(false);

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { fetchRelayState } from "../api";
@@ -11,14 +11,21 @@ import {
   resolveTheme,
   startConsoleErrorBuffer,
 } from "../config";
-import type { SnagScreenshot } from "../protocol";
+import type { SnagRequestRow, SnagScreenshot } from "../protocol";
 import { captureScreenshot } from "../screenshot";
+import { countUnseenDone, markDoneSeen } from "../seen-done";
 import { TAB_REST_SHAPE, type TabShape } from "../sheet";
 import { SnagStyles } from "../styles";
 import { FloatingButton } from "./floating-button";
 import { RequestPanel } from "./request-panel";
 
 const BADGE_POLL_MS = 30_000;
+
+function doneRequestIds(rows: SnagRequestRow[]): string[] {
+  return rows
+    .filter((row) => row.status === "finished" || row.status === "merged")
+    .map((row) => row.id);
+}
 
 /**
  * Mount once at the app root. Renders nothing until `initSnag` has run AND
@@ -32,6 +39,8 @@ export function SnagOverlay() {
   const [agentMode, setAgentMode] = useState<"plan_only" | "execute" | null>(null);
   const [badgeCount, setBadgeCount] = useState(0);
   const [runningCount, setRunningCount] = useState(0);
+  const [doneCount, setDoneCount] = useState(0);
+  const lastRequester = useRef<string | null>(null);
   const [environmentLabel, setEnvironmentLabel] = useState("");
   const [panelVisible, setPanelVisible] = useState(false);
   const [opening, setOpening] = useState(false);
@@ -58,6 +67,7 @@ export function SnagOverlay() {
       setEnabled(false);
       setBadgeCount(0);
       setRunningCount(0);
+      setDoneCount(0);
       setFollowupsEnabled(false);
       return;
     }
@@ -78,6 +88,19 @@ export function SnagOverlay() {
     setRunningCount(
       mine.filter((row) => row.status === "queued" || row.status === "running").length,
     );
+    lastRequester.current = requester;
+    setDoneCount(countUnseenDone(requester, doneRequestIds(mine)));
+  }, []);
+
+  const markRequestsViewed = useCallback((rows: SnagRequestRow[]) => {
+    const requester = lastRequester.current;
+    markDoneSeen(
+      requester,
+      doneRequestIds(
+        rows.filter((row) => !requester || !row.requester || row.requester === requester),
+      ),
+    );
+    setDoneCount(0);
   }, []);
 
   useEffect(() => {
@@ -155,9 +178,12 @@ export function SnagOverlay() {
           environmentLabel={environmentLabel}
           theme={theme}
           badgeCount={badgeCount}
+          doneCount={doneCount}
           running={runningCount > 0}
           busy={opening}
-          onPress={(shape) => void openPanel(badgeCount > 0 ? "list" : "new", shape)}
+          onPress={(shape) =>
+            void openPanel(badgeCount > 0 || doneCount > 0 ? "list" : "new", shape)
+          }
         />
       ) : null}
       {panelVisible ? (
@@ -169,6 +195,7 @@ export function SnagOverlay() {
           followupsEnabled={followupsEnabled}
           agentMode={agentMode}
           badgeCount={badgeCount}
+          onRequestsViewed={markRequestsViewed}
           onClose={() => {
             setPanelVisible(false);
             void refreshBadge();

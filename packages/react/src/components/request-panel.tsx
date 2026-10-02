@@ -15,7 +15,7 @@ import {
   type PickedElement,
 } from "../element-highlights";
 import { describeElement, elementLabel } from "../element-info";
-import type { SnagScreenshot } from "../protocol";
+import type { SnagRequestRow, SnagScreenshot } from "../protocol";
 import {
   GLASS_BLUR_SATURATE,
   GLASS_FILL,
@@ -73,12 +73,15 @@ interface RequestPanelProps {
   badgeCount?: number;
   /** Tab shape at the moment it was pressed; the sheet grows out of it. */
   morphFrom?: TabShape;
+  /** Called with fresh rows each time the Requests tab loads while on screen. */
+  onRequestsViewed?: (rows: SnagRequestRow[]) => void;
 }
 
 export function RequestPanel({
   screenshot,
   theme,
   morphFrom = TAB_REST_SHAPE,
+  onRequestsViewed,
   onClose,
   initialTab = "new",
   followupsEnabled = false,
@@ -432,8 +435,9 @@ export function RequestPanel({
                   theme={theme}
                   refreshKey={listRefreshKey}
                   followupsEnabled={followupsEnabled}
-                  focusRequestId={focusRequestId}
-                  onNewRequest={() => {
+                focusRequestId={focusRequestId}
+                onLoaded={onRequestsViewed}
+                onNewRequest={() => {
                     if (phase === "done") {
                       startAnother();
                       return;
