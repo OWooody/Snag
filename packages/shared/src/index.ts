@@ -2,6 +2,7 @@ export * from "./types";
 export * from "./schemas";
 export * from "./agent-mode";
 export * from "./execute-policy";
+export * from "./execution-posture";
 export * from "./policy-templates";
 export * from "./requester-followups";
 export * from "./crypto";

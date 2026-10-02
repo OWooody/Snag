@@ -2,13 +2,14 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
-  AGENT_MODE_LABELS,
+  classifyExecutionPosture,
   companyProjectUpdateSchema,
+  executionPostureSettings,
   parseOriginsTextarea,
-  resolveEffectiveAgentMode,
   resolveEffectiveRequesterFollowups,
   type AgentMode,
   type ExecuteDelivery,
+  type ExecutionPosture,
   type PolicyOutcome,
   type SnagOrganization,
   type SnagProjectSafe,
@@ -18,13 +19,14 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
-import { AgentModeSelect, ProjectAgentModeOverrideSelect } from "@/components/agent-mode-select";
+import { AgentModeSelect } from "@/components/agent-mode-select";
 import { AllowedOriginsField, originsToTextarea } from "@/components/allowed-origins-field";
 import {
   DefaultOutcomeSelect,
   ExecuteDeliverySelect,
   SHADOW_MODE_DESCRIPTION,
 } from "@/components/execution-selects";
+import { AdvancedDisclosure, ExecutionPosturePicker } from "@/components/execution-posture-picker";
 import { ExecutionSettingsCard } from "@/components/execution-settings-card";
 import {
   ProjectRequesterFollowupsOverrideSelect,
@@ -48,7 +50,6 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 
 type ProjectFormValues = z.infer<typeof companyProjectUpdateSchema>;
-type ProjectAgentOverride = AgentMode | "inherit";
 type ProjectFollowupsOverride = boolean | "inherit";
 
 export function SettingsForm({
@@ -88,14 +89,10 @@ export function SettingsForm({
       model: project.model,
       prompt_instructions: project.prompt_instructions,
       enabled: project.enabled,
-      agent_mode: project.agent_mode,
       requester_followups_enabled: project.requester_followups_enabled,
     },
   });
 
-  const [projectAgentOverride, setProjectAgentOverride] = useState<ProjectAgentOverride>(
-    project.agent_mode ?? "inherit",
-  );
   const [projectFollowupsOverride, setProjectFollowupsOverride] =
     useState<ProjectFollowupsOverride>(
       typeof project.requester_followups_enabled === "boolean"
@@ -124,10 +121,6 @@ export function SettingsForm({
   }, [project.allowed_origins]);
 
   useEffect(() => {
-    setProjectAgentOverride(project.agent_mode ?? "inherit");
-  }, [project.agent_mode]);
-
-  useEffect(() => {
     setProjectFollowupsOverride(
       typeof project.requester_followups_enabled === "boolean"
         ? project.requester_followups_enabled
@@ -135,10 +128,12 @@ export function SettingsForm({
     );
   }, [project.requester_followups_enabled]);
 
-  const effectiveMode = resolveEffectiveAgentMode(
-    projectAgentOverride === "inherit" ? null : projectAgentOverride,
-    orgAgentMode,
-  );
+  const orgPosture = classifyExecutionPosture({
+    agent_mode: orgAgentMode,
+    execute_delivery: orgDelivery,
+    default_outcome: orgOutcome,
+    policy_shadow_mode: orgShadow,
+  });
   const effectiveFollowups = resolveEffectiveRequesterFollowups(
     projectFollowupsOverride === "inherit" ? null : projectFollowupsOverride,
     orgFollowupsEnabled,
@@ -150,7 +145,8 @@ export function SettingsForm({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         ...values,
-        agent_mode: projectAgentOverride === "inherit" ? null : projectAgentOverride,
+        // Agent mode is saved with request handling, not this form.
+        agent_mode: undefined,
         requester_followups_enabled:
           projectFollowupsOverride === "inherit" ? null : projectFollowupsOverride,
         allowed_origins: parseOriginsTextarea(allowedOriginsText),
@@ -163,6 +159,15 @@ export function SettingsForm({
     }
     toast.success("Settings saved");
     router.refresh();
+  }
+
+  function selectOrgPosture(posture: "inherit" | ExecutionPosture) {
+    if (posture === "inherit") return;
+    const settings = executionPostureSettings(posture);
+    setOrgAgentMode(settings.agent_mode);
+    setOrgDelivery(settings.execute_delivery);
+    setOrgOutcome(settings.default_outcome);
+    setOrgShadow(settings.policy_shadow_mode);
   }
 
   function onSaveOrganization() {
@@ -232,33 +237,40 @@ export function SettingsForm({
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <AgentModeSelect
-              id="org_agent_mode"
-              value={orgAgentMode}
-              onChange={setOrgAgentMode}
+            <ExecutionPosturePicker
+              name="org-posture"
+              value={orgPosture}
+              onChange={selectOrgPosture}
             />
+            <AdvancedDisclosure openWhen={orgPosture === "custom"}>
+              <AgentModeSelect
+                id="org_agent_mode"
+                value={orgAgentMode}
+                onChange={setOrgAgentMode}
+              />
+              <ExecuteDeliverySelect
+                id="org_execute_delivery"
+                value={orgDelivery}
+                onChange={setOrgDelivery}
+              />
+              <DefaultOutcomeSelect
+                id="org_default_outcome"
+                value={orgOutcome}
+                onChange={setOrgOutcome}
+              />
+              <div className="flex items-center justify-between rounded-lg border border-zinc-200 p-4">
+                <div>
+                  <p className="font-medium">Rules shadow mode</p>
+                  <p className="text-sm text-zinc-500">{SHADOW_MODE_DESCRIPTION}</p>
+                </div>
+                <Switch checked={orgShadow} onCheckedChange={setOrgShadow} />
+              </div>
+            </AdvancedDisclosure>
             <RequesterFollowupsSwitch
               id="org_requester_followups"
               checked={orgFollowupsEnabled}
               onCheckedChange={setOrgFollowupsEnabled}
             />
-            <ExecuteDeliverySelect
-              id="org_execute_delivery"
-              value={orgDelivery}
-              onChange={setOrgDelivery}
-            />
-            <DefaultOutcomeSelect
-              id="org_default_outcome"
-              value={orgOutcome}
-              onChange={setOrgOutcome}
-            />
-            <div className="flex items-center justify-between rounded-lg border border-zinc-200 p-4">
-              <div>
-                <p className="font-medium">Rules shadow mode</p>
-                <p className="text-sm text-zinc-500">{SHADOW_MODE_DESCRIPTION}</p>
-              </div>
-              <Switch checked={orgShadow} onCheckedChange={setOrgShadow} />
-            </div>
             <Button type="button" onClick={onSaveOrganization} disabled={savingOrg}>
               {savingOrg ? "Saving…" : "Save organization defaults"}
             </Button>
@@ -289,9 +301,7 @@ export function SettingsForm({
         <CardHeader>
           <CardTitle>Project settings</CardTitle>
           <CardDescription>
-            Repository and agent configuration for {project.name}. Effective agent mode:{" "}
-            <span className="font-medium text-zinc-900">{AGENT_MODE_LABELS[effectiveMode]}</span>
-            . Requester follow-ups:{" "}
+            Repository and agent configuration for {project.name}. Requester follow-ups:{" "}
             <span className="font-medium text-zinc-900">
               {effectiveFollowups ? "On" : "Off"}
             </span>
@@ -300,12 +310,6 @@ export function SettingsForm({
         </CardHeader>
         <CardContent>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <ProjectAgentModeOverrideSelect
-              id="project_agent_mode"
-              value={projectAgentOverride}
-              onChange={setProjectAgentOverride}
-              orgDefault={orgAgentMode}
-            />
             <ProjectRequesterFollowupsOverrideSelect
               id="project_requester_followups"
               value={projectFollowupsOverride}
@@ -360,6 +364,7 @@ export function SettingsForm({
       <ExecutionSettingsCard
         project={project}
         orgDefaults={{
+          agent_mode: organization?.agent_mode ?? "plan_only",
           execute_delivery: organization?.execute_delivery ?? "pr_only",
           default_outcome: organization?.default_outcome ?? "review_before_execution",
           policy_shadow_mode: organization?.policy_shadow_mode ?? false,

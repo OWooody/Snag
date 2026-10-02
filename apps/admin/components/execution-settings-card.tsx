@@ -1,12 +1,17 @@
 "use client";
 
 import {
+  classifyExecutionPosture,
+  classifyProjectPosture,
   EXECUTE_DELIVERY_LABELS,
-  POLICY_OUTCOME_LABELS,
-  resolveEffectiveDefaultOutcome,
+  EXECUTION_POSTURE_DESCRIPTIONS,
+  EXECUTION_POSTURE_LABELS,
+  executionPostureSettings,
   resolveEffectiveExecuteDelivery,
-  resolveEffectivePolicyShadowMode,
+  type AgentMode,
   type ExecuteDelivery,
+  type ExecutionPosture,
+  type ExecutionPostureInput,
   type PolicyOutcome,
   type SnagProjectSafe,
 } from "@snag/shared";
@@ -15,11 +20,13 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { CopyButton } from "@/components/copy-button";
+import { ProjectAgentModeOverrideSelect } from "@/components/agent-mode-select";
 import {
   ProjectDefaultOutcomeOverrideSelect,
   ProjectExecuteDeliveryOverrideSelect,
   ShadowModeOverrideSelect,
 } from "@/components/execution-selects";
+import { AdvancedDisclosure, ExecutionPosturePicker } from "@/components/execution-posture-picker";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,10 +45,23 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { missingDeliveryPrerequisites } from "@/lib/execution";
 
-export interface OrganizationExecutionDefaults {
-  execute_delivery: ExecuteDelivery;
-  default_outcome: PolicyOutcome;
-  policy_shadow_mode: boolean;
+export type OrganizationExecutionDefaults = ExecutionPostureInput;
+
+function inheritOption(orgDefaults: OrganizationExecutionDefaults): {
+  label: string;
+  description: string;
+} {
+  const posture = classifyExecutionPosture(orgDefaults);
+  if (posture === "custom") {
+    return {
+      label: "Inherit from organization (Custom)",
+      description: "Uses the organization's advanced settings.",
+    };
+  }
+  return {
+    label: `Inherit from organization (${EXECUTION_POSTURE_LABELS[posture]})`,
+    description: EXECUTION_POSTURE_DESCRIPTIONS[posture],
+  };
 }
 
 function parseRequesterList(text: string): string[] {
@@ -89,6 +109,9 @@ export function ExecutionSettingsCard({
   orgDefaults: OrganizationExecutionDefaults;
 }) {
   const router = useRouter();
+  const [agentMode, setAgentMode] = useState<AgentMode | "inherit">(
+    project.agent_mode ?? "inherit",
+  );
   const [delivery, setDelivery] = useState<ExecuteDelivery | "inherit">(
     project.execute_delivery ?? "inherit",
   );
@@ -111,6 +134,7 @@ export function ExecutionSettingsCard({
   const [generatingSecret, setGeneratingSecret] = useState(false);
 
   useEffect(() => {
+    setAgentMode(project.agent_mode ?? "inherit");
     setDelivery(project.execute_delivery ?? "inherit");
     setOutcome(project.default_outcome ?? "inherit");
     setShadow(
@@ -119,6 +143,7 @@ export function ExecutionSettingsCard({
     setTrustedText((project.trusted_requesters ?? []).join("\n"));
     setDailyLimit(project.auto_merge_daily_limit ?? 10);
   }, [
+    project.agent_mode,
     project.execute_delivery,
     project.default_outcome,
     project.policy_shadow_mode,
@@ -126,17 +151,15 @@ export function ExecutionSettingsCard({
     project.auto_merge_daily_limit,
   ]);
 
+  const projectChoice = classifyProjectPosture({
+    agent_mode: agentMode === "inherit" ? null : agentMode,
+    execute_delivery: delivery === "inherit" ? null : delivery,
+    default_outcome: outcome === "inherit" ? null : outcome,
+    policy_shadow_mode: shadow === "inherit" ? null : shadow,
+  });
   const effectiveDelivery = resolveEffectiveExecuteDelivery(
     delivery === "inherit" ? null : delivery,
     orgDefaults.execute_delivery,
-  );
-  const effectiveOutcome = resolveEffectiveDefaultOutcome(
-    outcome === "inherit" ? null : outcome,
-    orgDefaults.default_outcome,
-  );
-  const effectiveShadow = resolveEffectivePolicyShadowMode(
-    shadow === "inherit" ? null : shadow,
-    orgDefaults.policy_shadow_mode,
   );
   const trusted = parseRequesterList(trustedText);
   const needsAcknowledgement =
@@ -154,6 +177,7 @@ export function ExecutionSettingsCard({
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        agent_mode: agentMode === "inherit" ? null : agentMode,
         execute_delivery: delivery === "inherit" ? null : delivery,
         default_outcome: outcome === "inherit" ? null : outcome,
         policy_shadow_mode: shadow === "inherit" ? null : shadow,
@@ -169,6 +193,21 @@ export function ExecutionSettingsCard({
     }
     toast.success("Execution settings saved");
     router.refresh();
+  }
+
+  function selectProjectPosture(choice: "inherit" | ExecutionPosture) {
+    if (choice === "inherit") {
+      setAgentMode("inherit");
+      setDelivery("inherit");
+      setOutcome("inherit");
+      setShadow("inherit");
+      return;
+    }
+    const settings = executionPostureSettings(choice);
+    setAgentMode(settings.agent_mode);
+    setDelivery(settings.execute_delivery);
+    setOutcome(settings.default_outcome);
+    setShadow(settings.policy_shadow_mode);
   }
 
   function onSave() {
@@ -222,72 +261,84 @@ export function ExecutionSettingsCard({
     router.refresh();
   }
 
+  const autoMergeFields = (
+    <>
+      <div className="space-y-2">
+        <Label htmlFor="trusted_requesters">Trusted requesters</Label>
+        <Textarea
+          id="trusted_requesters"
+          rows={4}
+          placeholder={"user_123\nops@example.com"}
+          value={trustedText}
+          onChange={(e) => setTrustedText(e.target.value)}
+          className="font-mono"
+        />
+        <p className="text-sm text-zinc-500">
+          One requester id per line, matching the <code>sub</code> in signed requester tokens.
+          Auto-merge only applies to verified requesters on this list.
+        </p>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="auto_merge_daily_limit">Daily auto-merge limit</Label>
+        <Input
+          id="auto_merge_daily_limit"
+          type="number"
+          min={1}
+          max={500}
+          value={dailyLimit}
+          onChange={(e) => setDailyLimit(Number(e.target.value) || 1)}
+        />
+        <p className="text-sm text-zinc-500">
+          Merges approved by rules in the last 24 hours. Past the limit, PRs go to a developer.
+        </p>
+      </div>
+    </>
+  );
+
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Execution and delivery</CardTitle>
+          <CardTitle>Request handling</CardTitle>
           <CardDescription>
-            Applies when the agent mode is Execute. Effective delivery:{" "}
-            <span className="font-medium text-zinc-900">
-              {EXECUTE_DELIVERY_LABELS[effectiveDelivery]}
-            </span>
-            . Without a matching allow rule:{" "}
-            <span className="font-medium text-zinc-900">
-              {POLICY_OUTCOME_LABELS[effectiveOutcome]}
-            </span>
-            . Shadow mode:{" "}
-            <span className="font-medium text-zinc-900">{effectiveShadow ? "On" : "Off"}</span>.
+            Inherit the organization default, or choose how this project handles requests.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <ProjectExecuteDeliveryOverrideSelect
-            id="project_execute_delivery"
-            value={delivery}
-            onChange={setDelivery}
-            orgDefault={orgDefaults.execute_delivery}
+          <ExecutionPosturePicker
+            name={`project-posture-${project.slug}`}
+            value={projectChoice}
+            onChange={selectProjectPosture}
+            inherit={inheritOption(orgDefaults)}
           />
-          <ProjectDefaultOutcomeOverrideSelect
-            id="project_default_outcome"
-            value={outcome}
-            onChange={setOutcome}
-            orgDefault={orgDefaults.default_outcome}
-          />
-          <ShadowModeOverrideSelect
-            id="project_shadow_mode"
-            value={shadow}
-            onChange={setShadow}
-            orgDefault={orgDefaults.policy_shadow_mode}
-          />
-          <div className="space-y-2">
-            <Label htmlFor="trusted_requesters">Trusted requesters</Label>
-            <Textarea
-              id="trusted_requesters"
-              rows={4}
-              placeholder={"user_123\nops@example.com"}
-              value={trustedText}
-              onChange={(e) => setTrustedText(e.target.value)}
-              className="font-mono"
+          {effectiveDelivery === "auto_merge" ? autoMergeFields : null}
+          <AdvancedDisclosure openWhen={projectChoice === "custom"}>
+            <ProjectAgentModeOverrideSelect
+              id="project_agent_mode"
+              value={agentMode}
+              onChange={setAgentMode}
+              orgDefault={orgDefaults.agent_mode}
             />
-            <p className="text-sm text-zinc-500">
-              One requester id per line, matching the <code>sub</code> in signed requester tokens.
-              Auto-merge only applies to verified requesters on this list.
-            </p>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="auto_merge_daily_limit">Daily auto-merge limit</Label>
-            <Input
-              id="auto_merge_daily_limit"
-              type="number"
-              min={1}
-              max={500}
-              value={dailyLimit}
-              onChange={(e) => setDailyLimit(Number(e.target.value) || 1)}
+            <ProjectExecuteDeliveryOverrideSelect
+              id="project_execute_delivery"
+              value={delivery}
+              onChange={setDelivery}
+              orgDefault={orgDefaults.execute_delivery}
             />
-            <p className="text-sm text-zinc-500">
-              Merges approved by rules in the last 24 hours. Past the limit, PRs go to a developer.
-            </p>
-          </div>
+            <ProjectDefaultOutcomeOverrideSelect
+              id="project_default_outcome"
+              value={outcome}
+              onChange={setOutcome}
+              orgDefault={orgDefaults.default_outcome}
+            />
+            <ShadowModeOverrideSelect
+              id="project_shadow_mode"
+              value={shadow}
+              onChange={setShadow}
+              orgDefault={orgDefaults.policy_shadow_mode}
+            />
+            {effectiveDelivery === "auto_merge" ? null : autoMergeFields}
+          </AdvancedDisclosure>
           {missing.length > 0 ? (
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
               <p className="font-medium">
@@ -301,7 +352,7 @@ export function ExecutionSettingsCard({
             </div>
           ) : null}
           <Button type="button" onClick={onSave} disabled={saving}>
-            {saving ? "Saving…" : "Save execution settings"}
+            {saving ? "Saving…" : "Save request handling"}
           </Button>
           <AlertDialog open={ackOpen} onOpenChange={setAckOpen}>
             <AlertDialogContent>

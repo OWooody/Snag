@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { platformTenantUpdateSchema, parseOriginsTextarea } from "@snag/shared";
-import type { AgentMode, SnagProjectSafe } from "@snag/shared";
+import type { SnagProjectSafe } from "@snag/shared";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -25,21 +25,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { ProjectAgentModeOverrideSelect } from "@/components/agent-mode-select";
 import { AllowedOriginsField, originsToTextarea } from "@/components/allowed-origins-field";
 import { ProjectRequesterFollowupsOverrideSelect } from "@/components/requester-followups-select";
 
 type FormValues = z.infer<typeof platformTenantUpdateSchema>;
-type ProjectAgentOverride = AgentMode | "inherit";
 type ProjectFollowupsOverride = boolean | "inherit";
 
 export function PlatformTenantForm({
   project,
-  orgAgentMode = "plan_only",
   orgFollowupsEnabled = true,
 }: {
   project: SnagProjectSafe;
-  orgAgentMode?: AgentMode;
   orgFollowupsEnabled?: boolean;
 }) {
   const router = useRouter();
@@ -48,19 +44,12 @@ export function PlatformTenantForm({
     originsToTextarea(project.allowed_origins),
   );
 
-  const [projectAgentOverride, setProjectAgentOverride] = useState<ProjectAgentOverride>(
-    project.agent_mode ?? "inherit",
-  );
   const [projectFollowupsOverride, setProjectFollowupsOverride] =
     useState<ProjectFollowupsOverride>(
       typeof project.requester_followups_enabled === "boolean"
         ? project.requester_followups_enabled
         : "inherit",
     );
-
-  useEffect(() => {
-    setProjectAgentOverride(project.agent_mode ?? "inherit");
-  }, [project.agent_mode]);
 
   useEffect(() => {
     setProjectFollowupsOverride(
@@ -93,7 +82,6 @@ export function PlatformTenantForm({
     const { cursor_api_key, ...rest } = values;
     const payload = {
       ...rest,
-      agent_mode: projectAgentOverride === "inherit" ? null : projectAgentOverride,
       requester_followups_enabled:
         projectFollowupsOverride === "inherit" ? null : projectFollowupsOverride,
       allowed_origins: parseOriginsTextarea(allowedOriginsText),
@@ -188,14 +176,6 @@ export function PlatformTenantForm({
                 id="platform_allowed_origins"
                 value={allowedOriginsText}
                 onChange={setAllowedOriginsText}
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <ProjectAgentModeOverrideSelect
-                id="platform_project_agent_mode"
-                value={projectAgentOverride}
-                onChange={setProjectAgentOverride}
-                orgDefault={orgAgentMode}
               />
             </div>
             <div className="sm:col-span-2">
