@@ -166,24 +166,56 @@ export const cursorKeyUpdateSchema = z.object({
   cursor_api_key: z.string().trim().min(1).max(512),
 });
 
-export const createTenantSchema = z.object({
-  org_name: z.string().trim().min(1).max(128),
-  org_slug: slugSchema,
-  project_name: z.string().trim().min(1).max(128),
-  project_slug: slugSchema,
-  repo_url: repoUrlSchema,
-  repo_ref: z.string().trim().min(1).max(256).default("main"),
-  model: z.string().trim().max(128).nullable().optional(),
-  prompt_instructions: promptInstructionsSchema,
-  cursor_api_key: z.string().trim().min(1).max(512),
-  owner_email: z.string().trim().email(),
-  per_ip_hourly_limit: rateLimitSchema.default(10),
-  hourly_limit: rateLimitSchema.default(10),
-  daily_limit: rateLimitSchema.default(30),
-  agent_mode: agentModeSchema.default("plan_only"),
-  requester_followups_enabled: z.boolean().default(true),
-  allowed_origins: allowedOriginsSchema.default([...DEFAULT_DEV_ORIGINS]),
-});
+export const createTenantSchema = z
+  .object({
+    /** Set to add a project to an existing organization. Org fields are then ignored. */
+    organization_id: z.string().uuid().or(z.literal("")).optional(),
+    org_name: z.string().trim().max(128).optional(),
+    org_slug: z.string().trim().max(64).optional(),
+    project_name: z.string().trim().min(1).max(128),
+    project_slug: slugSchema,
+    repo_url: repoUrlSchema,
+    repo_ref: z.string().trim().min(1).max(256).default("main"),
+    model: z.string().trim().max(128).nullable().optional(),
+    prompt_instructions: promptInstructionsSchema,
+    cursor_api_key: z.string().trim().min(1).max(512),
+    owner_email: z.string().trim().optional(),
+    per_ip_hourly_limit: rateLimitSchema.default(10),
+    hourly_limit: rateLimitSchema.default(10),
+    daily_limit: rateLimitSchema.default(30),
+    agent_mode: agentModeSchema.default("plan_only"),
+    requester_followups_enabled: z.boolean().default(true),
+    allowed_origins: allowedOriginsSchema.default([...DEFAULT_DEV_ORIGINS]),
+  })
+  .superRefine((value, ctx) => {
+    if (value.organization_id) return;
+
+    if (!value.org_name?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["org_name"],
+        message: "Required",
+      });
+    }
+
+    const slug = slugSchema.safeParse(value.org_slug ?? "");
+    if (!slug.success) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["org_slug"],
+        message: slug.error.issues[0]?.message ?? "Invalid slug",
+      });
+    }
+
+    const email = z.string().trim().email().safeParse(value.owner_email ?? "");
+    if (!email.success) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["owner_email"],
+        message: "Enter a valid email",
+      });
+    }
+  });
 
 export const platformTenantUpdateSchema = z.object({
   name: z.string().trim().min(1).max(128).optional(),

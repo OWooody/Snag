@@ -36,20 +36,51 @@ export async function POST(request: Request) {
 
   const input = parsed.data;
   const service = createServiceClient();
+  const existingOrganizationId = input.organization_id || undefined;
 
-  const { data: org, error: orgError } = await service
-    .from("snag_organizations")
-    .insert({
-      name: input.org_name,
-      slug: input.org_slug,
-      agent_mode: input.agent_mode,
-      requester_followups_enabled: input.requester_followups_enabled,
-    })
-    .select("id")
-    .single();
+  let orgId: string;
+  let orgSlug: string;
+  let createdOrganization = false;
 
-  if (orgError || !org) {
-    return NextResponse.json({ error: orgError?.message ?? "Failed to create org" }, { status: 500 });
+  if (existingOrganizationId) {
+    const { data: existing, error: existingError } = await service
+      .from("snag_organizations")
+      .select("id, slug")
+      .eq("id", existingOrganizationId)
+      .single();
+
+    if (existingError || !existing) {
+      return NextResponse.json({ error: "Organization not found" }, { status: 404 });
+    }
+
+    orgId = existing.id;
+    orgSlug = existing.slug;
+  } else {
+    if (!input.org_name || !input.org_slug || !input.owner_email) {
+      return NextResponse.json(
+        { error: "Organization name, slug, and owner email are required" },
+        { status: 400 },
+      );
+    }
+
+    const { data: org, error: orgError } = await service
+      .from("snag_organizations")
+      .insert({
+        name: input.org_name,
+        slug: input.org_slug,
+        agent_mode: input.agent_mode,
+        requester_followups_enabled: input.requester_followups_enabled,
+      })
+      .select("id, slug")
+      .single();
+
+    if (orgError || !org) {
+      return NextResponse.json({ error: orgError?.message ?? "Failed to create org" }, { status: 500 });
+    }
+
+    orgId = org.id;
+    orgSlug = org.slug;
+    createdOrganization = true;
   }
 
   const encrypted = await encryptSecret(input.cursor_api_key, encryptionSecret);
@@ -60,7 +91,7 @@ export async function POST(request: Request) {
     .insert({
       name: input.project_name,
       slug: input.project_slug,
-      organization_id: org.id,
+      organization_id: orgId,
       publishable_key: publishableKey,
       repo_url: input.repo_url,
       repo_ref: input.repo_ref,
@@ -78,25 +109,29 @@ export async function POST(request: Request) {
     .single();
 
   if (projectError || !project) {
-    await service.from("snag_organizations").delete().eq("id", org.id);
+    if (createdOrganization) {
+      await service.from("snag_organizations").delete().eq("id", orgId);
+    }
     return NextResponse.json(
       { error: projectError?.message ?? "Failed to create project" },
       { status: 500 },
     );
   }
 
-  await service.from("snag_org_members").insert({
-    organization_id: org.id,
-    invited_email: input.owner_email.toLowerCase(),
-    role: "owner",
-  });
-
-  try {
-    await service.auth.admin.inviteUserByEmail(input.owner_email, {
-      redirectTo: `${process.env.NEXT_PUBLIC_ADMIN_URL ?? "http://localhost:3000"}/auth/callback`,
+  if (createdOrganization && input.owner_email) {
+    await service.from("snag_org_members").insert({
+      organization_id: orgId,
+      invited_email: input.owner_email.toLowerCase(),
+      role: "owner",
     });
-  } catch {
-    // Invite is best-effort; member row links on first magic-link sign-in
+
+    try {
+      await service.auth.admin.inviteUserByEmail(input.owner_email, {
+        redirectTo: `${process.env.NEXT_PUBLIC_ADMIN_URL ?? "http://localhost:3000"}/auth/callback`,
+      });
+    } catch {
+      // Invite is best-effort; member row links on first magic-link sign-in
+    }
   }
 
   await writeAuditLog({
@@ -104,7 +139,11 @@ export async function POST(request: Request) {
     action: "tenant.create",
     targetType: "snag_projects",
     targetId: project.id,
-    metadata: { org_slug: input.org_slug, project_slug: input.project_slug },
+    metadata: {
+      org_slug: orgSlug,
+      project_slug: input.project_slug,
+      existing_organization: !createdOrganization,
+    },
   });
 
   const relayUrl =
