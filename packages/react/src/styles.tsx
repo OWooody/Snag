@@ -35,6 +35,32 @@ ${root} .snag-visually-hidden {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
   overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
 }
+${root} .snag-sheet-scroll {
+  scrollbar-width: thin;
+}
+@supports not selector(::-webkit-scrollbar) {
+  ${root} .snag-sheet-scroll {
+    scrollbar-color: ${withAlpha(theme.text, 0.28)} transparent;
+  }
+}
+${root} .snag-sheet-scroll::-webkit-scrollbar {
+  width: 10px;
+}
+${root} .snag-sheet-scroll::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 14px 0;
+}
+${root} .snag-sheet-scroll::-webkit-scrollbar-thumb {
+  background: ${withAlpha(theme.text, 0.22)};
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+${root} .snag-sheet-scroll::-webkit-scrollbar-thumb:hover {
+  background: ${withAlpha(theme.accent, 0.55)};
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
 @keyframes snag-tab-glow {
   0%, 100% { box-shadow: 0 0 3px 0 ${withAlpha(theme.danger, 0.4)}; }
   50% { box-shadow: 0 0 8px 1px ${withAlpha(theme.danger, 0.7)}, 0 0 16px 3px ${withAlpha(theme.danger, 0.22)}; }

@@ -357,12 +357,13 @@ export function RequestPanel({
           </div>
         ) : null}
         <div
+          className="snag-sheet-scroll"
           style={{
             position: "relative",
             overflow: "auto",
             maxHeight: "85vh",
             boxSizing: "border-box",
-            padding: `20px ${20 + fullFlare}px 28px`,
+            padding: `20px ${26 + fullFlare}px 28px ${20 + fullFlare}px`,
             opacity: contentReveal,
             transform: `translateY(${(1 - contentReveal) * 10}px)`,
             pointerEvents: contentReveal > 0.9 ? "auto" : "none",
