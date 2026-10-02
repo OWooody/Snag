@@ -29,6 +29,7 @@ export function SnagOverlay() {
   const [followupsEnabled, setFollowupsEnabled] = useState(false);
   const [agentMode, setAgentMode] = useState<"plan_only" | "execute" | null>(null);
   const [badgeCount, setBadgeCount] = useState(0);
+  const [runningCount, setRunningCount] = useState(0);
   const [environmentLabel, setEnvironmentLabel] = useState("");
   const [panelVisible, setPanelVisible] = useState(false);
   const [initialTab, setInitialTab] = useState<"new" | "list">("new");
@@ -52,6 +53,7 @@ export function SnagOverlay() {
     if (!state.enabled) {
       setEnabled(false);
       setBadgeCount(0);
+      setRunningCount(0);
       setFollowupsEnabled(false);
       return;
     }
@@ -59,15 +61,19 @@ export function SnagOverlay() {
     const followups = state.requester_followups_enabled === true;
     setFollowupsEnabled(followups);
     if (state.agent_mode) setAgentMode(state.agent_mode);
-    const rows = state.requests ?? [];
-    const count = rows.filter((row) => {
-      const needsRequester =
-        row.status === "awaiting_confirmation" || (followups && row.status === "needs_input");
-      if (!needsRequester) return false;
-      if (requester && row.requester) return row.requester === requester;
-      return true;
-    }).length;
-    setBadgeCount(count);
+    const mine = (state.requests ?? []).filter(
+      (row) => !requester || !row.requester || row.requester === requester,
+    );
+    setBadgeCount(
+      mine.filter(
+        (row) =>
+          row.status === "awaiting_confirmation" ||
+          (followups && row.status === "needs_input"),
+      ).length,
+    );
+    setRunningCount(
+      mine.filter((row) => row.status === "queued" || row.status === "running").length,
+    );
   }, []);
 
   useEffect(() => {
@@ -140,6 +146,7 @@ export function SnagOverlay() {
           environmentLabel={environmentLabel}
           theme={theme}
           badgeCount={badgeCount}
+          running={runningCount > 0}
           onPress={() => void openPanel(badgeCount > 0 ? "list" : "new")}
         />
       ) : null}

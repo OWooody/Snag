@@ -82,7 +82,8 @@ export function App() {
 
 ## That’s it
 
-- If env vars are set and your project is enabled, a floating button appears.
+- If env vars are set and your project is enabled, a slim glass tab appears at the bottom center of the screen. Hover (or tab to it with the keyboard) and it rises to show **What's on your mind?**; click or tap to open the request panel.
+- The tab's line shows status at a glance: a purple highlight sweeps across it while one of your requests is queued or running, and it glows red when requests are waiting on you. Hovering turns the red line into a count.
 - If not, nothing renders — safe to ship the code in all builds.
 - To turn Snag off remotely, your admin disables the project — no deploy needed on your side.
 
@@ -96,7 +97,7 @@ export function App() {
 | `getRequester` | Display id for who filed the request — shown in the list; **Mine** defaults on when set. When follow-ups are on, **Needs you** also defaults on (`needs_input` and requests waiting for your confirmation) |
 | `getRequesterToken` | Signed requester token from your backend, sent as `x-snag-requester-token`. Verifies who filed the request — required for execute-mode auto-merge (see below) |
 | `getAuthToken` | Send `Authorization: Bearer` when the user is logged in |
-| `theme` | Override button/panel colors |
+| `theme` | Override tab/panel colors (`accent` drives the in-progress sweep, `danger` the waiting-on-you glow) |
 | `debug: true` | Log probe/request details to the console |
 
 ### Pointing at an element
@@ -109,7 +110,7 @@ Production builds strip React's debug info and minify component names, so there 
 
 ### Execute mode: checking your own change
 
-When your admin enables execute mode with **Preview, then merge**, a request moves to **Ready for you to check** once the preview deployment is up. Open the preview from the request card, then tap **Looks right** (Snag merges it once CI passes and it goes live) or **Not right** with what should change (the agent revises the same PR). The floating button's badge counts these requests too.
+When your admin enables execute mode with **Preview, then merge**, a request moves to **Ready for you to check** once the preview deployment is up. Open the preview from the request card, then tap **Looks right** (Snag merges it once CI passes and it goes live) or **Not right** with what should change (the agent revises the same PR). The tab's red waiting-on-you count includes these requests too.
 
 ### Verified requesters (signed token)
 

@@ -2,7 +2,7 @@
 
 Tap the screen, it gets fixed.
 
-Snag is an in-app change-request tool for development and staging web apps. A floating button lets anyone using an internal build describe a change on the screen they are looking at. Snag captures the request together with a screenshot and app context, and a multi-tenant relay backend launches an AI coding agent (currently Cursor Cloud Agents) against the project's repository. Status, branch, and PR links show up back inside the app.
+Snag is an in-app change-request tool for development and staging web apps. A slim tab at the bottom of the screen lets anyone using an internal build describe a change on the screen they are looking at. Snag captures the request together with a screenshot and app context, and a multi-tenant relay backend launches an AI coding agent (currently Cursor Cloud Agents) against the project's repository. Status, branch, and PR links show up back inside the app.
 
 ## Documentation
 
