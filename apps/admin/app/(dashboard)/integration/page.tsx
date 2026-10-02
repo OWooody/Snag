@@ -4,7 +4,7 @@ import { getActiveProject, getUserContext } from "@/lib/auth";
 
 export default async function IntegrationPage() {
   const ctx = await getUserContext();
-  const project = getActiveProject(ctx.projects);
+  const project = getActiveProject(ctx);
   const relayUrl =
     process.env.NEXT_PUBLIC_SNAG_RELAY_URL ??
     `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/relay`;

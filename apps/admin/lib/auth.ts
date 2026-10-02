@@ -1,6 +1,6 @@
 import { SAFE_PROJECT_COLUMNS, type SnagOrganization, type SnagProjectSafe } from "@snag/shared";
 import { redirect } from "next/navigation";
-import { getEffectiveImpersonationOrgId } from "@/lib/impersonation";
+import { getEffectiveImpersonationOrgId, getImpersonatedProjectSlug } from "@/lib/impersonation";
 import { createServiceClient } from "@/lib/service";
 import { createClient } from "@/lib/supabase/server";
 
@@ -11,6 +11,8 @@ export interface UserContext {
   organizations: SnagOrganization[];
   projects: SnagProjectSafe[];
   impersonatingOrgId: string | null;
+  /** Project chosen when impersonation started; falls back to the newest project. */
+  activeProjectSlug: string | null;
   /** organization_id → role for the current user */
   orgRoles: Record<string, string>;
 }
@@ -47,8 +49,10 @@ export async function getUserContext(): Promise<UserContext> {
       .filter(Boolean) ?? [];
 
   let projects: SnagProjectSafe[] = [];
+  let activeProjectSlug: string | null = null;
 
   if (impersonatingOrgId) {
+    activeProjectSlug = await getImpersonatedProjectSlug();
     const service = createServiceClient();
     const [{ data: impersonatedOrg }, { data: impersonatedProjects }] = await Promise.all([
       service.from("snag_organizations").select("*").eq("id", impersonatingOrgId).single(),
@@ -81,6 +85,7 @@ export async function getUserContext(): Promise<UserContext> {
     organizations,
     projects,
     impersonatingOrgId,
+    activeProjectSlug,
     orgRoles,
   };
 }
@@ -94,12 +99,12 @@ export async function requirePlatformAdmin(): Promise<UserContext> {
 }
 
 export function getActiveProject(
-  projects: SnagProjectSafe[],
-  slug?: string,
+  ctx: Pick<UserContext, "projects" | "activeProjectSlug">,
 ): SnagProjectSafe | null {
+  const { projects, activeProjectSlug } = ctx;
   if (projects.length === 0) return null;
-  if (slug) {
-    return projects.find((p) => p.slug === slug) ?? projects[0];
+  if (activeProjectSlug) {
+    return projects.find((p) => p.slug === activeProjectSlug) ?? projects[0];
   }
   return projects[0];
 }

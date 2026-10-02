@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { writeAuditLog } from "@/lib/audit";
 import { requirePlatformAdmin } from "@/lib/auth";
-import { IMPERSONATE_COOKIE } from "@/lib/impersonation";
+import { safeImpersonationRedirectPath, setImpersonationCookies } from "@/lib/impersonation";
 import { createServiceClient } from "@/lib/service";
 
 /** POST only: a GET handler would run on Next.js link prefetches. */
@@ -25,21 +25,33 @@ export async function POST(
     return NextResponse.redirect(`${base}/platform/tenants`, 303);
   }
 
-  await writeAuditLog({
-    actorId: ctx.userId,
-    action: "impersonation.start",
-    targetType: "snag_organizations",
-    targetId: project.organization_id,
-    metadata: { project_slug: slug, project_id: project.id },
-  });
+  const form = await request.formData().catch(() => null);
+  const next = safeImpersonationRedirectPath(form?.get("next"));
 
-  const response = NextResponse.redirect(`${base}/dashboard`, 303);
-  response.cookies.set(IMPERSONATE_COOKIE, project.organization_id, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: 60 * 60,
-    path: "/",
+  if (ctx.impersonatingOrgId && ctx.impersonatingOrgId !== project.organization_id) {
+    await writeAuditLog({
+      actorId: ctx.userId,
+      action: "impersonation.stop",
+      targetType: "snag_organizations",
+      targetId: ctx.impersonatingOrgId,
+      metadata: {},
+    });
+  }
+
+  if (ctx.impersonatingOrgId !== project.organization_id) {
+    await writeAuditLog({
+      actorId: ctx.userId,
+      action: "impersonation.start",
+      targetType: "snag_organizations",
+      targetId: project.organization_id,
+      metadata: { project_slug: slug, project_id: project.id },
+    });
+  }
+
+  const response = NextResponse.redirect(`${base}${next}`, 303);
+  setImpersonationCookies(response, {
+    organizationId: project.organization_id,
+    projectSlug: slug,
   });
   return response;
 }

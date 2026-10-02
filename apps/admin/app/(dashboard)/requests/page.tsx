@@ -3,7 +3,7 @@ import { getActiveProject, getUserContext } from "@/lib/auth";
 
 export default async function RequestsPage() {
   const ctx = await getUserContext();
-  const project = getActiveProject(ctx.projects);
+  const project = getActiveProject(ctx);
 
   if (!project) {
     return (

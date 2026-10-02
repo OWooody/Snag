@@ -8,14 +8,16 @@ import { REVIEW_STATUSES, computeUsageStats, fetchProjectRequests } from "@/lib/
 
 export default async function DashboardPage() {
   const ctx = await getUserContext();
-  const project = getActiveProject(ctx.projects);
+  const project = getActiveProject(ctx);
 
   if (!project) {
     return (
       <div className="space-y-2">
         <h1 className="text-2xl font-semibold">Dashboard</h1>
         <p className="text-zinc-500">
-          No project assigned yet. Contact your Snag administrator to get access.
+          {ctx.isPlatformAdmin
+            ? "Pick a tenant from the switcher in the sidebar to view its dashboard."
+            : "No project assigned yet. Contact your Snag administrator to get access."}
         </p>
       </div>
     );

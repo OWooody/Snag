@@ -8,7 +8,7 @@ export default async function RequestDetailPage({
 }) {
   const { id } = await params;
   const ctx = await getUserContext();
-  const project = getActiveProject(ctx.projects);
+  const project = getActiveProject(ctx);
 
   if (!project) {
     return (

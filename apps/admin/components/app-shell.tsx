@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { TenantSwitcher, type TenantOption } from "@/components/tenant-switcher";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -24,6 +25,7 @@ interface AppShellProps {
   isPlatformAdmin: boolean;
   impersonating: boolean;
   projectSlug?: string;
+  tenants?: TenantOption[];
 }
 
 const companyLinks = [
@@ -45,9 +47,13 @@ export function AppShell({
   email,
   isPlatformAdmin,
   impersonating,
+  projectSlug,
+  tenants = [],
 }: AppShellProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const activeTenantSlug = impersonating ? (projectSlug ?? null) : null;
+  const activeTenant = tenants.find((t) => t.slug === activeTenantSlug);
 
   async function signOut() {
     const supabase = createClient();
@@ -63,6 +69,11 @@ export function AppShell({
           <Building2 className="h-5 w-5" />
           <span className="font-semibold">Snag Admin</span>
         </div>
+        {isPlatformAdmin && (
+          <div className="border-b border-zinc-200 p-3">
+            <TenantSwitcher tenants={tenants} activeSlug={activeTenantSlug} />
+          </div>
+        )}
         <nav className="flex flex-1 flex-col gap-1 p-3">
           {companyLinks.map((link) => {
             const Icon = link.icon;
@@ -118,7 +129,13 @@ export function AppShell({
       <div className="flex min-w-0 flex-1 flex-col">
         {impersonating && (
           <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
-            Viewing as company. Changes you make are saved to this company and logged under your account.{" "}
+            Viewing as{" "}
+            <span className="font-medium">
+              {activeTenant
+                ? `${activeTenant.organizationName ?? activeTenant.name} (${activeTenant.slug})`
+                : "company"}
+            </span>
+            . Changes you make are saved to this company and logged under your account.{" "}
             <a href="/platform/stop-impersonate" className="underline">
               Exit impersonation
             </a>

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { writeAuditLog } from "@/lib/audit";
 import { requirePlatformAdmin } from "@/lib/auth";
-import { IMPERSONATE_COOKIE } from "@/lib/impersonation";
+import { setImpersonationCookies } from "@/lib/impersonation";
 
 export async function GET(request: Request) {
   const ctx = await requirePlatformAdmin();
@@ -18,12 +18,6 @@ export async function GET(request: Request) {
   }
 
   const response = NextResponse.redirect(`${base}/platform/tenants`);
-  response.cookies.set(IMPERSONATE_COOKIE, "", {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: 0,
-    path: "/",
-  });
+  setImpersonationCookies(response, null);
   return response;
 }
