@@ -6,7 +6,9 @@ import type { SnagRequestRow, SnagRequestStatus } from "../protocol";
 import { displaySummaryForRequest } from "../requester-questions";
 import { LightMarkdown } from "../light-markdown";
 import { GLASS_SURFACE } from "../sheet";
+import { withAlpha } from "../styles";
 import type { SnagTheme } from "../theme";
+import { FilterChip } from "./controls";
 
 const POLL_INTERVAL_MS = 10_000;
 const MAX_REPLY_LENGTH = 2000;
@@ -19,6 +21,8 @@ interface RequestsListProps {
   followupsEnabled?: boolean;
   /** Request to show expanded and scroll to, e.g. the one just submitted. */
   focusRequestId?: string | null;
+  /** Switch to the New request tab (empty-state call to action). */
+  onNewRequest?: () => void;
 }
 
 export function RequestsList({
@@ -26,8 +30,10 @@ export function RequestsList({
   refreshKey = 0,
   followupsEnabled = false,
   focusRequestId = null,
+  onNewRequest,
 }: RequestsListProps) {
   const [rows, setRows] = useState<SnagRequestRow[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [currentRequester, setCurrentRequester] = useState<string | null>(null);
   const [mineOnly, setMineOnly] = useState(true);
@@ -51,6 +57,7 @@ export function RequestsList({
     if (state.agent_mode) setAgentMode(state.agent_mode);
     setCurrentRequester(requester);
     setRefreshing(false);
+    setLoaded(true);
   }, []);
 
   useEffect(() => {
@@ -97,15 +104,35 @@ export function RequestsList({
     return true;
   });
 
-  const emptyMessage = () => {
-    if (followupsEnabled && needsAttentionOnly && mineOnly) {
-      return "Nothing needs you right now.";
+  const filteringNeedsYou = followupsEnabled && needsAttentionOnly;
+  const hiddenByFilters = rows.length > 0;
+  const emptyState = (): { title: string; message: string; caughtUp: boolean } => {
+    if (filteringNeedsYou && mineOnly) {
+      return {
+        title: "You're all caught up",
+        message: "Nothing needs you right now.",
+        caughtUp: true,
+      };
     }
-    if (followupsEnabled && needsAttentionOnly) {
-      return "Nothing needs a reply right now. Uncheck Needs you to see all.";
+    if (filteringNeedsYou) {
+      return {
+        title: "You're all caught up",
+        message: "Nothing needs a reply right now. Turn off Needs you to see every request.",
+        caughtUp: true,
+      };
     }
-    if (mineOnly) return "No requests from you yet.";
-    return "No requests yet. Tap the button on any screen to file one.";
+    if (mineOnly && currentRequester) {
+      return {
+        title: "No requests from you yet",
+        message: "Share what's on your mind and you can follow it here.",
+        caughtUp: false,
+      };
+    }
+    return {
+      title: "No requests yet",
+      message: "Share what's on your mind from any screen and track it here.",
+      caughtUp: false,
+    };
   };
 
   return (
@@ -115,55 +142,27 @@ export function RequestsList({
           display: "flex",
           justifyContent: "flex-end",
           alignItems: "center",
-          gap: 12,
+          gap: 8,
           marginBottom: 12,
           flexWrap: "wrap",
         }}
       >
         {followupsEnabled ? (
-          <label
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              fontSize: 13,
-              color: theme.text,
-              cursor: "pointer",
-              userSelect: "none",
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={needsAttentionOnly}
-              onChange={(event) => setNeedsAttentionChoice(event.target.checked)}
-            />
-            Needs you
-          </label>
+          <FilterChip
+            label="Needs you"
+            active={needsAttentionOnly}
+            theme={theme}
+            onChange={setNeedsAttentionChoice}
+          />
         ) : null}
         {currentRequester ? (
-          <label
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              fontSize: 13,
-              color: theme.text,
-              cursor: "pointer",
-              userSelect: "none",
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={mineOnly}
-              onChange={(event) => setMineOnly(event.target.checked)}
-            />
-            Mine
-          </label>
+          <FilterChip label="Mine" active={mineOnly} theme={theme} onChange={setMineOnly} />
         ) : null}
         <button
           type="button"
           onClick={() => void load()}
           disabled={refreshing}
+          className="snag-focus"
           style={{
             border: "none",
             background: "transparent",
@@ -171,15 +170,36 @@ export function RequestsList({
             fontWeight: 700,
             cursor: refreshing ? "wait" : "pointer",
             fontSize: 13,
+            marginLeft: 4,
           }}
         >
           {refreshing ? "Refreshing…" : "Refresh"}
         </button>
       </div>
-      {visibleRows.length === 0 ? (
-        <p style={{ textAlign: "center", color: theme.textMuted, fontSize: 14, marginTop: 32 }}>
-          {emptyMessage()}
-        </p>
+      {!loaded ? (
+        <div aria-busy="true" aria-label="Loading requests">
+          {[0, 1, 2].map((index) => (
+            <SkeletonCard key={index} wide={index !== 1} />
+          ))}
+        </div>
+      ) : visibleRows.length === 0 ? (
+        <EmptyState
+          theme={theme}
+          {...emptyState()}
+          action={
+            hiddenByFilters
+              ? {
+                  label: "Show all requests",
+                  onClick: () => {
+                    setNeedsAttentionChoice(false);
+                    setMineOnly(false);
+                  },
+                }
+              : onNewRequest
+                ? { label: "New request", onClick: onNewRequest }
+                : null
+          }
+        />
       ) : (
         visibleRows.map((row) => {
           const needsRequester =
@@ -208,6 +228,141 @@ export function RequestsList({
           );
         })
       )}
+    </div>
+  );
+}
+
+function SkeletonCard({ wide }: { wide: boolean }) {
+  const bar = (width: number | string, height: number) => (
+    <span
+      className="snag-shimmer"
+      style={{ display: "block", width, height, borderRadius: 6 }}
+    />
+  );
+  return (
+    <div
+      aria-hidden
+      style={{
+        borderRadius: 12,
+        padding: 12,
+        marginBottom: 10,
+        background: GLASS_SURFACE,
+        border: "1px solid rgba(255,255,255,0.4)",
+        display: "flex",
+        flexDirection: "column",
+        gap: 10,
+      }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between" }}>
+        {bar(84, 10)}
+        {bar(64, 10)}
+      </div>
+      {bar(wide ? "82%" : "64%", 14)}
+      {bar(wide ? "54%" : "40%", 11)}
+    </div>
+  );
+}
+
+function EmptyState({
+  theme,
+  title,
+  message,
+  caughtUp,
+  action,
+}: {
+  theme: SnagTheme;
+  title: string;
+  message: string;
+  caughtUp: boolean;
+  action: { label: string; onClick: () => void } | null;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        textAlign: "center",
+        padding: "28px 16px 16px",
+      }}
+    >
+      <span
+        aria-hidden
+        style={{
+          width: 52,
+          height: 52,
+          borderRadius: 999,
+          background: withAlpha(theme.accent, 0.1),
+          border: `1px solid ${withAlpha(theme.accent, 0.18)}`,
+          color: theme.accent,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          marginBottom: 14,
+        }}
+      >
+        {caughtUp ? (
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" />
+            <path
+              d="M8 12.5l2.8 2.8L16 9.8"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        ) : (
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+            <path
+              d="M22 12h-6l-2 3h-4l-2-3H2"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <path
+              d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        )}
+      </span>
+      <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: theme.text }}>{title}</p>
+      <p
+        style={{
+          margin: "6px 0 0",
+          maxWidth: 300,
+          fontSize: 13,
+          lineHeight: 1.45,
+          color: theme.textMuted,
+        }}
+      >
+        {message}
+      </p>
+      {action ? (
+        <button
+          type="button"
+          onClick={action.onClick}
+          className="snag-focus"
+          style={{
+            marginTop: 16,
+            padding: "8px 16px",
+            borderRadius: 999,
+            border: `1px solid ${withAlpha(theme.accent, 0.35)}`,
+            background: withAlpha(theme.accent, 0.1),
+            color: theme.accent,
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          {action.label}
+        </button>
+      ) : null}
     </div>
   );
 }

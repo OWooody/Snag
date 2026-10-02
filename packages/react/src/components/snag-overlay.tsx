@@ -13,6 +13,8 @@ import {
 } from "../config";
 import type { SnagScreenshot } from "../protocol";
 import { captureScreenshot } from "../screenshot";
+import { TAB_REST_SHAPE, type TabShape } from "../sheet";
+import { SnagStyles } from "../styles";
 import { FloatingButton } from "./floating-button";
 import { RequestPanel } from "./request-panel";
 
@@ -32,6 +34,8 @@ export function SnagOverlay() {
   const [runningCount, setRunningCount] = useState(0);
   const [environmentLabel, setEnvironmentLabel] = useState("");
   const [panelVisible, setPanelVisible] = useState(false);
+  const [opening, setOpening] = useState(false);
+  const [morphFrom, setMorphFrom] = useState<TabShape>(TAB_REST_SHAPE);
   const [initialTab, setInitialTab] = useState<"new" | "list">("new");
   const [screenshot, setScreenshot] = useState<SnagScreenshot | null>(null);
   const [mounted, setMounted] = useState(false);
@@ -132,28 +136,35 @@ export function SnagOverlay() {
 
   const theme = resolveTheme();
 
-  const openPanel = async (tab: "new" | "list" = "new") => {
+  const openPanel = async (tab: "new" | "list", from: TabShape) => {
+    if (opening) return;
+    setOpening(true);
     setInitialTab(tab);
+    setMorphFrom(from);
     // Capture BEFORE the panel mounts so it never appears in the screenshot.
     setScreenshot(await captureScreenshot());
     setPanelVisible(true);
+    setOpening(false);
   };
 
   return createPortal(
     <div data-snag-overlay="true">
+      <SnagStyles theme={theme} />
       {!panelVisible ? (
         <FloatingButton
           environmentLabel={environmentLabel}
           theme={theme}
           badgeCount={badgeCount}
           running={runningCount > 0}
-          onPress={() => void openPanel(badgeCount > 0 ? "list" : "new")}
+          busy={opening}
+          onPress={(shape) => void openPanel(badgeCount > 0 ? "list" : "new", shape)}
         />
       ) : null}
       {panelVisible ? (
         <RequestPanel
           screenshot={screenshot}
           theme={theme}
+          morphFrom={morphFrom}
           initialTab={initialTab}
           followupsEnabled={followupsEnabled}
           agentMode={agentMode}

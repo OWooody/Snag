@@ -17,18 +17,31 @@ import {
 import { describeElement, elementLabel } from "../element-info";
 import type { SnagScreenshot } from "../protocol";
 import {
+  GLASS_BLUR_SATURATE,
+  GLASS_FILL,
   GLASS_SURFACE,
   TAB_MOTION_MS,
+  TAB_PEEK_SHAPE,
+  TAB_REST_SHAPE,
   glassBackdropStyle,
-  glassSheetStyle,
-  useSheetMotion,
+  lerpShape,
+  tabPath,
+  tabShapeWidth,
+  useMorphMotion,
+  type TabShape,
 } from "../sheet";
 import type { SnagTheme } from "../theme";
+import { Switch } from "./controls";
 import { ElementPicker } from "./element-picker";
+import { ChatIcon, TAB_LABEL } from "./floating-button";
 import { RequestsList } from "./requests-list";
 import { ScreenshotAnnotator } from "./screenshot-annotator";
 
 const MAX_PROMPT_LENGTH = 2000;
+const SHEET_MAX_WIDTH = 560;
+const SHEET_FLARE = 14;
+const SHEET_CORNER = 18;
+const SHEET_STROKE = "rgba(255, 255, 255, 0.6)";
 /** Keep in sync with the relay's `elements` max. */
 const MAX_ELEMENTS = 3;
 
@@ -53,11 +66,14 @@ interface RequestPanelProps {
   agentMode?: "plan_only" | "execute" | null;
   /** Pending needs_input count for the Requests tab badge. */
   badgeCount?: number;
+  /** Tab shape at the moment it was pressed; the sheet grows out of it. */
+  morphFrom?: TabShape;
 }
 
 export function RequestPanel({
   screenshot,
   theme,
+  morphFrom = TAB_REST_SHAPE,
   onClose,
   initialTab = "new",
   followupsEnabled = false,
@@ -168,7 +184,19 @@ export function RequestPanel({
     setTab("new");
   };
 
-  const { open, requestClose } = useSheetMotion(onClose);
+  const { open, progress, requestClose } = useMorphMotion(onClose);
+  const [sheetNode, setSheetNode] = useState<HTMLDivElement | null>(null);
+  const [sheetSize, setSheetSize] = useState({ width: 0, height: 0 });
+
+  useLayoutEffect(() => {
+    if (!sheetNode) return;
+    const update = () =>
+      setSheetSize({ width: sheetNode.offsetWidth, height: sheetNode.offsetHeight });
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(sheetNode);
+    return () => observer.disconnect();
+  }, [sheetNode]);
 
   if (annotating && workingScreenshot) {
     return (
@@ -201,6 +229,24 @@ export function RequestPanel({
   const canPickMore = elements.length < MAX_ELEMENTS;
   const pickLabel = elements.length > 0 ? "Add element" : "Select element";
 
+  // Narrow viewports get an edge-to-edge sheet, so the flare would fall off-screen.
+  const fullFlare =
+    sheetSize.width >= SHEET_MAX_WIDTH + 2 * SHEET_FLARE ? SHEET_FLARE : 0;
+  const fullShape: TabShape = {
+    w: Math.max(0, sheetSize.width - 2 * (fullFlare + SHEET_CORNER)),
+    h: sheetSize.height,
+    f: fullFlare,
+    r: SHEET_CORNER,
+  };
+  const t = Math.min(1, Math.max(0, progress));
+  const shape = lerpShape(open ? morphFrom : TAB_REST_SHAPE, fullShape, t);
+  const outline = { ...shape, h: shape.h + 1 };
+  const shapeX = (sheetSize.width - tabShapeWidth(shape)) / 2;
+  const shapeY = sheetSize.height - shape.h;
+  const contentReveal = Math.min(1, Math.max(0, (t - 0.55) / 0.45));
+  const labelFade =
+    open && morphFrom.h >= TAB_PEEK_SHAPE.h ? Math.max(0, 1 - t * 5) : 0;
+
   return (
     <div
       role="dialog"
@@ -220,346 +266,410 @@ export function RequestPanel({
       onClick={requestClose}
     >
       <div
+        ref={setSheetNode}
         onClick={(event) => event.stopPropagation()}
         style={{
-          width: "min(560px, 100%)",
+          position: "relative",
+          width: `min(${SHEET_MAX_WIDTH + 2 * SHEET_FLARE}px, 100%)`,
           maxHeight: "85vh",
-          overflow: "auto",
-          borderTopLeftRadius: 16,
-          borderTopRightRadius: 16,
-          padding: "20px 20px 28px",
-          ...glassSheetStyle(open),
+          display: "flex",
+          flexDirection: "column",
         }}
       >
         <div
+          aria-hidden
           style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: 16,
+            position: "absolute",
+            inset: 0,
+            clipPath: `path('${tabPath(outline, true, shapeX, shapeY)}')`,
+            background: GLASS_FILL,
+            backdropFilter: GLASS_BLUR_SATURATE,
+            WebkitBackdropFilter: GLASS_BLUR_SATURATE,
+          }}
+        />
+        <svg
+          aria-hidden
+          width={sheetSize.width}
+          height={sheetSize.height + 1}
+          style={{
+            position: "absolute",
+            left: 0,
+            top: 0,
+            overflow: "visible",
+            pointerEvents: "none",
           }}
         >
-          <h2 style={{ margin: 0, fontSize: 18, color: theme.text }}>Snag</h2>
-          <button
-            type="button"
-            onClick={requestClose}
-            aria-label="Close"
+          <path
+            d={tabPath(outline, false, shapeX, shapeY)}
+            fill="none"
+            stroke={SHEET_STROKE}
+            strokeWidth={1}
+          />
+        </svg>
+        {labelFade > 0 ? (
+          <div
+            aria-hidden
             style={{
-              width: 30,
-              height: 30,
-              borderRadius: 15,
-              border: "1px solid rgba(255,255,255,0.55)",
-              background: GLASS_SURFACE,
+              position: "absolute",
+              left: 0,
+              right: 0,
+              bottom: TAB_PEEK_SHAPE.h / 2,
+              transform: "translateY(50%)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
               color: theme.text,
-              cursor: "pointer",
-              fontSize: 18,
-              lineHeight: 1,
+              fontSize: 13,
+              fontWeight: 600,
+              letterSpacing: "-0.01em",
+              whiteSpace: "nowrap",
+              opacity: labelFade,
+              pointerEvents: "none",
             }}
           >
-            ×
-          </button>
-        </div>
-
+            <ChatIcon />
+            {TAB_LABEL}
+          </div>
+        ) : null}
         <div
           style={{
-            display: "flex",
-            gap: 8,
-            marginBottom: 16,
+            position: "relative",
+            overflow: "auto",
+            maxHeight: "85vh",
+            boxSizing: "border-box",
+            padding: `20px ${20 + fullFlare}px 28px`,
+            opacity: contentReveal,
+            transform: `translateY(${(1 - contentReveal) * 10}px)`,
+            pointerEvents: contentReveal > 0.9 ? "auto" : "none",
           }}
         >
-          <TabButton
-            active={tab === "new"}
-            label="New request"
-            theme={theme}
-            onClick={() => {
-              if (phase === "done") {
-                startAnother();
-                return;
-              }
-              setTab("new");
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: 16,
             }}
-          />
-          <TabButton
-            active={tab === "list"}
-            label="Requests"
-            theme={theme}
-            badgeCount={badgeCount}
-            onClick={() => {
-              setFocusRequestId(null);
-              setTab("list");
-            }}
-          />
-        </div>
+          >
+            <h2 style={{ margin: 0, fontSize: 18, color: theme.text }}>Snag</h2>
+            <button
+              type="button"
+              onClick={requestClose}
+              aria-label="Close"
+              style={{
+                width: 30,
+                height: 30,
+                borderRadius: 15,
+                border: "1px solid rgba(255,255,255,0.55)",
+                background: GLASS_SURFACE,
+                color: theme.text,
+                cursor: "pointer",
+                fontSize: 18,
+                lineHeight: 1,
+              }}
+            >
+              ×
+            </button>
+          </div>
 
-        <AnimatedTabBody tab={tab}>
-          {(activeTab) =>
-            activeTab === "list" ? (
-              <RequestsList
-                theme={theme}
-                refreshKey={listRefreshKey}
-                followupsEnabled={followupsEnabled}
-                focusRequestId={focusRequestId}
-              />
-            ) : phase === "done" ? (
-              <div>
-                <p style={{ color: theme.text, fontSize: 15 }}>
-                  {agentMode === "execute"
-                    ? "Request submitted. The agent plans the change first."
-                    : "Request submitted. An agent is working on it."}
-                </p>
-                {agentMode === "execute" ? (
-                  <p style={{ color: theme.textMuted, fontSize: 13, lineHeight: 1.45 }}>
-                    {followupsEnabled
-                      ? "If anything is unclear you'll get questions here. "
-                      : ""}
-                    Depending on the change, a developer may check it first, or you may be
-                    asked to try a preview before it goes live. Progress shows on the request
-                    card.
-                  </p>
-                ) : null}
-                {agentUrl ? (
-                  <a
-                    href={agentUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{ color: theme.accent, fontWeight: 700 }}
-                  >
-                    Open agent
-                  </a>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFocusRequestId(submittedId);
-                    setTab("list");
-                  }}
-                  style={{
-                    display: "block",
-                    marginTop: 20,
-                    width: "100%",
-                    padding: "12px 16px",
-                    borderRadius: 10,
-                    border: "none",
-                    background: theme.accent,
-                    color: "#fff",
-                    fontWeight: 700,
-                    cursor: "pointer",
-                  }}
-                >
-                  {submittedId ? "Track this request" : "View requests"}
-                </button>
-                <button
-                  type="button"
-                  onClick={startAnother}
-                  style={{
-                    display: "block",
-                    marginTop: 10,
-                    width: "100%",
-                    padding: "12px 16px",
-                    borderRadius: 10,
-                    border: "1px solid rgba(255,255,255,0.55)",
-                    background: GLASS_SURFACE,
-                    color: theme.text,
-                    fontWeight: 700,
-                    cursor: "pointer",
-                  }}
-                >
-                  New request
-                </button>
-              </div>
-            ) : (
-              <>
-                <label
-                  htmlFor="snag-prompt"
-                  style={{
-                    display: "block",
-                    fontSize: 11,
-                    fontWeight: 700,
-                    letterSpacing: 0.5,
-                    color: theme.textMuted,
-                    marginBottom: 8,
-                  }}
-                >
-                  CHANGE REQUEST
-                </label>
-                <textarea
-                  id="snag-prompt"
-                  value={prompt}
-                  onChange={(event) => setPrompt(event.target.value)}
-                  maxLength={MAX_PROMPT_LENGTH}
-                  disabled={phase === "submitting"}
-                  placeholder="What should change on this screen?"
-                  rows={5}
-                  style={{
-                    width: "100%",
-                    boxSizing: "border-box",
-                    borderRadius: 12,
-                    border: "1px solid rgba(255,255,255,0.55)",
-                    background: GLASS_SURFACE,
-                    color: theme.text,
-                    padding: 12,
-                    fontSize: 14,
-                    resize: "vertical",
-                    fontFamily: "inherit",
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              marginBottom: 16,
+            }}
+          >
+            <TabButton
+              active={tab === "new"}
+              label="New request"
+              theme={theme}
+              onClick={() => {
+                if (phase === "done") {
+                  startAnother();
+                  return;
+                }
+                setTab("new");
+              }}
+            />
+            <TabButton
+              active={tab === "list"}
+              label="Requests"
+              theme={theme}
+              badgeCount={badgeCount}
+              onClick={() => {
+                setFocusRequestId(null);
+                setTab("list");
+              }}
+            />
+          </div>
+
+          <AnimatedTabBody tab={tab}>
+            {(activeTab) =>
+              activeTab === "list" ? (
+                <RequestsList
+                  theme={theme}
+                  refreshKey={listRefreshKey}
+                  followupsEnabled={followupsEnabled}
+                  focusRequestId={focusRequestId}
+                  onNewRequest={() => {
+                    if (phase === "done") {
+                      startAnother();
+                      return;
+                    }
+                    setTab("new");
                   }}
                 />
-
-                {workingScreenshot ? (
-                  <div
+              ) : phase === "done" ? (
+                <div>
+                  <p style={{ color: theme.text, fontSize: 15 }}>
+                    {agentMode === "execute"
+                      ? "Request submitted. The agent plans the change first."
+                      : "Request submitted. An agent is working on it."}
+                  </p>
+                  {agentMode === "execute" ? (
+                    <p style={{ color: theme.textMuted, fontSize: 13, lineHeight: 1.45 }}>
+                      {followupsEnabled
+                        ? "If anything is unclear you'll get questions here. "
+                        : ""}
+                      Depending on the change, a developer may check it first, or you may be
+                      asked to try a preview before it goes live. Progress shows on the request
+                      card.
+                    </p>
+                  ) : null}
+                  {agentUrl ? (
+                    <a
+                      href={agentUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: theme.accent, fontWeight: 700 }}
+                    >
+                      Open agent
+                    </a>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFocusRequestId(submittedId);
+                      setTab("list");
+                    }}
                     style={{
-                      marginTop: 16,
-                      borderRadius: 12,
-                      background: GLASS_SURFACE,
-                      border: "1px solid rgba(255,255,255,0.4)",
-                      padding: 12,
+                      display: "block",
+                      marginTop: 20,
+                      width: "100%",
+                      padding: "12px 16px",
+                      borderRadius: 10,
+                      border: "none",
+                      background: theme.accent,
+                      color: "#fff",
+                      fontWeight: 700,
+                      cursor: "pointer",
                     }}
                   >
-                    <div style={{ position: "relative" }}>
-                      <button
-                        type="button"
-                        onClick={() => setAnnotating(true)}
-                        disabled={phase === "submitting"}
-                        aria-label="Mark up screenshot"
-                        style={{
-                          display: "block",
-                          width: "100%",
-                          padding: 0,
-                          border: "none",
-                          background: "transparent",
-                          cursor: phase === "submitting" ? "not-allowed" : "pointer",
-                        }}
-                      >
-                        <img
-                          src={`data:image/jpeg;base64,${(previewScreenshot ?? workingScreenshot).base64}`}
-                          alt="Screenshot preview"
-                          style={{
-                            width: "100%",
-                            maxHeight: 160,
-                            objectFit: "cover",
-                            borderRadius: 8,
-                            display: "block",
-                          }}
-                        />
-                      </button>
-                      {/* Pills sit outside the image button; "Mark up" lets clicks fall through to it. */}
-                      <div
-                        style={{
-                          position: "absolute",
-                          left: 10,
-                          bottom: 10,
-                          display: "flex",
-                          gap: 6,
-                          pointerEvents: "none",
-                        }}
-                      >
-                        <span style={overlayPillStyle}>
-                          {isAnnotated ? "Marked up · Edit" : "Mark up"}
-                        </span>
-                        {canPickMore ? (
-                          <button
-                            type="button"
-                            onClick={() => setPicking(true)}
-                            disabled={phase === "submitting"}
-                            style={{
-                              ...overlayPillStyle,
-                              border: "none",
-                              pointerEvents: "auto",
-                              cursor: phase === "submitting" ? "not-allowed" : "pointer",
-                            }}
-                          >
-                            {pickLabel}
-                          </button>
-                        ) : null}
-                      </div>
-                    </div>
-                    <PickedElementList
-                      elements={elements}
-                      theme={theme}
-                      disabled={phase === "submitting"}
-                      onRemove={removeElement}
-                    />
-                    <label
+                    {submittedId ? "Track this request" : "View requests"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={startAnother}
+                    style={{
+                      display: "block",
+                      marginTop: 10,
+                      width: "100%",
+                      padding: "12px 16px",
+                      borderRadius: 10,
+                      border: "1px solid rgba(255,255,255,0.55)",
+                      background: GLASS_SURFACE,
+                      color: theme.text,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    New request
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <label
+                    htmlFor="snag-prompt"
+                    style={{
+                      display: "block",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      letterSpacing: 0.5,
+                      color: theme.textMuted,
+                      marginBottom: 8,
+                    }}
+                  >
+                    CHANGE REQUEST
+                  </label>
+                  <textarea
+                    id="snag-prompt"
+                    value={prompt}
+                    onChange={(event) => setPrompt(event.target.value)}
+                    maxLength={MAX_PROMPT_LENGTH}
+                    disabled={phase === "submitting"}
+                    placeholder="What should change on this screen?"
+                    rows={5}
+                    style={{
+                      width: "100%",
+                      boxSizing: "border-box",
+                      borderRadius: 12,
+                      border: "1px solid rgba(255,255,255,0.55)",
+                      background: GLASS_SURFACE,
+                      color: theme.text,
+                      padding: 12,
+                      fontSize: 14,
+                      resize: "vertical",
+                      fontFamily: "inherit",
+                    }}
+                  />
+
+                  {workingScreenshot ? (
+                    <div
                       style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 8,
-                        marginTop: 10,
-                        fontSize: 13,
-                        color: theme.text,
-                        cursor: "pointer",
+                        marginTop: 16,
+                        borderRadius: 12,
+                        background: GLASS_SURFACE,
+                        border: "1px solid rgba(255,255,255,0.4)",
+                        padding: 12,
                       }}
                     >
-                      <input
-                        type="checkbox"
-                        checked={includeScreenshot}
-                        onChange={(event) =>
-                          setIncludeScreenshot(event.target.checked)
-                        }
+                      <div style={{ position: "relative" }}>
+                        <button
+                          type="button"
+                          onClick={() => setAnnotating(true)}
+                          disabled={phase === "submitting"}
+                          aria-label="Mark up screenshot"
+                          style={{
+                            display: "block",
+                            width: "100%",
+                            padding: 0,
+                            border: "none",
+                            background: "transparent",
+                            cursor: phase === "submitting" ? "not-allowed" : "pointer",
+                          }}
+                        >
+                          <img
+                            src={`data:image/jpeg;base64,${(previewScreenshot ?? workingScreenshot).base64}`}
+                            alt="Screenshot preview"
+                            style={{
+                              width: "100%",
+                              maxHeight: 160,
+                              objectFit: "cover",
+                              borderRadius: 8,
+                              display: "block",
+                            }}
+                          />
+                        </button>
+                        {/* Pills sit outside the image button; "Mark up" lets clicks fall through to it. */}
+                        <div
+                          style={{
+                            position: "absolute",
+                            left: 10,
+                            bottom: 10,
+                            display: "flex",
+                            gap: 6,
+                            pointerEvents: "none",
+                          }}
+                        >
+                          <span style={overlayPillStyle}>
+                            {isAnnotated ? "Marked up · Edit" : "Mark up"}
+                          </span>
+                          {canPickMore ? (
+                            <button
+                              type="button"
+                              onClick={() => setPicking(true)}
+                              disabled={phase === "submitting"}
+                              style={{
+                                ...overlayPillStyle,
+                                border: "none",
+                                pointerEvents: "auto",
+                                cursor: phase === "submitting" ? "not-allowed" : "pointer",
+                              }}
+                            >
+                              {pickLabel}
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                      <PickedElementList
+                        elements={elements}
+                        theme={theme}
                         disabled={phase === "submitting"}
+                        onRemove={removeElement}
                       />
-                      Include screenshot with request
-                    </label>
-                  </div>
-                ) : (
-                  <div style={{ marginTop: 16 }}>
-                    {canPickMore ? (
-                      <button
-                        type="button"
-                        onClick={() => setPicking(true)}
+                      <div style={{ marginTop: 12 }}>
+                        <Switch
+                          checked={includeScreenshot}
+                          disabled={phase === "submitting"}
+                          theme={theme}
+                          onChange={setIncludeScreenshot}
+                        >
+                          Include screenshot with request
+                        </Switch>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ marginTop: 16 }}>
+                      {canPickMore ? (
+                        <button
+                          type="button"
+                          onClick={() => setPicking(true)}
+                          disabled={phase === "submitting"}
+                          style={{
+                            padding: "8px 12px",
+                            borderRadius: 8,
+                            border: "1px solid rgba(255,255,255,0.55)",
+                            background: GLASS_SURFACE,
+                            color: theme.text,
+                            fontWeight: 700,
+                            fontSize: 12,
+                            cursor: phase === "submitting" ? "not-allowed" : "pointer",
+                          }}
+                        >
+                          {pickLabel}
+                        </button>
+                      ) : null}
+                      <PickedElementList
+                        elements={elements}
+                        theme={theme}
                         disabled={phase === "submitting"}
-                        style={{
-                          padding: "8px 12px",
-                          borderRadius: 8,
-                          border: "1px solid rgba(255,255,255,0.55)",
-                          background: GLASS_SURFACE,
-                          color: theme.text,
-                          fontWeight: 700,
-                          fontSize: 12,
-                          cursor: phase === "submitting" ? "not-allowed" : "pointer",
-                        }}
-                      >
-                        {pickLabel}
-                      </button>
-                    ) : null}
-                    <PickedElementList
-                      elements={elements}
-                      theme={theme}
-                      disabled={phase === "submitting"}
-                      onRemove={removeElement}
-                    />
-                  </div>
-                )}
+                        onRemove={removeElement}
+                      />
+                    </div>
+                  )}
 
-                {errorMessage ? (
-                  <p style={{ color: theme.danger, fontSize: 13, marginTop: 12 }}>
-                    {errorMessage}
-                  </p>
-                ) : null}
+                  {errorMessage ? (
+                    <p style={{ color: theme.danger, fontSize: 13, marginTop: 12 }}>
+                      {errorMessage}
+                    </p>
+                  ) : null}
 
-                <button
-                  type="button"
-                  onClick={() => void submit()}
-                  disabled={phase === "submitting"}
-                  style={{
-                    display: "block",
-                    marginTop: 20,
-                    width: "100%",
-                    padding: "12px 16px",
-                    borderRadius: 10,
-                    border: "none",
-                    background: theme.accent,
-                    color: "#fff",
-                    fontWeight: 700,
-                    cursor: phase === "submitting" ? "wait" : "pointer",
-                    opacity: phase === "submitting" ? 0.7 : 1,
-                  }}
-                >
-                  {phase === "submitting" ? "Submitting…" : "Submit request"}
-                </button>
-              </>
-            )
-          }
-        </AnimatedTabBody>
+                  <button
+                    type="button"
+                    onClick={() => void submit()}
+                    disabled={phase === "submitting"}
+                    style={{
+                      display: "block",
+                      marginTop: 20,
+                      width: "100%",
+                      padding: "12px 16px",
+                      borderRadius: 10,
+                      border: "none",
+                      background: theme.accent,
+                      color: "#fff",
+                      fontWeight: 700,
+                      cursor: phase === "submitting" ? "wait" : "pointer",
+                      opacity: phase === "submitting" ? 0.7 : 1,
+                    }}
+                  >
+                    {phase === "submitting" ? "Submitting…" : "Submit request"}
+                  </button>
+                </>
+              )
+            }
+          </AnimatedTabBody>
+        </div>
       </div>
     </div>
   );
