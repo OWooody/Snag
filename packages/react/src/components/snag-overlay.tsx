@@ -171,7 +171,7 @@ export function SnagOverlay() {
   };
 
   return createPortal(
-    <div data-snag-overlay="true">
+    <div data-snag-overlay="true" dir="ltr">
       <SnagStyles theme={theme} />
       {!panelVisible ? (
         <FloatingButton

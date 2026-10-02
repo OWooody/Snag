@@ -172,7 +172,7 @@ export function Preview() {
         )}
       </main>
       {open ? (
-        <div data-snag-overlay="true">
+        <div data-snag-overlay="true" dir="ltr">
           <SnagStyles theme={defaultTheme} />
           <RequestPanel
             screenshot={null}

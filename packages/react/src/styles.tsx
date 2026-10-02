@@ -18,6 +18,15 @@ export function withAlpha(hex: string, alpha: number): string {
 export function SnagStyles({ theme }: { theme: SnagTheme }) {
   const root = "[data-snag-overlay]";
   const css = `
+/* Stay LTR when the host page is RTL. The repeated attribute beats rules like
+   html[dir=rtl] body * { direction: rtl !important }, including on descendants. */
+${root}${root},
+${root}${root} * {
+  direction: ltr !important;
+}
+${root}${root} {
+  unicode-bidi: isolate;
+}
 ${root} .snag-tab-glow { animation: snag-tab-glow 2.2s ease-in-out infinite; }
 ${root} .snag-tab-done-glow { animation: snag-tab-done-glow 3.4s ease-in-out infinite; }
 ${root} .snag-tab-sweep { animation: snag-tab-sweep 2.6s cubic-bezier(.65,0,.35,1) infinite; }
