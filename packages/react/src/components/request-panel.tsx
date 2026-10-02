@@ -44,6 +44,11 @@ const SHEET_CORNER = 18;
 const SHEET_STROKE = "rgba(255, 255, 255, 0.6)";
 /** Keep in sync with the relay's `elements` max. */
 const MAX_ELEMENTS = 3;
+const GO_STATUS = [
+  "Reading this screen…",
+  "Analyzing the request…",
+  "Doing the magic",
+];
 
 const overlayPillStyle: CSSProperties = {
   padding: "4px 8px",
@@ -82,6 +87,7 @@ export function RequestPanel({
 }: RequestPanelProps) {
   const [tab, setTab] = useState<Tab>(initialTab);
   const [phase, setPhase] = useState<Phase>("editing");
+  const [statusIndex, setStatusIndex] = useState(0);
   const [prompt, setPrompt] = useState("");
   const [includeScreenshot, setIncludeScreenshot] = useState(true);
   const [workingScreenshot, setWorkingScreenshot] = useState<SnagScreenshot | null>(
@@ -99,6 +105,21 @@ export function RequestPanel({
   const [focusRequestId, setFocusRequestId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [listRefreshKey, setListRefreshKey] = useState(0);
+
+  useEffect(() => {
+    if (phase !== "submitting") {
+      setStatusIndex(0);
+      return;
+    }
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setStatusIndex(GO_STATUS.length - 1);
+      return;
+    }
+    const id = window.setInterval(() => {
+      setStatusIndex((index) => (index + 1) % GO_STATUS.length);
+    }, 1400);
+    return () => window.clearInterval(id);
+  }, [phase]);
 
   const withHighlights = async (base: SnagScreenshot): Promise<SnagScreenshot> => {
     try {
@@ -663,7 +684,9 @@ export function RequestPanel({
                       opacity: phase === "submitting" ? 0.7 : 1,
                     }}
                   >
-                    {phase === "submitting" ? "Submitting…" : "Submit request"}
+                    <span aria-live="polite">
+                      {phase === "submitting" ? GO_STATUS[statusIndex] : "Go"}
+                    </span>
                   </button>
                 </>
               )
