@@ -5,15 +5,16 @@
  * by snag-relay. The HMAC-SHA256 signature is verified against
  * SNAG_WEBHOOK_SECRET using the RAW body before any parsing.
  *
- * When Cursor omits `summary` (known v0 API gap), we fall back to
- * GET /v0/agents/{id}/conversation and store the trailing assistant text.
+ * When Cursor omits `summary` (known v0 API gap), or a planning run's summary
+ * has no Snag plan, we fall back to GET /v0/agents/{id}/conversation and store
+ * the trailing assistant text.
  */
 
 import { createServiceClient } from "../_shared/supabase.ts";
 import {
   cursorProvider,
   mapCursorStatus,
-  resolveSummaryWithConversationFallback,
+  resolveTerminalSummary,
 } from "../_shared/agent_provider.ts";
 import {
   handleAgentTerminal,
@@ -91,14 +92,12 @@ Deno.serve(async (req) => {
       return new Response("Ignored", { status: 200 });
     }
 
-    let summary = payload.summary?.trim() || null;
-    if (!summary) {
-      summary = await resolveSummaryWithConversationFallback(
-        provider,
-        payload.id,
-        payload.summary,
-      );
-    }
+    const summary = await resolveTerminalSummary(
+      provider,
+      payload.id,
+      payload.summary,
+      row.phase,
+    );
 
     await handleAgentTerminal({ service, provider, project }, row, {
       status: cursorMapped,

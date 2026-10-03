@@ -18,6 +18,8 @@ import {
   cursorProvider,
   userFacingLaunchError,
   resolveSummaryWithConversationFallback,
+  resolveTerminalSummary,
+  summaryNeedsConversation,
   type AgentImage,
   type AgentProvider,
 } from "../_shared/agent_provider.ts";
@@ -660,15 +662,14 @@ async function listRequests(
       if (!task) continue;
 
       if (task.status === "finished" || task.status === "error") {
-        let summary = task.summary?.trim() || null;
-        if (!summary && conversationBackfills < MAX_CONVERSATION_BACKFILLS) {
-          conversationBackfills += 1;
-          summary = await resolveSummaryWithConversationFallback(
-            provider,
-            row.agent_id,
-            task.summary,
-          );
+        const needsConversation = summaryNeedsConversation(task.summary, row.phase);
+        if (needsConversation && conversationBackfills >= MAX_CONVERSATION_BACKFILLS) {
+          continue;
         }
+        if (needsConversation) conversationBackfills += 1;
+        const summary = needsConversation
+          ? await resolveTerminalSummary(provider, row.agent_id, task.summary, row.phase)
+          : task.summary?.trim() || null;
         await handleAgentTerminal({ service: serviceClient, provider, project }, row, {
           status: task.status,
           summary,

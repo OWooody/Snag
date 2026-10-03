@@ -5,6 +5,8 @@
  * imports) so it can be extracted into a standalone package later.
  */
 
+import { parseSnagPlan, SNAG_PLAN_HEADING } from "./plan_block.ts";
+
 export type AgentTaskStatus = "queued" | "running" | "finished" | "error";
 
 export interface AgentImage {
@@ -47,6 +49,7 @@ export interface AgentProvider {
 }
 
 const CURSOR_API_BASE = "https://api.cursor.com/v0";
+const MAX_STORED_SUMMARY_CHARS = 12_000;
 
 interface CursorAgentResponse {
   id: string;
@@ -76,6 +79,43 @@ export async function resolveSummaryWithConversationFallback(
 ): Promise<string | null> {
   const trimmed = apiSummary?.trim();
   if (trimmed) return trimmed;
+  return conversationSummary(provider, taskId);
+}
+
+/**
+ * Planning runs often finish with a one-line Cursor summary while the Snag
+ * plan is later in the thread. Read the conversation when that summary does
+ * not parse, and keep it when it contains a plan.
+ */
+export function summaryNeedsConversation(
+  apiSummary: string | null | undefined,
+  phase: string | null,
+): boolean {
+  const trimmed = apiSummary?.trim() || null;
+  if (phase === "planning") return !parseSnagPlan(trimmed);
+  return !trimmed;
+}
+
+export async function resolveTerminalSummary(
+  provider: AgentProvider,
+  taskId: string,
+  apiSummary: string | null | undefined,
+  phase: string | null,
+): Promise<string | null> {
+  const trimmed = apiSummary?.trim() || null;
+  if (!summaryNeedsConversation(trimmed, phase)) return trimmed;
+  const conversation = await conversationSummary(provider, taskId);
+  if (phase === "planning" && conversation && parseSnagPlan(conversation)) {
+    return conversation;
+  }
+  if (trimmed) return trimmed;
+  return conversation;
+}
+
+async function conversationSummary(
+  provider: AgentProvider,
+  taskId: string,
+): Promise<string | null> {
   try {
     return await provider.getConversationSummary(taskId);
   } catch (error) {
@@ -105,9 +145,17 @@ export function summaryFromConversationMessages(
     if (assistantTexts.length > 0) break;
   }
   if (assistantTexts.length === 0) return null;
-  // Cap stored summary size so request rows stay bounded.
-  const joined = assistantTexts.join("\n\n");
-  return joined.length > 12_000 ? joined.slice(0, 12_000) : joined;
+  return capStoredSummary(assistantTexts.join("\n\n"));
+}
+
+/** Keep request rows bounded. A Snag plan at the end must survive the cap. */
+export function capStoredSummary(text: string): string {
+  if (text.length <= MAX_STORED_SUMMARY_CHARS) return text;
+  const heading = text.lastIndexOf(SNAG_PLAN_HEADING);
+  if (heading < 0) return text.slice(0, MAX_STORED_SUMMARY_CHARS);
+  const plan = text.slice(heading);
+  if (plan.length >= MAX_STORED_SUMMARY_CHARS) return plan.slice(0, MAX_STORED_SUMMARY_CHARS);
+  return text.slice(heading - (MAX_STORED_SUMMARY_CHARS - plan.length));
 }
 
 /** Safe, user-facing launch failure — never includes raw API bodies or secrets. */
