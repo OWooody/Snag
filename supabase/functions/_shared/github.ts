@@ -4,64 +4,44 @@
  * Never log or return tokens or response bodies to clients.
  */
 
+import {
+  type ChecksState,
+  ForgeError,
+  type ForgeClient,
+  type ForgeRepo,
+  type PullRequestDiff,
+  type PullRequestInfo,
+  parseForgePullRequestUrl,
+  parseForgeRepoUrl,
+} from "./forge.ts";
 import type { ChangedFile } from "./policy.ts";
 
 const GITHUB_API = "https://api.github.com";
 const MAX_PR_FILES = 3000;
 
-export interface GitHubRepo {
-  owner: string;
-  repo: string;
-}
+export type { ChecksState, PullRequestDiff, PullRequestInfo };
+export type GitHubRepo = ForgeRepo;
+export type GitHubClient = ForgeClient;
 
-export interface PullRequestInfo {
-  number: number;
-  nodeId: string;
-  state: "open" | "closed";
-  merged: boolean;
-  mergeable: boolean | null;
-  mergeableState: string | null;
-  draft: boolean;
-  headSha: string;
-  headRef: string;
-  baseRef: string;
-  title: string;
-  mergeCommitSha: string | null;
-}
-
-export type ChecksState = "success" | "pending" | "failure" | "none";
-
-export interface PullRequestDiff {
-  files: ChangedFile[];
-  linesChanged: number;
-}
-
-export class GitHubError extends Error {
-  readonly status: number;
-
+export class GitHubError extends ForgeError {
   constructor(message: string, status: number) {
-    super(message);
+    super(message, status, "github");
     this.name = "GitHubError";
-    this.status = status;
   }
 }
 
 export function parseRepoUrl(url: string): GitHubRepo | null {
-  const match = url.trim().match(
-    /^https:\/\/github\.com\/([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/,
-  );
-  if (!match) return null;
-  return { owner: match[1], repo: match[2] };
+  const parsed = parseForgeRepoUrl(url);
+  if (!parsed || parsed.host !== "github") return null;
+  return { owner: parsed.owner, repo: parsed.repo };
 }
 
 export function parsePullRequestUrl(
   url: string,
 ): (GitHubRepo & { number: number }) | null {
-  const match = url.trim().match(
-    /^https:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/pull\/(\d+)/,
-  );
-  if (!match) return null;
-  return { owner: match[1], repo: match[2], number: Number(match[3]) };
+  const parsed = parseForgePullRequestUrl(url);
+  if (!parsed || parsed.host !== "github") return null;
+  return { owner: parsed.owner, repo: parsed.repo, number: parsed.number };
 }
 
 function mapFileStatus(status: string | undefined): ChangedFile["status"] {
@@ -80,7 +60,7 @@ function mapFileStatus(status: string | undefined): ChangedFile["status"] {
   }
 }
 
-export function githubClient(options: { token: string }) {
+export function githubClient(options: { token: string }): ForgeClient {
   const headers = {
     Authorization: `Bearer ${options.token}`,
     Accept: "application/vnd.github+json",
@@ -285,13 +265,13 @@ export function githubClient(options: { token: string }) {
       return null;
     },
 
-    async markReadyForReview(nodeId: string): Promise<void> {
+    async markReadyForReview(_repo: ForgeRepo, pr: PullRequestInfo): Promise<void> {
       await request(`/graphql`, {
         method: "POST",
         body: JSON.stringify({
           query:
             "mutation($id: ID!) { markPullRequestReadyForReview(input: { pullRequestId: $id }) { pullRequest { id } } }",
-          variables: { id: nodeId },
+          variables: { id: pr.nodeId },
         }),
       });
     },
@@ -316,5 +296,3 @@ export function githubClient(options: { token: string }) {
     },
   };
 }
-
-export type GitHubClient = ReturnType<typeof githubClient>;

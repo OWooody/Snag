@@ -1,7 +1,8 @@
-import type { ExecuteDelivery } from "@snag/shared";
+import type { ExecuteDelivery, ForgeHost } from "@snag/shared";
 
 export interface DeliveryPrerequisites {
-  hasGitHubToken: boolean;
+  host: ForgeHost | null;
+  hasForgeCredential: boolean;
   hasRequesterSecret: boolean;
   trustedRequesterCount: number;
   acknowledged: boolean;
@@ -13,9 +14,18 @@ export function missingDeliveryPrerequisites(
   prerequisites: DeliveryPrerequisites,
 ): string[] {
   if (delivery === "pr_only") return [];
+  if (prerequisites.host === "origin" && delivery === "preview_confirm") {
+    return [
+      "Preview, then merge only works on GitHub. Choose PR only or merge directly to production for this Origin repository.",
+    ];
+  }
   const missing: string[] = [];
-  if (!prerequisites.hasGitHubToken) {
-    missing.push("Add a GitHub token so Snag can read checks and merge PRs.");
+  if (!prerequisites.hasForgeCredential) {
+    missing.push(
+      prerequisites.host === "origin"
+        ? "Add an Origin app so Snag can read checks and merge pull requests."
+        : "Add a GitHub token so Snag can read checks and merge PRs.",
+    );
   }
   if (delivery === "auto_merge") {
     if (!prerequisites.hasRequesterSecret) {

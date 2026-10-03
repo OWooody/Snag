@@ -1,7 +1,9 @@
 import {
+  forgeHostFromRepoUrl,
   resolveEffectiveExecuteDelivery,
   type AuthProvider,
   type ExecuteDelivery,
+  type ForgeHost,
   type HostRuntime,
   type SnagProjectSafe,
 } from "@snag/shared";
@@ -79,11 +81,19 @@ function originsDetail(host: HostRuntime | null, onlyLocalOrigins: boolean): str
     : "Add at least one web origin or app:// bundle id. An empty list blocks every client.";
 }
 
-function deliveryDetail(host: HostRuntime | null, deliveryReady: boolean, autoMerge: boolean): string {
+function deliveryDetail(
+  host: HostRuntime | null,
+  repoHost: ForgeHost | null,
+  deliveryReady: boolean,
+  autoMerge: boolean,
+): string {
   if (deliveryReady) {
     return autoMerge
       ? "Delivery is merge directly to production."
       : "Delivery is preview, then merge.";
+  }
+  if (repoHost === "origin") {
+    return "Origin can open a pull request or merge it once CI is green. Preview, then merge stays on GitHub.";
   }
   if (host === "vercel") {
     return "Vercel posts a preview URL on the pull request. Switch to Preview, then merge to use it. PR only leaves that URL unused.";
@@ -112,7 +122,10 @@ function signedRequestsDetail(host: HostRuntime | null, auth: AuthProvider | nul
   return "The app sends the signed token with each request. Unsigned requests still file, but they stay unverified.";
 }
 
-function checklistFootnote(host: HostRuntime | null): string {
+function checklistFootnote(host: HostRuntime | null, repoHost: ForgeHost | null): string {
+  if (repoHost === "origin") {
+    return "Snag does not record connecting the Cursor account to this Origin repository, CI on the production branch, or rulesets that let the Origin app merge. Those stay outside this list.";
+  }
   if (host === "vercel") {
     return "Snag does not record connecting the Cursor account to GitHub, CI on the production branch, or branch protection that lets the token user merge. Vercel posts the preview URL on the pull request, so that is not a separate step.";
   }
@@ -128,7 +141,10 @@ export function buildActivationChecklist(
   const originsSet = origins.length > 0;
   const onlyLocalOrigins = originsSet && origins.every(isLocalDevOrigin);
   const delivery = resolveEffectiveExecuteDelivery(project.execute_delivery, orgDelivery);
-  const deliveryReady = delivery === "preview_confirm" || delivery === "auto_merge";
+  const repoHost = forgeHostFromRepoUrl(project.repo_url);
+  const deliveryReady = repoHost === "origin"
+    ? delivery === "auto_merge"
+    : delivery === "preview_confirm" || delivery === "auto_merge";
   const host = project.host_runtime;
   const auth = project.auth_provider;
 
@@ -168,7 +184,9 @@ export function buildActivationChecklist(
         step({
           id: "repo",
           title: "Set the repository and branch",
-          detail: "The branch must exist on GitHub and already have commits.",
+          detail: repoHost === "origin"
+            ? "The branch must exist on Origin and already have commits."
+            : "The branch must exist on GitHub and already have commits.",
           done: Boolean(project.repo_url.trim() && project.repo_ref.trim()),
         }),
         step({
@@ -205,17 +223,22 @@ export function buildActivationChecklist(
       steps: [
         step({
           id: "github-token",
-          title: "Save a GitHub token",
-          detail:
-            "Needed to read checks, find preview URLs, and merge. Without it, merge deliveries fall back to PR only.",
-          done: Boolean(project.github_token_updated_at),
-          at: project.github_token_updated_at,
+          title: repoHost === "origin" ? "Save an Origin app" : "Save a GitHub token",
+          detail: repoHost === "origin"
+            ? "Needed to read checks and merge. Without it, merge deliveries fall back to PR only. Preview, then merge is not available on Origin."
+            : "Needed to read checks, find preview URLs, and merge. Without it, merge deliveries fall back to PR only.",
+          done: repoHost === "origin"
+            ? Boolean(project.origin_credentials_updated_at)
+            : Boolean(project.github_token_updated_at),
+          at: repoHost === "origin"
+            ? project.origin_credentials_updated_at
+            : project.github_token_updated_at,
           atLabel: "Saved",
         }),
         step({
           id: "delivery",
           title: "Choose a merge delivery",
-          detail: deliveryDetail(host, deliveryReady, delivery === "auto_merge"),
+          detail: deliveryDetail(host, repoHost, deliveryReady, delivery === "auto_merge"),
           done: deliveryReady,
         }),
       ],
@@ -274,6 +297,6 @@ export function buildActivationChecklist(
     doneCount,
     totalCount: steps.length,
     complete: doneCount === steps.length,
-    footnote: checklistFootnote(host),
+    footnote: checklistFootnote(host, repoHost),
   };
 }

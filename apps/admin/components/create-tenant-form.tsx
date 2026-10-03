@@ -123,7 +123,10 @@ export function CreateTenantForm({
           </div>
           <div className="space-y-2 sm:col-span-2">
             <Label>Repository URL</Label>
-            <Input {...form.register("repo_url")} placeholder="https://github.com/org/repo" />
+            <Input
+              {...form.register("repo_url")}
+              placeholder="https://github.com/org/repo or https://origin.cursor.com/org/repo"
+            />
           </div>
           <div className={form.watch("organization_id") ? "space-y-2 sm:col-span-2" : "space-y-2"}>
             <Label>Branch</Label>

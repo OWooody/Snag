@@ -318,7 +318,14 @@ export function SettingsForm({
             />
             <div className="space-y-2">
               <Label htmlFor="repo_url">Repository URL</Label>
-              <Input id="repo_url" {...form.register("repo_url")} />
+              <Input
+                id="repo_url"
+                placeholder="https://github.com/org/repo or https://origin.cursor.com/org/repo"
+                {...form.register("repo_url")}
+              />
+              <p className="text-sm text-zinc-500">
+                GitHub or Cursor Origin. Preview, then merge is available on GitHub.
+              </p>
               {form.formState.errors.repo_url && (
                 <p className="text-sm text-red-600">{form.formState.errors.repo_url.message}</p>
               )}

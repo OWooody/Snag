@@ -1,5 +1,6 @@
 import {
   SAFE_PROJECT_COLUMNS,
+  forgeHostFromRepoUrl,
   projectExecutionUpdateSchema,
   resolveEffectiveExecuteDelivery,
   type ExecuteDelivery,
@@ -42,8 +43,16 @@ export async function PATCH(
   const acknowledged =
     Boolean(project.auto_merge_acknowledged_at) || input.acknowledge_auto_merge === true;
 
+  const host = forgeHostFromRepoUrl(project.repo_url);
   const missing = missingDeliveryPrerequisites(effectiveDelivery, {
-    hasGitHubToken: Boolean(project.github_token_encrypted),
+    host,
+    hasForgeCredential: host === "origin"
+      ? Boolean(
+        project.origin_app_id &&
+          project.origin_installation_id &&
+          project.origin_app_key_encrypted,
+      )
+      : Boolean(project.github_token_encrypted),
     hasRequesterSecret: Boolean(project.requester_signing_secret_encrypted),
     trustedRequesterCount: trusted.length,
     acknowledged,

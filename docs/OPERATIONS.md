@@ -48,6 +48,8 @@ Migration: `supabase/migrations/00002_admin_auth.sql` → organizations, members
 
 Migration: `supabase/migrations/00006_execute_policy.sql` → execute-mode rules (`snag_policy_rules`), delivery settings, per-project GitHub token and requester signing secret, request lifecycle columns.
 
+Migration: `supabase/migrations/00012_origin_credentials.sql` → per-project Cursor Origin app id, installation id, and encrypted private key.
+
 Migrations `00007`–`00010` → `rejected` status and `rejection_note`, `handoff_reason`, the `snag_request_transitions` status history (written by a trigger on `snag_requests`), and the `snag_execute_metrics` function behind the dashboard's execute-mode metrics.
 
 If policies already exist from a partial run:
@@ -297,10 +299,12 @@ The strictest matching rule wins; rules can only escalate beyond the default unl
 | Delivery | Needs | Behaviour |
 |----------|-------|-----------|
 | PR only (default) | — | Agent opens a PR; developers merge as usual |
-| Preview, then merge | GitHub token, preview deployments on PRs (Vercel, Netlify, …) | Snag waits for the PR's preview URL, the requester taps **Looks right**, then Snag squash-merges once CI is green |
-| Merge directly to production | GitHub token, requester signing secret, trusted requesters, admin acknowledgement | Snag squash-merges as soon as CI is green, for verified trusted requesters only, up to the daily limit |
+| Preview, then merge | GitHub repository, GitHub token, preview deployments on PRs (Vercel, Netlify, …) | Snag waits for the PR's preview URL, the requester taps **Looks right**, then Snag squash-merges once CI is green. Not available on Cursor Origin |
+| Merge directly to production | GitHub token or Origin app, requester signing secret, trusted requesters, admin acknowledgement | Snag squash-merges as soon as CI is green, for verified trusted requesters only, up to the daily limit |
 
-A project missing any prerequisite silently falls back to **PR only** (logged by the Edge Functions).
+A project missing any prerequisite silently falls back to **PR only** (logged by the Edge Functions). An Origin repository configured for preview, then merge falls back the same way.
+
+Repository URLs are `https://github.com/owner/repo` or `https://origin.cursor.com/owner/repo`. Snag passes that URL to the Cursor cloud agent, so the API key has to be allowed to open it. Diffs, checks, and merges then use the GitHub token or Origin app below.
 
 ### GitHub token
 
@@ -316,6 +320,29 @@ Create a **fine-grained personal access token** (or a token from a machine user 
 | Metadata | Read | Required by GitHub |
 
 Paste it under **Settings → GitHub token**; it is stored AES-256-GCM encrypted and never shown again.
+
+### Origin app
+
+For a repository on Cursor Origin, create an [Origin app](https://cursor.com/docs/api/origin), install it on the repository's namespace, and grant:
+
+| Scope | Used for |
+|-------|----------|
+| `repository:contents:read` | Comparing branches |
+| `repository:contents:write` | Squash-merging pull requests |
+| `repository:pull_requests:read` | Reading the pull request and its diff |
+| `repository:pull_requests:write` | Opening a pull request and marking a draft ready |
+| `repository:checks:read` | CI gate |
+
+Generate a PKCS#8 Ed25519 key and register the public key on the app:
+
+```sh
+openssl genpkey -algorithm ED25519 -out origin-app-private.pem
+openssl pkey -in origin-app-private.pem -pubout -out origin-app-public.pem
+```
+
+Paste the app id, installation id, and private key under **Settings → Origin app**. Snag stores the private key AES-256-GCM encrypted and mints a short-lived installation token on each delivery run. The key is never shown again.
+
+Origin has no deployment status API, so **Preview, then merge** is GitHub-only. Use **PR only** or **Merge directly to production**.
 
 ### Branch protection
 
@@ -380,8 +407,8 @@ SELECT slug, name, publishable_key, enabled, repo_url, repo_ref FROM snag_projec
 | ------------------------------ | ------------------------------------------------------------------------------------------- |
 | Probe `enabled: false`         | Wrong/missing key, no tenant row, or `enabled = false`                                      |
 | Relay **500**                  | `SNAG_KEY_ENCRYPTION_SECRET` mismatch vs tenant creation; check relay logs                  |
-| Agent launch: branch not found | Wrong `repo_ref`, repo not on GitHub, or no commits on branch — UI shows a specific message |
-| Agent launch: repo access      | Cursor key can’t see private repo — link GitHub in Cursor — UI shows a specific message     |
+| Agent launch: branch not found | Wrong `repo_ref`, repository not connected in Cursor, or no commits on the branch — UI shows a specific message |
+| Agent launch: repo access      | Cursor key can’t see the private repository — connect GitHub or Origin in Cursor — UI shows a specific message |
 | Agent launch: rate limited     | Wait and retry; Cursor returned 429                                                         |
 | Webhook silent                 | `SNAG_WEBHOOK_SECRET` unset; GET polling still works                                        |
 | `db push` policy exists        | `supabase migration repair 00001 --status applied`                                          |
@@ -398,7 +425,7 @@ When Snag hands a request to a developer it records why in `snag_requests.handof
 | Request stuck `running` after the PR opened | Delivery worker not scheduled, or `SNAG_WORKER_SECRET` mismatch — check `net._http_response` for 401s |
 | `awaiting_review` with "The repository reports no CI checks…" | No checks ran on the PR head commit; add CI or keep delivery on PR only |
 | "No preview deployment was found for this pull request." | The preview provider is not posting GitHub deployment statuses, or took longer than 30 minutes |
-| "GitHub refused the merge" | Branch protection (required reviews, CODEOWNERS) or merge conflicts — a developer finishes it |
+| "GitHub refused the merge" or "Origin refused the merge" | Branch protection or an Origin ruleset (required reviews, CODEOWNERS) or merge conflicts — a developer finishes it |
 | Requester never verified | Host backend not sending `x-snag-requester-token`, wrong secret, or token lifetime over 7 days |
 
 ### Relay logs

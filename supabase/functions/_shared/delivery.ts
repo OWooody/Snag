@@ -12,14 +12,21 @@
  */
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { GitHubError, parsePullRequestUrl, type PullRequestInfo } from "./github.ts";
+import {
+  ForgeError,
+  forgeHostFromRepoUrl,
+  hostLabel,
+  parseForgePullRequestUrl,
+  sameRepo,
+  type PullRequestInfo,
+} from "./forge.ts";
 import {
   claimTransition,
   evaluateDiff,
   type LifecycleRow,
   type PolicyDecisionRecord,
 } from "./lifecycle.ts";
-import { type ProjectRow, projectGitHub } from "./projects.ts";
+import { type ForgeConnection, type ProjectRow, projectForge } from "./projects.ts";
 
 export const PREVIEW_TIMEOUT_MS = 30 * 60 * 1000;
 export const CI_TIMEOUT_MS = 60 * 60 * 1000;
@@ -29,28 +36,39 @@ export interface DeliveryRunState {
   mergedProjects: Set<string>;
 }
 
-type GitHub = NonNullable<Awaited<ReturnType<typeof projectGitHub>>>;
-
 export async function advanceDelivery(
   service: SupabaseClient,
   project: ProjectRow,
   row: LifecycleRow,
   state: DeliveryRunState,
   now = Date.now(),
-  deps: { github?: GitHub | null } = {},
+  deps: { forge?: ForgeConnection | null } = {},
 ): Promise<void> {
-  const github = deps.github !== undefined ? deps.github : await projectGitHub(project);
-  const prRef = row.pr_url ? parsePullRequestUrl(row.pr_url) : null;
-  if (!github || !prRef) {
+  let forge: ForgeConnection | null;
+  if (deps.forge !== undefined) {
+    forge = deps.forge;
+  } else {
+    try {
+      forge = await projectForge(project);
+    } catch (error) {
+      console.error(`snag delivery forge auth failed request=${row.id}:`, error);
+      forge = null;
+    }
+  }
+  const prRef = row.pr_url ? parseForgePullRequestUrl(row.pr_url) : null;
+  if (!forge || !prRef || !sameRepo(prRef, forge.host, forge.repo)) {
     if (row.status !== "awaiting_review") {
-      await handOff(service, row, "Snag cannot reach the pull request on GitHub.");
+      const label = forge
+        ? hostLabel(forge.host)
+        : hostLabel(forgeHostFromRepoUrl(project.repo_url) ?? "github");
+      await handOff(service, row, `Snag cannot reach the pull request on ${label}.`);
     }
     return;
   }
 
   let pr: PullRequestInfo;
   try {
-    pr = await github.client.getPullRequest(github.repo, prRef.number);
+    pr = await forge.client.getPullRequest(forge.repo, prRef.number);
   } catch (error) {
     console.error(`snag delivery PR lookup failed request=${row.id}:`, error);
     return;
@@ -82,13 +100,13 @@ export async function advanceDelivery(
   }
 
   if (record.diff?.head_sha !== pr.headSha) {
-    const rechecked = await recheckNewCommits(service, project, github, row, record, pr, now);
+    const rechecked = await recheckNewCommits(service, project, forge, row, record, pr, now);
     if (!rechecked) return;
   }
 
   if (delivery === "preview_confirm" && !row.confirmed_at) {
     if (row.status === "awaiting_confirmation") return;
-    const previewUrl = await github.client.findPreviewUrl(github.repo, pr.headSha)
+    const previewUrl = await forge.client.findPreviewUrl(forge.repo, pr.headSha)
       .catch((error) => {
         console.warn(`snag preview lookup failed request=${row.id}:`, error);
         return null;
@@ -104,13 +122,13 @@ export async function advanceDelivery(
     return;
   }
 
-  await tryMerge(service, project, github, row, pr, state, now);
+  await tryMerge(service, project, forge, row, pr, state, now);
 }
 
 async function recheckNewCommits(
   service: SupabaseClient,
   project: ProjectRow,
-  github: GitHub,
+  forge: ForgeConnection,
   row: LifecycleRow,
   record: PolicyDecisionRecord,
   pr: PullRequestInfo,
@@ -119,7 +137,7 @@ async function recheckNewCommits(
   const { decision, final } = await evaluateDiff(
     service,
     project,
-    github,
+    forge,
     row,
     pr.number,
     pr.headSha,
@@ -145,7 +163,7 @@ async function recheckNewCommits(
 async function tryMerge(
   service: SupabaseClient,
   project: ProjectRow,
-  github: GitHub,
+  forge: ForgeConnection,
   row: LifecycleRow,
   pr: PullRequestInfo,
   state: DeliveryRunState,
@@ -154,7 +172,7 @@ async function tryMerge(
   if (state.mergedProjects.has(project.id)) return;
 
   const waitingSince = row.confirmed_at ?? row.phase_started_at;
-  const checks = await github.client.getChecksState(github.repo, pr.headSha);
+  const checks = await forge.client.getChecksState(forge.repo, pr.headSha);
   if (checks === "pending") {
     if (elapsedSince(waitingSince, now) > CI_TIMEOUT_MS) {
       await handOff(service, row, "CI did not finish within 60 minutes.");
@@ -200,13 +218,13 @@ async function tryMerge(
   state.mergedProjects.add(project.id);
 
   try {
-    if (pr.draft) await github.client.markReadyForReview(pr.nodeId);
-    const result = await github.client.squashMerge(github.repo, pr.number, {
+    if (pr.draft) await forge.client.markReadyForReview(forge.repo, pr);
+    const result = await forge.client.squashMerge(forge.repo, pr.number, {
       sha: pr.headSha,
       title: `${pr.title} (#${pr.number})`,
     });
     if (!result.merged) {
-      await handOff(service, row, "GitHub did not merge the pull request.");
+      await handOff(service, row, `${hostLabel(forge.host)} did not merge the pull request.`);
       return;
     }
     await claimTransition(service, row, {
@@ -216,14 +234,15 @@ async function tryMerge(
     });
   } catch (error) {
     console.error(`snag merge failed request=${row.id}:`, error);
-    const refused = error instanceof GitHubError &&
-      (error.status === 403 || error.status === 405 || error.status === 409 ||
-        error.status === 422);
+    const refused = error instanceof ForgeError &&
+      (error.status === 400 || error.status === 403 || error.status === 405 ||
+        error.status === 409 || error.status === 422);
+    const label = hostLabel(forge.host);
     await handOff(
       service,
       row,
       refused
-        ? "GitHub refused the merge (branch protection, conflicts, or token permissions)."
+        ? `${label} refused the merge (branch protection, conflicts, or token permissions).`
         : "Snag could not merge the pull request.",
     );
   }

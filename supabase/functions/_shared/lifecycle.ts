@@ -13,7 +13,14 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { type AgentProvider, userFacingLaunchError } from "./agent_provider.ts";
 import { buildImplementationPrompt } from "./execute_prompts.ts";
-import { GitHubError, parsePullRequestUrl } from "./github.ts";
+import {
+  ForgeError,
+  forgeHostFromRepoUrl,
+  hostLabel,
+  parseForgePullRequestUrl,
+  pullRequestUrl,
+  sameRepo,
+} from "./forge.ts";
 import { parseSnagPlan, type SnagPlan } from "./plan_block.ts";
 import {
   evaluatePolicy,
@@ -24,7 +31,8 @@ import {
 import {
   loadPolicyRules,
   type ProjectRow,
-  projectGitHub,
+  type ForgeConnection,
+  projectForge,
   projectSettings,
 } from "./projects.ts";
 import {
@@ -183,14 +191,19 @@ async function finishPlanning(
   const { project } = ctx;
   const settings = projectSettings(project);
   const plan = parseSnagPlan(summary);
-  const github = await projectGitHub(project);
+  let forge: ForgeConnection | null = null;
+  try {
+    forge = await projectForge(project);
+  } catch (error) {
+    console.warn(`snag planning forge auth failed request=${row.id}:`, error);
+  }
 
   let editedDuringPlanning = false;
   const branch = (base.branch_name as string | undefined) ?? row.branch_name;
-  if (github && branch && branch !== project.repo_ref) {
+  if (forge && branch && branch !== project.repo_ref) {
     try {
-      editedDuringPlanning = await github.client.branchIsAhead(
-        github.repo,
+      editedDuringPlanning = await forge.client.branchIsAhead(
+        forge.repo,
         project.repo_ref,
         branch,
       );
@@ -264,9 +277,23 @@ async function finishImplementation(
   const settings = projectSettings(project);
   const record: PolicyDecisionRecord = { ...(row.policy_decision ?? {}) };
 
-  const github = await projectGitHub(project);
-  if (!github) {
+  let forge: ForgeConnection | null;
+  try {
+    forge = await projectForge(project);
+  } catch (error) {
+    console.error(`snag forge auth failed request=${row.id}:`, error);
+    const label = error instanceof ForgeError ? hostLabel(error.host) : "the repository host";
+    await claimTransition(ctx.service, row, {
+      ...base,
+      status: "awaiting_review",
+      handoff_reason: `Snag could not authenticate to ${label}.`,
+      policy_decision: { ...record, final_outcome: "review_before_merge" },
+    });
+    return;
+  }
+  if (!forge) {
     const final = planStageOutcome(row);
+    const host = forgeHostFromRepoUrl(project.repo_url);
     await claimTransition(ctx.service, row, {
       ...base,
       status: final === "execute" && settings.delivery === "pr_only"
@@ -275,14 +302,16 @@ async function finishImplementation(
       policy_decision: {
         ...record,
         final_outcome: final,
-        note: "GitHub token not configured; the PR diff was not checked.",
+        note: host === "origin"
+          ? "Origin app not configured; the pull request diff was not checked."
+          : "GitHub token not configured; the pull request diff was not checked.",
       },
     });
     return;
   }
 
   try {
-    const prNumber = await resolvePullRequest(github, project, row, base, summary);
+    const prNumber = await resolvePullRequest(forge, project, row, base, summary);
     if (prNumber === null) {
       await claimTransition(ctx.service, row, {
         ...base,
@@ -293,11 +322,11 @@ async function finishImplementation(
       return;
     }
 
-    const pr = await github.client.getPullRequest(github.repo, prNumber);
+    const pr = await forge.client.getPullRequest(forge.repo, prNumber);
     const { decision: diffDecision, final } = await evaluateDiff(
       ctx.service,
       project,
-      github,
+      forge,
       row,
       prNumber,
       pr.headSha,
@@ -334,8 +363,8 @@ async function finishImplementation(
     await claimTransition(ctx.service, row, {
       ...base,
       status: "awaiting_review",
-      handoff_reason: error instanceof GitHubError
-        ? "Snag could not read the pull request from GitHub."
+      handoff_reason: error instanceof ForgeError
+        ? `Snag could not read the pull request from ${hostLabel(error.host)}.`
         : "Snag could not check the pull request.",
       policy_decision: { ...record, final_outcome: "review_before_merge" },
     });
@@ -356,13 +385,13 @@ function planStageOutcome(row: LifecycleRow): PolicyOutcome {
 export async function evaluateDiff(
   service: SupabaseClient,
   project: ProjectRow,
-  github: NonNullable<Awaited<ReturnType<typeof projectGitHub>>>,
+  forge: ForgeConnection,
   row: LifecycleRow,
   prNumber: number,
   headSha: string,
 ): Promise<{ decision: PolicyStageDecision; final: PolicyOutcome }> {
   const settings = projectSettings(project);
-  const diff = await github.client.getPullRequestDiff(github.repo, prNumber);
+  const diff = await forge.client.getPullRequestDiff(forge.repo, prNumber);
   const decision = evaluatePolicy({
     stage: "diff",
     files: diff.files,
@@ -388,7 +417,7 @@ export async function evaluateDiff(
 }
 
 async function resolvePullRequest(
-  github: NonNullable<Awaited<ReturnType<typeof projectGitHub>>>,
+  forge: ForgeConnection,
   project: ProjectRow,
   row: LifecycleRow,
   base: Record<string, unknown>,
@@ -396,34 +425,28 @@ async function resolvePullRequest(
 ): Promise<number | null> {
   const prUrl = (base.pr_url as string | undefined) ?? row.pr_url;
   if (prUrl) {
-    const parsed = parsePullRequestUrl(prUrl);
-    if (
-      parsed &&
-      parsed.owner.toLowerCase() === github.repo.owner.toLowerCase() &&
-      parsed.repo.toLowerCase() === github.repo.repo.toLowerCase()
-    ) {
-      return parsed.number;
-    }
+    const parsed = parseForgePullRequestUrl(prUrl);
+    if (parsed && sameRepo(parsed, forge.host, forge.repo)) return parsed.number;
   }
 
   const branch = (base.branch_name as string | undefined) ?? row.branch_name;
   if (!branch || branch === project.repo_ref) return null;
 
-  const existing = await github.client.findOpenPullRequest(
-    github.repo,
+  const existing = await forge.client.findOpenPullRequest(
+    forge.repo,
     branch,
     project.repo_ref,
   );
   if (existing !== null) {
-    base.pr_url = `https://github.com/${github.repo.owner}/${github.repo.repo}/pull/${existing}`;
+    base.pr_url = pullRequestUrl(forge.host, forge.repo, existing);
     return existing;
   }
 
-  if (!(await github.client.branchIsAhead(github.repo, project.repo_ref, branch))) {
+  if (!(await forge.client.branchIsAhead(forge.repo, project.repo_ref, branch))) {
     return null;
   }
 
-  const created = await github.client.createPullRequest(github.repo, {
+  const created = await forge.client.createPullRequest(forge.repo, {
     head: branch,
     base: project.repo_ref,
     title: `Snag: ${row.prompt.slice(0, 72)}`,

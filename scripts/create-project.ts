@@ -19,6 +19,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { assertEncryptionSecret, encryptSecret } from "../packages/shared/src/crypto.ts";
 import { generatePublishableKey } from "../packages/shared/src/keys.ts";
+import { forgeHostFromRepoUrl } from "../packages/shared/src/forge.ts";
 import { normalizeAllowedEntry } from "../packages/shared/src/origins.ts";
 
 function parseAllowedOriginsArg(raw: string | undefined): string[] {
@@ -59,6 +60,13 @@ const repoRef = args.ref ?? "main";
 const model = args.model ?? null;
 const promptInstructions = args["prompt-instructions"] ?? "";
 const allowedOrigins = parseAllowedOriginsArg(args["allowed-origins"]);
+
+if (repoUrl && !forgeHostFromRepoUrl(repoUrl)) {
+  console.error(
+    "Repository URL must be https://github.com/owner/repo or https://origin.cursor.com/owner/repo",
+  );
+  Deno.exit(1);
+}
 
 if (!name || !slug || !repoUrl || !cursorApiKey) {
   console.error(

@@ -79,6 +79,9 @@ function project(overrides: Partial<ProjectRow> = {}): ProjectRow {
     default_outcome: "review_before_execution",
     policy_shadow_mode: false,
     github_token_encrypted: "enc",
+    origin_app_id: null,
+    origin_installation_id: null,
+    origin_app_key_encrypted: null,
     requester_signing_secret_encrypted: "enc",
     trusted_requesters: ["pm@example.com"],
     auto_merge_daily_limit: 5,
@@ -178,13 +181,16 @@ function fakeGitHub(options: {
       return Promise.resolve({ merged: true, sha: "merge-sha" });
     },
   } as unknown as GitHubClient;
-  return { github: { client, repo: { owner: "acme", repo: "web" } }, calls };
+  return {
+    forge: { host: "github" as const, client, repo: { owner: "acme", repo: "web" } },
+    calls,
+  };
 }
 
 Deno.test("auto_merge merges once CI is green", async () => {
   const { service, updates } = fakeService();
-  const { github, calls } = fakeGitHub({ checks: "success" });
-  await advanceDelivery(service, project(), row(), { mergedProjects: new Set() }, NOW, { github });
+  const { forge, calls } = fakeGitHub({ checks: "success" });
+  await advanceDelivery(service, project(), row(), { mergedProjects: new Set() }, NOW, { forge });
   assertEquals(calls.includes("squashMerge"), true);
   assertEquals(updates.at(-1)?.status, "merged");
   assertEquals(updates.at(-1)?.merge_commit_sha, "merge-sha");
@@ -192,14 +198,14 @@ Deno.test("auto_merge merges once CI is green", async () => {
 
 Deno.test("merges are serialized per project within a run", async () => {
   const { service, updates } = fakeService();
-  const { github, calls } = fakeGitHub({ checks: "success" });
+  const { forge, calls } = fakeGitHub({ checks: "success" });
   await advanceDelivery(
     service,
     project(),
     row(),
     { mergedProjects: new Set(["proj-1"]) },
     NOW,
-    { github },
+    { forge },
   );
   assertEquals(calls.includes("squashMerge"), false);
   assertEquals(updates.length, 0);
@@ -208,8 +214,8 @@ Deno.test("merges are serialized per project within a run", async () => {
 Deno.test("failing or missing CI hands the PR to a developer", async () => {
   for (const checks of ["failure", "none"] as const) {
     const { service, updates } = fakeService();
-    const { github, calls } = fakeGitHub({ checks });
-    await advanceDelivery(service, project(), row(), { mergedProjects: new Set() }, NOW, { github });
+    const { forge, calls } = fakeGitHub({ checks });
+    await advanceDelivery(service, project(), row(), { mergedProjects: new Set() }, NOW, { forge });
     assertEquals(calls.includes("squashMerge"), false);
     assertEquals(updates.at(-1)?.status, "awaiting_review");
   }
@@ -223,7 +229,7 @@ Deno.test("pending CI waits, then times out", async () => {
     row(),
     { mergedProjects: new Set() },
     NOW,
-    { github: fakeGitHub({ checks: "pending" }).github },
+    { forge: fakeGitHub({ checks: "pending" }).forge },
   );
   assertEquals(waiting.updates.length, 0);
 
@@ -234,15 +240,15 @@ Deno.test("pending CI waits, then times out", async () => {
     row({ phase_started_at: "2026-10-01T10:00:00Z" }),
     { mergedProjects: new Set() },
     NOW,
-    { github: fakeGitHub({ checks: "pending" }).github },
+    { forge: fakeGitHub({ checks: "pending" }).forge },
   );
   assertEquals(timedOut.updates.at(-1)?.status, "awaiting_review");
 });
 
 Deno.test("daily auto-merge cap hands off instead of merging", async () => {
   const { service, updates } = fakeService({ mergedToday: 5 });
-  const { github, calls } = fakeGitHub({ checks: "success" });
-  await advanceDelivery(service, project(), row(), { mergedProjects: new Set() }, NOW, { github });
+  const { forge, calls } = fakeGitHub({ checks: "success" });
+  await advanceDelivery(service, project(), row(), { mergedProjects: new Set() }, NOW, { forge });
   assertEquals(calls.includes("squashMerge"), false);
   assertEquals(updates.at(-1)?.handoff_reason, "Daily automatic merge limit reached.");
   assertEquals(updates.at(-1)?.error, undefined);
@@ -260,20 +266,20 @@ Deno.test("preview_confirm waits for a preview, then for the requester", async (
     { ...previewRow },
     { mergedProjects: new Set() },
     NOW,
-    { github: fakeGitHub({ previewUrl: "https://preview.example.com" }).github },
+    { forge: fakeGitHub({ previewUrl: "https://preview.example.com" }).forge },
   );
   assertEquals(found.updates.at(-1)?.status, "awaiting_confirmation");
   assertEquals(found.updates.at(-1)?.preview_url, "https://preview.example.com");
 
   const waiting = fakeService();
-  const { github, calls } = fakeGitHub({ checks: "success" });
+  const { forge, calls } = fakeGitHub({ checks: "success" });
   await advanceDelivery(
     waiting.service,
     project({ execute_delivery: "preview_confirm" }),
     { ...previewRow, status: "awaiting_confirmation" },
     { mergedProjects: new Set() },
     NOW,
-    { github },
+    { forge },
   );
   assertEquals(waiting.updates.length, 0);
   assertEquals(calls.includes("squashMerge"), false);
@@ -286,7 +292,7 @@ Deno.test("preview_confirm waits for a preview, then for the requester", async (
     { ...previewRow, confirmed_at: "2026-10-01T11:55:00Z" },
     { mergedProjects: new Set() },
     NOW,
-    { github: merging.github },
+    { forge: merging.forge },
   );
   assertEquals(merging.calls.includes("squashMerge"), true);
   assertEquals(confirmed.updates.at(-1)?.status, "merged");
@@ -294,7 +300,7 @@ Deno.test("preview_confirm waits for a preview, then for the requester", async (
 
 Deno.test("new commits outside the plan send the PR to review and void confirmation", async () => {
   const { service, updates } = fakeService();
-  const { github, calls } = fakeGitHub({
+  const { forge, calls } = fakeGitHub({
     pr: { headSha: "sha-2" },
     files: ["src/copy.json", "src/payments.ts"],
   });
@@ -304,7 +310,7 @@ Deno.test("new commits outside the plan send the PR to review and void confirmat
     row({ confirmed_at: "2026-10-01T11:55:00Z" }),
     { mergedProjects: new Set() },
     NOW,
-    { github },
+    { forge },
   );
   assertEquals(calls.includes("squashMerge"), false);
   assertEquals(updates.at(-1)?.status, "awaiting_review");
@@ -318,7 +324,7 @@ Deno.test("developer merges and closes are tracked for handed-off PRs", async ()
     row({ status: "awaiting_review" }),
     { mergedProjects: new Set() },
     NOW,
-    { github: fakeGitHub({ pr: { merged: true, state: "closed", mergeCommitSha: "m" } }).github },
+    { forge: fakeGitHub({ pr: { merged: true, state: "closed", mergeCommitSha: "m" } }).forge },
   );
   assertEquals(merged.updates.at(-1)?.status, "merged");
 
@@ -329,7 +335,7 @@ Deno.test("developer merges and closes are tracked for handed-off PRs", async ()
     row({ status: "awaiting_review" }),
     { mergedProjects: new Set() },
     NOW,
-    { github: fakeGitHub({ pr: { state: "closed" } }).github },
+    { forge: fakeGitHub({ pr: { state: "closed" } }).forge },
   );
   assertEquals(closed.updates.at(-1)?.status, "error");
 });

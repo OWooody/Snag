@@ -6,6 +6,7 @@ import {
   PLAN_RISKS,
   POLICY_OUTCOMES,
 } from "./execute-policy";
+import { forgeHostFromRepoUrl } from "./forge";
 import { DEFAULT_DEV_ORIGINS, normalizeAllowedEntry } from "./origins";
 
 export const slugSchema = z
@@ -19,9 +20,27 @@ export const repoUrlSchema = z
   .string()
   .trim()
   .url()
-  .refine((url) => url.startsWith("https://github.com/"), {
-    message: "Repository URL must be a GitHub HTTPS URL",
+  .refine((url) => forgeHostFromRepoUrl(url) !== null, {
+    message:
+      "Repository URL must be a GitHub (https://github.com/owner/repo) or Cursor Origin (https://origin.cursor.com/owner/repo) HTTPS URL",
   });
+
+export const originCredentialsUpdateSchema = z.object({
+  origin_app_id: z.string().trim().min(1).max(128),
+  origin_installation_id: z.string().trim().min(1).max(128),
+  origin_app_private_key: z
+    .string()
+    .trim()
+    .min(1)
+    .max(8000)
+    .refine(
+      (value) => value.includes("BEGIN PRIVATE KEY") && value.includes("END PRIVATE KEY"),
+      {
+        message:
+          "Private key must be a PKCS#8 PEM (BEGIN PRIVATE KEY), from openssl genpkey -algorithm ED25519",
+      },
+    ),
+});
 
 export const promptInstructionsSchema = z.string().max(4000).default("");
 

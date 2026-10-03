@@ -8,3 +8,4 @@ export * from "./requester-followups";
 export * from "./crypto";
 export * from "./keys";
 export * from "./origins";
+export * from "./forge";

@@ -1,6 +1,14 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { decryptSecret, getEncryptionSecret } from "./crypto.ts";
-import { type GitHubClient, githubClient, type GitHubRepo, parseRepoUrl } from "./github.ts";
+import {
+  type ForgeClient,
+  type ForgeHost,
+  type ForgeRepo,
+  forgeHostFromRepoUrl,
+  parseForgeRepoUrl,
+} from "./forge.ts";
+import { githubClient } from "./github.ts";
+import { mintOriginInstallationToken, originClient } from "./origin.ts";
 import type { ExecuteDelivery, PolicyOutcome, PolicyRule } from "./policy.ts";
 import { resolveEffectiveRequesterFollowups } from "./requester_questions.ts";
 
@@ -36,6 +44,9 @@ export interface ProjectRow {
   default_outcome: PolicyOutcome | null;
   policy_shadow_mode: boolean | null;
   github_token_encrypted: string | null;
+  origin_app_id: string | null;
+  origin_installation_id: string | null;
+  origin_app_key_encrypted: string | null;
   requester_signing_secret_encrypted: string | null;
   trusted_requesters: string[];
   auto_merge_daily_limit: number;
@@ -44,7 +55,7 @@ export interface ProjectRow {
 }
 
 export const PROJECT_SELECT =
-  "id, name, slug, organization_id, publishable_key, repo_url, repo_ref, model, cursor_api_key_encrypted, prompt_instructions, enabled, per_ip_hourly_limit, hourly_limit, daily_limit, allowed_origins, agent_mode, requester_followups_enabled, execute_delivery, default_outcome, policy_shadow_mode, github_token_encrypted, requester_signing_secret_encrypted, trusted_requesters, auto_merge_daily_limit, auto_merge_acknowledged_at, snag_organizations(agent_mode, requester_followups_enabled, execute_delivery, default_outcome, policy_shadow_mode)";
+  "id, name, slug, organization_id, publishable_key, repo_url, repo_ref, model, cursor_api_key_encrypted, prompt_instructions, enabled, per_ip_hourly_limit, hourly_limit, daily_limit, allowed_origins, agent_mode, requester_followups_enabled, execute_delivery, default_outcome, policy_shadow_mode, github_token_encrypted, origin_app_id, origin_installation_id, origin_app_key_encrypted, requester_signing_secret_encrypted, trusted_requesters, auto_merge_daily_limit, auto_merge_acknowledged_at, snag_organizations(agent_mode, requester_followups_enabled, execute_delivery, default_outcome, policy_shadow_mode)";
 
 export interface ProjectSettings {
   agentMode: AgentMode;
@@ -74,15 +85,24 @@ export function projectSettings(project: ProjectRow): ProjectSettings {
 
 /**
  * Configured delivery, downgraded to pr_only when the project is missing what
- * that delivery needs (GitHub token; for auto_merge also the requester signing
- * secret and the admin acknowledgement).
+ * that delivery needs. Origin has no preview deployments, so preview_confirm
+ * falls back too. auto_merge also needs the requester signing secret and the
+ * admin acknowledgement.
  */
 function effectiveDelivery(project: ProjectRow): ExecuteDelivery {
   const configured = project.execute_delivery ??
     project.snag_organizations?.execute_delivery ?? "pr_only";
   if (configured === "pr_only") return configured;
-  if (!project.github_token_encrypted) {
-    console.warn(`snag: ${configured} needs a GitHub token; using pr_only project=${project.id}`);
+  const host = forgeHostFromRepoUrl(project.repo_url);
+  if (host === "origin" && configured === "preview_confirm") {
+    console.warn(
+      `snag: preview_confirm is not available for Origin; using pr_only project=${project.id}`,
+    );
+    return "pr_only";
+  }
+  if (!forgeCredentialConfigured(project, host)) {
+    const credential = host === "origin" ? "an Origin app" : "a GitHub token";
+    console.warn(`snag: ${configured} needs ${credential}; using pr_only project=${project.id}`);
     return "pr_only";
   }
   if (
@@ -143,12 +163,46 @@ export async function decryptProjectSecret(
   }
 }
 
-export async function projectGitHub(
-  project: ProjectRow,
-): Promise<{ client: GitHubClient; repo: GitHubRepo } | null> {
-  const repo = parseRepoUrl(project.repo_url);
-  if (!repo) return null;
-  const token = await decryptProjectSecret(project.github_token_encrypted);
-  if (!token) return null;
-  return { client: githubClient({ token }), repo };
+function forgeCredentialConfigured(project: ProjectRow, host: ForgeHost | null): boolean {
+  if (host === "origin") {
+    return Boolean(
+      project.origin_app_id &&
+        project.origin_installation_id &&
+        project.origin_app_key_encrypted,
+    );
+  }
+  return Boolean(project.github_token_encrypted);
+}
+
+export interface ForgeConnection {
+  host: ForgeHost;
+  repo: ForgeRepo;
+  client: ForgeClient;
+}
+
+/** GitHub token or a freshly minted Origin installation token. Null when unset. */
+export async function projectForge(project: ProjectRow): Promise<ForgeConnection | null> {
+  const parsed = parseForgeRepoUrl(project.repo_url);
+  if (!parsed) return null;
+  const repo = { owner: parsed.owner, repo: parsed.repo };
+  if (parsed.host === "github") {
+    const token = await decryptProjectSecret(project.github_token_encrypted);
+    if (!token) return null;
+    return { host: "github", repo, client: githubClient({ token }) };
+  }
+  if (
+    !project.origin_app_id ||
+    !project.origin_installation_id ||
+    !project.origin_app_key_encrypted
+  ) {
+    return null;
+  }
+  const privateKeyPem = await decryptProjectSecret(project.origin_app_key_encrypted);
+  if (!privateKeyPem) return null;
+  const token = await mintOriginInstallationToken({
+    appId: project.origin_app_id,
+    installationId: project.origin_installation_id,
+    privateKeyPem,
+  });
+  return { host: "origin", repo, client: originClient({ token }) };
 }

@@ -7,6 +7,7 @@ import {
   EXECUTION_POSTURE_DESCRIPTIONS,
   EXECUTION_POSTURE_LABELS,
   executionPostureSettings,
+  forgeHostFromRepoUrl,
   resolveEffectiveExecuteDelivery,
   type AgentMode,
   type ExecuteDelivery,
@@ -130,6 +131,12 @@ export function ExecutionSettingsCard({
 
   const [githubToken, setGithubToken] = useState("");
   const [savingToken, setSavingToken] = useState(false);
+  const [originAppId, setOriginAppId] = useState(project.origin_app_id ?? "");
+  const [originInstallationId, setOriginInstallationId] = useState(
+    project.origin_installation_id ?? "",
+  );
+  const [originPrivateKey, setOriginPrivateKey] = useState("");
+  const [savingOrigin, setSavingOrigin] = useState(false);
   const [revealedSecret, setRevealedSecret] = useState<string | null>(null);
   const [generatingSecret, setGeneratingSecret] = useState(false);
 
@@ -142,6 +149,8 @@ export function ExecutionSettingsCard({
     );
     setTrustedText((project.trusted_requesters ?? []).join("\n"));
     setDailyLimit(project.auto_merge_daily_limit ?? 10);
+    setOriginAppId(project.origin_app_id ?? "");
+    setOriginInstallationId(project.origin_installation_id ?? "");
   }, [
     project.agent_mode,
     project.execute_delivery,
@@ -149,6 +158,8 @@ export function ExecutionSettingsCard({
     project.policy_shadow_mode,
     project.trusted_requesters,
     project.auto_merge_daily_limit,
+    project.origin_app_id,
+    project.origin_installation_id,
   ]);
 
   const projectChoice = classifyProjectPosture({
@@ -162,10 +173,14 @@ export function ExecutionSettingsCard({
     orgDefaults.execute_delivery,
   );
   const trusted = parseRequesterList(trustedText);
+  const repoHost = forgeHostFromRepoUrl(project.repo_url);
   const needsAcknowledgement =
     effectiveDelivery === "auto_merge" && !project.auto_merge_acknowledged_at;
   const missing = missingDeliveryPrerequisites(effectiveDelivery, {
-    hasGitHubToken: Boolean(project.github_token_updated_at),
+    host: repoHost,
+    hasForgeCredential: repoHost === "origin"
+      ? Boolean(project.origin_credentials_updated_at)
+      : Boolean(project.github_token_updated_at),
     hasRequesterSecret: Boolean(project.requester_secret_updated_at),
     trustedRequesterCount: trusted.length,
     acknowledged: true,
@@ -247,6 +262,42 @@ export function ExecutionSettingsCard({
     router.refresh();
   }
 
+  async function saveOriginCredentials(e: React.FormEvent) {
+    e.preventDefault();
+    if (!originAppId.trim() || !originInstallationId.trim() || !originPrivateKey.trim()) return;
+    setSavingOrigin(true);
+    const res = await fetch(`/api/projects/${project.slug}/origin-credentials`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        origin_app_id: originAppId,
+        origin_installation_id: originInstallationId,
+        origin_app_private_key: originPrivateKey,
+      }),
+    });
+    setSavingOrigin(false);
+    if (!res.ok) {
+      toast.error(await errorMessage(res, "Failed to save Origin app"));
+      return;
+    }
+    setOriginPrivateKey("");
+    toast.success("Origin app saved");
+    router.refresh();
+  }
+
+  async function removeOriginCredentials() {
+    const res = await fetch(`/api/projects/${project.slug}/origin-credentials`, { method: "DELETE" });
+    if (!res.ok) {
+      toast.error(await errorMessage(res, "Failed to remove Origin app"));
+      return;
+    }
+    setOriginAppId("");
+    setOriginInstallationId("");
+    setOriginPrivateKey("");
+    toast.success("Origin app removed");
+    router.refresh();
+  }
+
   async function generateSecret() {
     setGeneratingSecret(true);
     const res = await fetch(`/api/projects/${project.slug}/requester-secret`, { method: "POST" });
@@ -324,6 +375,7 @@ export function ExecutionSettingsCard({
               value={delivery}
               onChange={setDelivery}
               orgDefault={orgDefaults.execute_delivery}
+              omit={repoHost === "origin" ? ["preview_confirm"] : undefined}
             />
             <ProjectDefaultOutcomeOverrideSelect
               id="project_default_outcome"
@@ -376,6 +428,101 @@ export function ExecutionSettingsCard({
         </CardContent>
       </Card>
 
+      {repoHost === "origin" ? (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex flex-wrap items-center justify-between gap-2">
+            Origin app
+            <SavedStatus savedAt={project.origin_credentials_updated_at} label="Saved" />
+          </CardTitle>
+          <CardDescription>
+            App installed on {project.repo_url}. Needs contents and pull requests (read and write)
+            plus checks (read). Snag mints a short-lived installation token when it reads the pull
+            request or merges. The private key is stored encrypted and never shown again. Preview,
+            then merge stays on GitHub.
+            {project.origin_credentials_updated_at ? null : (
+              <> Not configured — merge deliveries fall back to PR only.</>
+            )}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <form onSubmit={saveOriginCredentials} className="space-y-3">
+            <div className="space-y-2">
+              <Label htmlFor="origin_app_id">App ID</Label>
+              <Input
+                id="origin_app_id"
+                value={originAppId}
+                onChange={(e) => setOriginAppId(e.target.value)}
+                placeholder="app_..."
+                className="font-mono"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="origin_installation_id">Installation ID</Label>
+              <Input
+                id="origin_installation_id"
+                value={originInstallationId}
+                onChange={(e) => setOriginInstallationId(e.target.value)}
+                placeholder="ins_..."
+                className="font-mono"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="origin_app_private_key">Private key</Label>
+              <Textarea
+                id="origin_app_private_key"
+                rows={6}
+                value={originPrivateKey}
+                onChange={(e) => setOriginPrivateKey(e.target.value)}
+                placeholder={"-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"}
+                className="font-mono"
+              />
+              <p className="text-sm text-zinc-500">
+                PKCS#8 Ed25519 key from{" "}
+                <code>openssl genpkey -algorithm ED25519</code>. Register the matching public key
+                on the Origin app.
+              </p>
+            </div>
+            <Button
+              type="submit"
+              variant="secondary"
+              disabled={
+                savingOrigin ||
+                !originAppId.trim() ||
+                !originInstallationId.trim() ||
+                !originPrivateKey.trim()
+              }
+            >
+              {savingOrigin ? "Saving…" : project.origin_credentials_updated_at ? "Replace" : "Save"}
+            </Button>
+          </form>
+          {project.origin_credentials_updated_at ? (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button type="button" variant="outline" size="sm">
+                  Remove Origin app
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Remove the Origin app?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Snag will stop merging pull requests and tracking CI for this project. Delivery
+                    falls back to PR only until an app is added again.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => void removeOriginCredentials()}>
+                    Remove Origin app
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          ) : null}
+        </CardContent>
+      </Card>
+      ) : (
       <Card>
         <CardHeader>
           <CardTitle className="flex flex-wrap items-center justify-between gap-2">
@@ -434,6 +581,7 @@ export function ExecutionSettingsCard({
           ) : null}
         </CardContent>
       </Card>
+      )}
 
       <Card>
         <CardHeader>

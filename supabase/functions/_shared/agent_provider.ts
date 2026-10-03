@@ -179,7 +179,7 @@ export function classifyCursorLaunchError(
 ): string {
   const lower = body.toLowerCase();
   if (status === 401 || status === 403) {
-    return "Cursor API key cannot access this repository. Check the key and GitHub link in Cursor.";
+    return "Cursor API key cannot access this repository. Check the key and repository connection in Cursor.";
   }
   if (status === 429) {
     return "Cursor rate limit — try again shortly.";
@@ -195,7 +195,7 @@ export function classifyCursorLaunchError(
     return "Repository branch not found. Ask your Snag admin to check repo_ref.";
   }
   if (/repositor|repo|access|permission|unauthorized|forbidden/.test(lower)) {
-    return "Cursor API key cannot access this repository. Check the key and GitHub link in Cursor.";
+    return "Cursor API key cannot access this repository. Check the key and repository connection in Cursor.";
   }
   return "Could not launch agent. Your Snag admin can check relay logs.";
 }

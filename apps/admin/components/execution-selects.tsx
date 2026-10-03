@@ -140,8 +140,18 @@ export function ProjectExecuteDeliveryOverrideSelect(props: {
   onChange: (value: ExecuteDelivery | "inherit") => void;
   orgDefault: ExecuteDelivery;
   disabled?: boolean;
+  /** Deliveries this repository host cannot run. The current value stays visible. */
+  omit?: readonly ExecuteDelivery[];
 }) {
-  return <OverrideSelect {...props} label="Delivery override" options={DELIVERY_OPTIONS} />;
+  const options = props.omit?.length
+    ? {
+      ...DELIVERY_OPTIONS,
+      values: DELIVERY_OPTIONS.values.filter(
+        (value) => !props.omit!.includes(value) || value === props.value,
+      ),
+    }
+    : DELIVERY_OPTIONS;
+  return <OverrideSelect {...props} label="Delivery override" options={options} />;
 }
 
 export function ProjectDefaultOutcomeOverrideSelect(props: {

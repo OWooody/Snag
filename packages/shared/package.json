@@ -21,7 +21,7 @@
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit",
-    "test": "npm run build && node --test test/requester-followups.test.mjs test/execute-policy.test.mjs"
+    "test": "npm run build && node --test test/requester-followups.test.mjs test/execute-policy.test.mjs test/forge.test.mjs"
   },
   "dependencies": {
     "zod": "^3.24.1"
