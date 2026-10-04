@@ -29,6 +29,23 @@ enum RequesterQuestions {
     }
 
     static let planHeading = "## Snag plan"
+    static let developerNotesHeading = "## Notes for developers"
+
+    /// Remove one Markdown section, keeping any text before it and after the next heading.
+    static func stripHeadingSection(_ summary: String, heading: String) -> String {
+        guard let headingRange = summary.range(of: heading) else {
+            return summary
+        }
+        let after = summary[headingRange.upperBound...]
+        var rest = ""
+        if let nextHeading = after.range(of: #"\n##\s"#, options: .regularExpression) {
+            rest = String(after[nextHeading.lowerBound...])
+        }
+        return [String(summary[..<headingRange.lowerBound]), rest]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n\n")
+    }
 
     /// Remove the machine-readable "## Snag plan" section. Mirrors packages/shared.
     static func stripPlanSection(_ summary: String) -> String {
@@ -46,13 +63,23 @@ enum RequesterQuestions {
             .joined(separator: "\n\n")
     }
 
-    /// Summary text to show requesters — questions only when needs_input.
+    /// Summary text to show requesters.
+    /// needs_input shows the answer above the questions, and hides developer notes and the plan block.
     static func displaySummary(status: SnagRequestStatus, summary: String?) -> String? {
         guard let summary else { return nil }
         let trimmed = summary.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         if status == .needsInput, let questions = extractSection(from: summary) {
-            return questions
+            guard let headingRange = summary.range(of: heading), headingRange.lowerBound > summary.startIndex else {
+                return questions
+            }
+            let before = String(summary[..<headingRange.lowerBound])
+            let answer = stripHeadingSection(
+                stripPlanSection(before),
+                heading: developerNotesHeading
+            ).trimmingCharacters(in: .whitespacesAndNewlines)
+            if answer.isEmpty { return questions }
+            return "\(answer)\n\n\(heading)\n\n\(questions)"
         }
         let display = stripPlanSection(trimmed)
         return display.isEmpty ? nil : display

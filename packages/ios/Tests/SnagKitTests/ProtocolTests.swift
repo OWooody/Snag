@@ -111,7 +111,50 @@ final class ProtocolTests: XCTestCase {
         )
         XCTAssertEqual(
             RequesterQuestions.displaySummary(status: .needsInput, summary: summary),
-            "- Which shade of blue?\n- Keep it on home only?"
+            """
+            Plan text above
+
+            ## Questions for requester
+
+            - Which shade of blue?
+            - Keep it on home only?
+            """
+        )
+        XCTAssertEqual(
+            RequesterQuestions.displaySummary(
+                status: .needsInput,
+                summary: """
+                ## Questions for requester
+                - Which blue?
+                """
+            ),
+            "- Which blue?"
+        )
+        XCTAssertEqual(
+            RequesterQuestions.displaySummary(
+                status: .needsInput,
+                summary: """
+                No, pending does not include paused subscriptions.
+
+                ## Notes for developers
+                - Check route.ts
+
+                ## Snag plan
+                ```json
+                {"files": ["src/route.ts"], "risk": "low", "flags": []}
+                ```
+
+                ## Questions for requester
+                1. Is this answer enough?
+                """
+            ),
+            """
+            No, pending does not include paused subscriptions.
+
+            ## Questions for requester
+
+            1. Is this answer enough?
+            """
         )
         XCTAssertEqual(
             RequesterQuestions.displaySummary(status: .finished, summary: summary),
