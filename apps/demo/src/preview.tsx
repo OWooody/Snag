@@ -82,7 +82,7 @@ const ROWS: SnagRequestRow[] = [
       "",
       "```json",
       JSON.stringify([
-        { id: "color", text: "Which color should the header use?", choices: ["Brand blue", "Navy", "Keep it white, add a shadow"], allow_other: true },
+        { id: "color", text: "Which color should the header use?", choices: ["Brand blue", "Navy", "Keep it white, and add a soft shadow so the header stays readable on both light and dark pages"], allow_other: true },
         { id: "mobile", text: "Should the change apply on mobile too?", choices: ["Yes", "Desktop only"], allow_other: false },
         { id: "extra", text: "Anything else about the header?", choices: [] },
       ]),
