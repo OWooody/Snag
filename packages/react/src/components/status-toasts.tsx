@@ -102,6 +102,26 @@ function ToastCard({
           {toast.event.row.prompt}
         </div>
       </div>
+      {toast.event.status === "merged" ? (
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className="snag-focus"
+          style={{
+            flexShrink: 0,
+            padding: "5px 11px",
+            borderRadius: 8,
+            border: `1px solid ${theme.accent}`,
+            background: "transparent",
+            color: theme.accent,
+            fontWeight: 700,
+            fontSize: 12,
+            cursor: "pointer",
+          }}
+        >
+          Reload page
+        </button>
+      ) : null}
       <button
         type="button"
         onClick={onOpen}

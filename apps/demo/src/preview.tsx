@@ -228,6 +228,14 @@ export function Preview() {
           title: "The agent has a question for you",
         },
       },
+      {
+        key: `sample-live-${Date.now()}`,
+        event: {
+          row: ROWS.find((row) => row.status === "merged") ?? ROWS[0],
+          status: "merged",
+          title: "Your change is live",
+        },
+      },
     ]);
 
   useEffect(() => {

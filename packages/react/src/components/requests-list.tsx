@@ -756,6 +756,20 @@ function RequestCard({
           ) : null}
         </div>
       ) : null}
+      {row.status === "merged" ? (
+        <div style={{ marginTop: 10 }}>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            style={{ ...buttonStyle(false, false), width: "100%" }}
+          >
+            Reload to see it
+          </button>
+          <p style={{ fontSize: 11, color: theme.textMuted, margin: "6px 0 0" }}>
+            It can take a minute or two to go live after merging.
+          </p>
+        </div>
+      ) : null}
       {link ? (
         <a
           href={link}
