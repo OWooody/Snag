@@ -4,7 +4,10 @@ import { test } from "node:test";
 import {
   REQUESTER_QUESTIONS_HEADING,
   extractRequesterQuestionsSection,
+  formatRequesterAnswers,
+  parseRequesterQuestions,
   resolveEffectiveRequesterFollowups,
+  stripRequesterQuestionsJson,
   summaryHasRequesterQuestions,
 } from "../dist/index.js";
 
@@ -43,6 +46,58 @@ test("summaryHasRequesterQuestions: section at end without next heading", () => 
   assert.equal(
     extractRequesterQuestionsSection(summary),
     "Need copy for the empty state.",
+  );
+});
+
+const STRUCTURED_SUMMARY = [
+  "The header color comes from ThemeProvider.",
+  "",
+  REQUESTER_QUESTIONS_HEADING,
+  "- Which shade of blue?",
+  "- Anything else?",
+  "",
+  "```json",
+  '[{"id": "shade", "text": "Which shade of blue?", "choices": ["Brand blue", "Navy"], "allow_other": false},',
+  ' {"text": "Anything else?", "choices": []}]',
+  "```",
+  "",
+  "## Notes for developers",
+  "- Check ThemeProvider",
+].join("\n");
+
+test("parseRequesterQuestions reads the fenced block", () => {
+  assert.deepEqual(parseRequesterQuestions(STRUCTURED_SUMMARY), [
+    { id: "shade", text: "Which shade of blue?", choices: ["Brand blue", "Navy"], allow_other: false },
+    { id: "q2", text: "Anything else?", choices: [], allow_other: true },
+  ]);
+});
+
+test("parseRequesterQuestions returns null for missing or invalid blocks", () => {
+  assert.equal(parseRequesterQuestions(null), null);
+  assert.equal(parseRequesterQuestions(`${REQUESTER_QUESTIONS_HEADING}\n- Which?`), null);
+  const broken = STRUCTURED_SUMMARY.replace('"choices": []', '"choices": [3]');
+  assert.equal(parseRequesterQuestions(broken), null);
+  const notJson = STRUCTURED_SUMMARY.replace("[{", "{{");
+  assert.equal(parseRequesterQuestions(notJson), null);
+  const outside = `${REQUESTER_QUESTIONS_HEADING}\n- Which?\n\n## Notes\n\`\`\`json\n[{"text": "x"}]\n\`\`\``;
+  assert.equal(parseRequesterQuestions(outside), null);
+});
+
+test("stripRequesterQuestionsJson keeps the Markdown questions and later sections", () => {
+  const stripped = stripRequesterQuestionsJson(STRUCTURED_SUMMARY);
+  assert.ok(!stripped.includes("```"));
+  assert.equal(
+    extractRequesterQuestionsSection(stripped),
+    "- Which shade of blue?\n- Anything else?",
+  );
+  assert.ok(stripped.includes("## Notes for developers\n- Check ThemeProvider"));
+});
+
+test("formatRequesterAnswers pairs questions and answers", () => {
+  const questions = parseRequesterQuestions(STRUCTURED_SUMMARY);
+  assert.equal(
+    formatRequesterAnswers(questions, { shade: "Navy" }),
+    "Q: Which shade of blue?\nA: Navy\n\nQ: Anything else?\nA: (no preference)",
   );
 });
 

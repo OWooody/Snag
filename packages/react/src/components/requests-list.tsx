@@ -1,15 +1,16 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { confirmSnagRequest, fetchRelayState, replyToSnagRequest } from "../api";
 import { resolveRequester } from "../config";
 import { ACTIVE_POLL_MS, hasActiveRequest, isActiveRequest, startVisiblePolling } from "../polling";
 import type { SnagRequestPhase, SnagRequestRow, SnagRequestStatus } from "../protocol";
-import { displaySummaryForRequest } from "../requester-questions";
+import { displaySummaryForRequest, parseRequesterQuestions } from "../requester-questions";
 import { LightMarkdown } from "../light-markdown";
 import { GLASS_SURFACE } from "../sheet";
 import { withAlpha } from "../styles";
 import type { SnagTheme } from "../theme";
 import { FilterChip } from "./controls";
+import { QuestionForm } from "./question-form";
 
 const POLL_INTERVAL_MS = 10_000;
 const MAX_REPLY_LENGTH = 2000;
@@ -391,7 +392,13 @@ function RequestCard({
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const canReply = followupsEnabled && row.status === "needs_input";
   const canConfirm = row.status === "awaiting_confirmation";
-  const summaryText = displaySummaryForRequest(row.status, row.summary);
+  const [writeInstead, setWriteInstead] = useState(false);
+  const structuredQuestions = useMemo(
+    () => (canReply ? parseRequesterQuestions(row.summary) : null),
+    [canReply, row.summary],
+  );
+  const showQuestionForm = structuredQuestions != null && !writeInstead;
+  const summaryText = displaySummaryForRequest(row.status, row.summary, showQuestionForm);
   const summaryRef = useRef<HTMLDivElement>(null);
   const [summaryOverflows, setSummaryOverflows] = useState(false);
 
@@ -404,8 +411,8 @@ function RequestCard({
   const canToggle = summaryOverflows || canReply || canConfirm;
   const showActions = expanded || !canToggle;
 
-  const submitReply = async () => {
-    const trimmed = reply.trim();
+  const submitReply = async (text: string) => {
+    const trimmed = text.trim();
     if (!trimmed) {
       setReplyError("Write a reply first.");
       return;
@@ -413,7 +420,7 @@ function RequestCard({
     setSending(true);
     setReplyError(null);
     try {
-      await replyToSnagRequest(row.id, trimmed);
+      await replyToSnagRequest(row.id, trimmed.slice(0, MAX_REPLY_LENGTH));
       setReply("");
       onReplied();
     } catch (error) {
@@ -581,7 +588,18 @@ function RequestCard({
             : "A developer decided not to make this change. File a new request if it is still needed."}
         </p>
       ) : null}
-      {canReply && showActions ? (
+      {canReply && showActions && structuredQuestions && !writeInstead ? (
+        <QuestionForm
+          questions={structuredQuestions}
+          theme={theme}
+          sending={sending}
+          error={replyError}
+          fieldStyle={fieldStyle}
+          onSubmit={(text) => void submitReply(text)}
+          onWriteInstead={() => setWriteInstead(true)}
+        />
+      ) : null}
+      {canReply && showActions && !showQuestionForm ? (
         <div style={{ marginTop: 10 }}>
           <textarea
             value={reply}
@@ -598,7 +616,7 @@ function RequestCard({
           ) : null}
           <button
             type="button"
-            onClick={() => void submitReply()}
+            onClick={() => void submitReply(reply)}
             disabled={sending}
             style={{
               marginTop: 8,

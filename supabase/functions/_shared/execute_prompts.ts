@@ -5,6 +5,10 @@
  */
 
 import { PLAN_FLAGS, SNAG_PLAN_HEADING } from "./plan_block.ts";
+import { requesterQuestionsFormatLines } from "./requester_questions.ts";
+
+const SAME_QUESTION_FORMAT =
+  "Use the same format as before: Markdown bullets plus the fenced JSON block.";
 
 export function planningInstructions(followupsEnabled: boolean): string[] {
   const lines = [
@@ -21,6 +25,7 @@ export function planningInstructions(followupsEnabled: boolean): string[] {
       "- Put product/UX/scope decisions only the requester can answer FIRST under exactly this heading:",
       "  ## Questions for requester",
       "  (copy, intent, which variant, edge-case preference). Omit this heading entirely if there are none.",
+      ...requesterQuestionsFormatLines(),
       "- Put technical open questions under:",
       "  ## Notes for developers",
       "  (architecture, data model, risks, implementation). Do not put these in the requester section.",
@@ -59,6 +64,7 @@ export function planningReplyWrapper(reply: string): string {
     "",
     "Continue planning with this clarification. Do not edit files yet.",
     'If you are still blocked on product/UX/scope decisions, list remaining questions under "## Questions for requester" at the top of your summary.',
+    SAME_QUESTION_FORMAT,
     'Put technical notes under "## Notes for developers".',
     `If no further requester questions remain, omit the requester heading and end your summary with the "${SNAG_PLAN_HEADING}" JSON block as instructed earlier.`,
   ].join("\n");
@@ -72,6 +78,7 @@ export function implementingReplyWrapper(reply: string): string {
     "",
     "Continue implementing with this clarification. Stay within the files in your Snag plan, and do not merge the pull request.",
     'If you are still blocked on product/UX/scope decisions, list remaining questions under "## Questions for requester" at the top of your summary.',
+    SAME_QUESTION_FORMAT,
     'Put technical notes under "## Notes for developers".',
   ].join("\n");
 }

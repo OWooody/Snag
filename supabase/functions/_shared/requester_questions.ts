@@ -36,6 +36,22 @@ export function summaryHasRequesterQuestions(
   return extractRequesterQuestionsSection(summary) != null;
 }
 
+/**
+ * Prompt lines asking the agent to add a machine-readable copy of its
+ * requester questions. The SDK renders it as tappable choices; the Markdown
+ * bullets stay for clients that cannot.
+ */
+export function requesterQuestionsFormatLines(indent = "  "): string[] {
+  return [
+    `${indent}Write each requester question as a Markdown bullet, then repeat them in a fenced JSON block inside the same section:`,
+    `${indent}\`\`\`json`,
+    `${indent}[{"id": "q1", "text": "Which shade of blue?", "choices": ["Brand blue", "Navy"], "allow_other": true}]`,
+    `${indent}\`\`\``,
+    `${indent}- choices: 2 to 5 short answers the requester can tap. Use [] when the question is open-ended.`,
+    `${indent}- allow_other: false only when the choices cover every sensible answer.`,
+  ];
+}
+
 export type TerminalRequestStatus = "finished" | "needs_input" | "error";
 
 /**

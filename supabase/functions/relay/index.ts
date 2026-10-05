@@ -45,7 +45,10 @@ import {
   projectSettings,
 } from "../_shared/projects.ts";
 import { requestStageLabel } from "../_shared/request_stage.ts";
-import { mapTerminalRequestStatus } from "../_shared/requester_questions.ts";
+import {
+  mapTerminalRequestStatus,
+  requesterQuestionsFormatLines,
+} from "../_shared/requester_questions.ts";
 import { verifyRequesterToken } from "../_shared/requester_token.ts";
 import {
   formatSelectedElements,
@@ -421,6 +424,7 @@ async function handleReply(
       "",
       "Continue with this clarification.",
       'If you are still blocked on product/UX/scope decisions, list remaining questions under "## Questions for requester" at the top of your summary.',
+      "Use the same format as before: Markdown bullets plus the fenced JSON block.",
       'Put technical notes under "## Notes for developers".',
       "If no further requester questions remain, omit the requester heading.",
     ].join("\n");
@@ -791,6 +795,7 @@ function buildAgentPrompt(
       "- Put product/UX/scope decisions only the requester can answer FIRST under exactly this heading:",
       "  ## Questions for requester",
       "  (copy, intent, which variant, edge-case preference). Omit this heading entirely if there are none.",
+      ...requesterQuestionsFormatLines(),
       "- Put technical open questions under:",
       "  ## Notes for developers",
       "  (architecture, data model, risks, implementation). Do not put these in the requester section.",

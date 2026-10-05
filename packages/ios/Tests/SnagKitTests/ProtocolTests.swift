@@ -162,6 +162,35 @@ final class ProtocolTests: XCTestCase {
         )
     }
 
+    func testHidesQuestionsJSONBlock() {
+        let summary = """
+        Plan text above
+        ## Questions for requester
+        - Which shade of blue?
+
+        ```json
+        [{"id": "q1", "text": "Which shade of blue?", "choices": ["Brand", "Navy"]}]
+        ```
+
+        ## Notes for developers
+        - Check ThemeProvider
+        """
+        XCTAssertEqual(
+            RequesterQuestions.displaySummary(status: .needsInput, summary: summary),
+            """
+            Plan text above
+
+            ## Questions for requester
+
+            - Which shade of blue?
+            """
+        )
+        XCTAssertFalse(
+            RequesterQuestions.displaySummary(status: .finished, summary: summary)?
+                .contains("```") ?? true
+        )
+    }
+
     func testDecodesExecuteStatusesAndPreviewUrl() throws {
         let json = """
         {

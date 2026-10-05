@@ -63,10 +63,31 @@ enum RequesterQuestions {
             .joined(separator: "\n\n")
     }
 
+    /// Remove the fenced JSON copy of the questions (read by the web SDK) from the questions section.
+    static func stripQuestionsJSON(_ summary: String) -> String {
+        guard let headingRange = summary.range(of: heading) else { return summary }
+        let after = summary[headingRange.upperBound...]
+        let sectionEnd = after.range(of: #"\n##\s"#, options: .regularExpression)?.lowerBound
+            ?? summary.endIndex
+        let section = String(summary[headingRange.upperBound..<sectionEnd])
+            .replacingOccurrences(
+                of: #"```(?:json)?[ \t]*\n[\s\S]*?\n\s*```"#,
+                with: "",
+                options: .regularExpression
+            )
+            .replacingOccurrences(of: #"\n{3,}"#, with: "\n\n", options: .regularExpression)
+        var trimmedSection = section
+        while trimmedSection.last?.isWhitespace == true { trimmedSection.removeLast() }
+        let rest = String(summary[sectionEnd...])
+        return String(summary[..<headingRange.upperBound]) + trimmedSection
+            + (rest.isEmpty ? "" : "\n") + rest
+    }
+
     /// Summary text to show requesters.
     /// needs_input shows the answer above the questions, and hides developer notes and the plan block.
-    static func displaySummary(status: SnagRequestStatus, summary: String?) -> String? {
-        guard let summary else { return nil }
+    static func displaySummary(status: SnagRequestStatus, summary rawSummary: String?) -> String? {
+        guard let rawSummary else { return nil }
+        let summary = stripQuestionsJSON(rawSummary)
         let trimmed = summary.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         if status == .needsInput, let questions = extractSection(from: summary) {

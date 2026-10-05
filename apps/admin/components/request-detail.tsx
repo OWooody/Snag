@@ -3,6 +3,7 @@
 import {
   PLAN_FLAG_LABELS,
   POLICY_OUTCOME_LABELS,
+  stripRequesterQuestionsJson,
   stripSnagPlanSection,
   type PolicyStageDecision,
   type SnagRequestRow,
@@ -179,7 +180,9 @@ export function RequestDetail({
   }
 
   const decision = request.policy_decision;
-  const summary = request.summary ? stripSnagPlanSection(request.summary) : null;
+  const summary = request.summary
+    ? stripRequesterQuestionsJson(stripSnagPlanSection(request.summary))
+    : null;
 
   return (
     <div className="space-y-6">
