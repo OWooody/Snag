@@ -13,6 +13,7 @@ export type {
   SnagRequestRow,
   SnagElement,
   SnagRequestPhase,
+  SnagRequestPlan,
   SnagRequestStatus,
   SnagScreenshot,
 } from "./protocol";

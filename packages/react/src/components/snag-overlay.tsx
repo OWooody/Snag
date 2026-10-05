@@ -91,6 +91,7 @@ export function SnagOverlay() {
     setBadgeCount(
       mine.filter(
         (row) =>
+          row.status === "awaiting_requester" ||
           row.status === "awaiting_confirmation" ||
           (followups && row.status === "needs_input"),
       ).length,

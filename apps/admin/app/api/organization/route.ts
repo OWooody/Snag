@@ -52,6 +52,9 @@ export async function PATCH(request: Request) {
     requester_followups_enabled: input.requester_followups_enabled,
     updated_at: now,
   };
+  if (input.requester_plan_review_enabled !== undefined) {
+    updates.requester_plan_review_enabled = input.requester_plan_review_enabled;
+  }
   if (input.execute_delivery !== undefined) updates.execute_delivery = input.execute_delivery;
   if (input.default_outcome !== undefined) updates.default_outcome = input.default_outcome;
   if (input.policy_shadow_mode !== undefined) {

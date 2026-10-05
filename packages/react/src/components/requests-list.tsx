@@ -10,6 +10,7 @@ import { GLASS_SURFACE } from "../sheet";
 import { withAlpha } from "../styles";
 import type { SnagTheme } from "../theme";
 import { FilterChip } from "./controls";
+import { PlanReview } from "./plan-review";
 import { QuestionForm } from "./question-form";
 
 const POLL_INTERVAL_MS = 10_000;
@@ -92,6 +93,7 @@ export function RequestsList({
       followupsEnabled &&
       needsAttentionOnly &&
       row.status !== "needs_input" &&
+      row.status !== "awaiting_requester" &&
       row.status !== "awaiting_confirmation"
     ) {
       return false;
@@ -201,6 +203,7 @@ export function RequestsList({
       ) : (
         visibleRows.map((row) => {
           const needsRequester =
+            row.status === "awaiting_requester" ||
             row.status === "awaiting_confirmation" ||
             (followupsEnabled && row.status === "needs_input");
           const focused = row.id === focusRequestId;
@@ -392,13 +395,17 @@ function RequestCard({
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const canReply = followupsEnabled && row.status === "needs_input";
   const canConfirm = row.status === "awaiting_confirmation";
+  const reviewPlan = row.status === "awaiting_requester" && row.plan != null;
   const [writeInstead, setWriteInstead] = useState(false);
   const structuredQuestions = useMemo(
     () => (canReply ? parseRequesterQuestions(row.summary) : null),
     [canReply, row.summary],
   );
   const showQuestionForm = structuredQuestions != null && !writeInstead;
-  const summaryText = displaySummaryForRequest(row.status, row.summary, showQuestionForm);
+  // The plan card replaces the agent's technical summary while the requester reviews it.
+  const summaryText = reviewPlan
+    ? null
+    : displaySummaryForRequest(row.status, row.summary, showQuestionForm);
   const summaryRef = useRef<HTMLDivElement>(null);
   const [summaryOverflows, setSummaryOverflows] = useState(false);
 
@@ -408,7 +415,7 @@ function RequestCard({
   }, [summaryText]);
 
   const showSteps = row.phase != null && isActiveRequest(row);
-  const canToggle = summaryOverflows || canReply || canConfirm;
+  const canToggle = summaryOverflows || canReply || canConfirm || reviewPlan;
   const showActions = expanded || !canToggle;
 
   const submitReply = async (text: string) => {
@@ -635,6 +642,16 @@ function RequestCard({
           </button>
         </div>
       ) : null}
+      {reviewPlan && row.plan && showActions ? (
+        <PlanReview
+          requestId={row.id}
+          plan={row.plan}
+          theme={theme}
+          fieldStyle={fieldStyle}
+          buttonStyle={buttonStyle}
+          onDone={onReplied}
+        />
+      ) : null}
       {canConfirm && showActions ? (
         <div style={{ marginTop: 10 }}>
           <p style={{ fontSize: 13, color: theme.text, margin: "0 0 8px" }}>
@@ -812,6 +829,7 @@ const STATUS_LABELS: Record<SnagRequestStatus, string> = {
   queued: "QUEUED",
   running: "IN PROGRESS",
   needs_input: "NEEDS YOUR REPLY",
+  awaiting_requester: "REVIEW THE PLAN",
   awaiting_approval: "WAITING FOR A DEVELOPER",
   awaiting_review: "IN DEVELOPER REVIEW",
   awaiting_confirmation: "READY FOR YOU TO CHECK",

@@ -46,6 +46,15 @@ test("parseSnagPlan reads files, risk, and known flags", () => {
   });
 });
 
+test("parseSnagPlan keeps plain-language changes for the requester", () => {
+  const withChanges = planSummary.replace(
+    '"summary":"Swap the header token"',
+    '"summary":"Swap the header token","changes":["Make the header blue","  ",3]',
+  );
+  assert.deepEqual(parseSnagPlan(withChanges)?.changes, ["Make the header blue"]);
+  assert.equal("changes" in parseSnagPlan(planSummary), false);
+});
+
 test("parseSnagPlan rejects missing or invalid blocks", () => {
   assert.equal(parseSnagPlan(null), null);
   assert.equal(parseSnagPlan("No plan here"), null);

@@ -2,7 +2,8 @@
  * Execute-mode request lifecycle. Called when an agent run reaches a terminal
  * state (from the Cursor webhook or the relay's polling fallback).
  *
- *   planning      → needs_input | awaiting_approval | implementing
+ *   planning      → needs_input | awaiting_requester | awaiting_approval | implementing
+ *   awaiting_requester → (requester approves) awaiting_approval | implementing
  *   implementing  → needs_input | awaiting_review | finished | delivering
  *   delivering    → handled by the delivery worker
  *
@@ -188,9 +189,41 @@ async function finishPlanning(
   base: Record<string, unknown>,
   summary: string | null,
 ): Promise<void> {
+  const plan = parseSnagPlan(summary);
+  // Without a parsed plan there is nothing to show; policy hands it to a developer.
+  if (plan && projectSettings(ctx.project).planReviewEnabled) {
+    await claimTransition(ctx.service, row, {
+      ...base,
+      plan,
+      plan_summary: summary,
+      status: "awaiting_requester",
+    });
+    return;
+  }
+  await evaluatePlan(ctx, row, base, summary, plan);
+}
+
+/**
+ * The requester approved the plan at awaiting_requester. Policy still runs,
+ * so this never skips awaiting_approval.
+ */
+export async function continueAfterRequesterApproval(
+  ctx: { service: SupabaseClient; provider: AgentProvider; project: ProjectRow },
+  row: LifecycleRow,
+): Promise<void> {
+  const summary = row.plan_summary ?? row.summary;
+  await evaluatePlan(ctx, row, {}, summary, row.plan ?? parseSnagPlan(summary));
+}
+
+async function evaluatePlan(
+  ctx: { service: SupabaseClient; provider: AgentProvider; project: ProjectRow },
+  row: LifecycleRow,
+  base: Record<string, unknown>,
+  summary: string | null,
+  plan: SnagPlan | null,
+): Promise<void> {
   const { project } = ctx;
   const settings = projectSettings(project);
-  const plan = parseSnagPlan(summary);
   let forge: ForgeConnection | null = null;
   try {
     forge = await projectForge(project);

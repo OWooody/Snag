@@ -20,6 +20,7 @@ function project(overrides: Partial<ProjectRow> = {}): ProjectRow {
     allowed_origins: [],
     agent_mode: "execute",
     requester_followups_enabled: true,
+    requester_plan_review_enabled: null,
     execute_delivery: "auto_merge",
     default_outcome: "review_before_execution",
     policy_shadow_mode: false,
@@ -56,5 +57,23 @@ Deno.test("Origin drops preview delivery and keeps direct merge", () => {
   assertEquals(
     projectSettings(project({ ...origin, origin_app_key_encrypted: null })).delivery,
     "pr_only",
+  );
+});
+
+Deno.test("plan review: project override wins, otherwise the organization, otherwise off", () => {
+  const org = {
+    agent_mode: "execute" as const,
+    requester_followups_enabled: true,
+    requester_plan_review_enabled: true,
+    execute_delivery: "pr_only" as const,
+    default_outcome: "review_before_execution" as const,
+    policy_shadow_mode: false,
+  };
+  assertEquals(projectSettings(project()).planReviewEnabled, false);
+  assertEquals(projectSettings(project({ snag_organizations: org })).planReviewEnabled, true);
+  assertEquals(
+    projectSettings(project({ snag_organizations: org, requester_plan_review_enabled: false }))
+      .planReviewEnabled,
+    false,
   );
 });

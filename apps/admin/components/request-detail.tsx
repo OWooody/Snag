@@ -34,6 +34,7 @@ import { Textarea } from "@/components/ui/textarea";
 const ACTIVE_STATUSES: SnagRequestStatus[] = [
   "queued",
   "running",
+  "awaiting_requester",
   "awaiting_approval",
   "awaiting_review",
   "awaiting_confirmation",

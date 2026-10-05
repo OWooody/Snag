@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 const ACTIVE_STATUSES: SnagRequestStatus[] = [
   "queued",
   "running",
+  "awaiting_requester",
   "awaiting_approval",
   "awaiting_review",
   "awaiting_confirmation",

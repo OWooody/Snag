@@ -96,6 +96,27 @@ const ROWS: SnagRequestRow[] = [
     created_at: "2026-10-02T12:10:00.000Z",
   },
   {
+    id: "preview-plan",
+    prompt: "Make the Save button stand out",
+    status: "awaiting_requester",
+    agent_url: "https://cursor.com/agents/preview-plan",
+    branch_name: "cursor/save-button-emphasis",
+    pr_url: null,
+    summary: "The Save button uses the secondary style in SettingsForm.",
+    error: null,
+    phase: "planning",
+    plan: {
+      summary: "Give the Save button the primary style and move it right of Cancel.",
+      changes: [
+        "The Save button turns solid purple with white text",
+        "Save moves to the right of Cancel",
+        "Nothing else on the page changes",
+      ],
+    },
+    requester: PREVIEW_REQUESTER,
+    created_at: "2026-10-02T12:12:00.000Z",
+  },
+  {
     id: "preview-running",
     prompt: "Tighten the card padding on the right",
     status: "running",

@@ -33,6 +33,10 @@ import {
   RequesterFollowupsSwitch,
 } from "@/components/requester-followups-select";
 import {
+  ProjectRequesterPlanReviewOverrideSelect,
+  RequesterPlanReviewSwitch,
+} from "@/components/requester-plan-review-select";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -68,6 +72,9 @@ export function SettingsForm({
   const [orgFollowupsEnabled, setOrgFollowupsEnabled] = useState(
     organization?.requester_followups_enabled ?? true,
   );
+  const [orgPlanReviewEnabled, setOrgPlanReviewEnabled] = useState(
+    organization?.requester_plan_review_enabled ?? false,
+  );
   const [orgDelivery, setOrgDelivery] = useState<ExecuteDelivery>(
     organization?.execute_delivery ?? "pr_only",
   );
@@ -99,11 +106,18 @@ export function SettingsForm({
         ? project.requester_followups_enabled
         : "inherit",
     );
+  const [projectPlanReviewOverride, setProjectPlanReviewOverride] =
+    useState<ProjectFollowupsOverride>(
+      typeof project.requester_plan_review_enabled === "boolean"
+        ? project.requester_plan_review_enabled
+        : "inherit",
+    );
 
   useEffect(() => {
     if (organization) {
       setOrgAgentMode(organization.agent_mode);
       setOrgFollowupsEnabled(organization.requester_followups_enabled);
+      setOrgPlanReviewEnabled(organization.requester_plan_review_enabled ?? false);
       setOrgDelivery(organization.execute_delivery ?? "pr_only");
       setOrgOutcome(organization.default_outcome ?? "review_before_execution");
       setOrgShadow(organization.policy_shadow_mode ?? false);
@@ -111,6 +125,7 @@ export function SettingsForm({
   }, [
     organization?.agent_mode,
     organization?.requester_followups_enabled,
+    organization?.requester_plan_review_enabled,
     organization?.execute_delivery,
     organization?.default_outcome,
     organization?.policy_shadow_mode,
@@ -127,6 +142,14 @@ export function SettingsForm({
         : "inherit",
     );
   }, [project.requester_followups_enabled]);
+
+  useEffect(() => {
+    setProjectPlanReviewOverride(
+      typeof project.requester_plan_review_enabled === "boolean"
+        ? project.requester_plan_review_enabled
+        : "inherit",
+    );
+  }, [project.requester_plan_review_enabled]);
 
   const orgPosture = classifyExecutionPosture({
     agent_mode: orgAgentMode,
@@ -149,6 +172,8 @@ export function SettingsForm({
         agent_mode: undefined,
         requester_followups_enabled:
           projectFollowupsOverride === "inherit" ? null : projectFollowupsOverride,
+        requester_plan_review_enabled:
+          projectPlanReviewOverride === "inherit" ? null : projectPlanReviewOverride,
         allowed_origins: parseOriginsTextarea(allowedOriginsText),
       }),
     });
@@ -188,6 +213,7 @@ export function SettingsForm({
         organization_id: organization.id,
         agent_mode: orgAgentMode,
         requester_followups_enabled: orgFollowupsEnabled,
+        requester_plan_review_enabled: orgPlanReviewEnabled,
         execute_delivery: orgDelivery,
         default_outcome: orgOutcome,
         policy_shadow_mode: orgShadow,
@@ -271,6 +297,11 @@ export function SettingsForm({
               checked={orgFollowupsEnabled}
               onCheckedChange={setOrgFollowupsEnabled}
             />
+            <RequesterPlanReviewSwitch
+              id="org_requester_plan_review"
+              checked={orgPlanReviewEnabled}
+              onCheckedChange={setOrgPlanReviewEnabled}
+            />
             <Button type="button" onClick={onSaveOrganization} disabled={savingOrg}>
               {savingOrg ? "Saving…" : "Save organization defaults"}
             </Button>
@@ -315,6 +346,12 @@ export function SettingsForm({
               value={projectFollowupsOverride}
               onChange={setProjectFollowupsOverride}
               orgDefault={orgFollowupsEnabled}
+            />
+            <ProjectRequesterPlanReviewOverrideSelect
+              id="project_requester_plan_review"
+              value={projectPlanReviewOverride}
+              onChange={setProjectPlanReviewOverride}
+              orgDefault={orgPlanReviewEnabled}
             />
             <div className="space-y-2">
               <Label htmlFor="repo_url">Repository URL</Label>

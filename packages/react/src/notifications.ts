@@ -21,6 +21,7 @@ export interface StatusEvent {
 
 const EVENT_TITLES: Partial<Record<SnagRequestStatus, string>> = {
   needs_input: "The agent has a question for you",
+  awaiting_requester: "The plan is ready for you to review",
   awaiting_confirmation: "Your change is ready to check",
   finished: "Your request is finished",
   merged: "Your change is live",

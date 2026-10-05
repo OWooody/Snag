@@ -44,11 +44,12 @@ export function planningInstructions(followupsEnabled: boolean): string[] {
       : `4. End your summary with exactly this heading and a fenced JSON block:`,
     `   ${SNAG_PLAN_HEADING}`,
     "   ```json",
-    '   {"files": ["path/to/file.tsx"], "risk": "low", "flags": [], "summary": "One sentence describing the change"}',
+    '   {"files": ["path/to/file.tsx"], "risk": "low", "flags": [], "summary": "One sentence describing the change", "changes": ["Make the Save button blue"]}',
     "   ```",
     "   - files: every repository-relative path you expect to create, modify, or delete.",
     "   - risk: low, medium, or high.",
     `   - flags: every one that applies from: ${PLAN_FLAGS.join(", ")}.`,
+    "   - changes: 1 to 5 short bullets describing what the requester will see change, in plain language with no file names or code.",
   );
   if (followupsEnabled) {
     lines.push("   Omit this block while you still have questions for the requester.");
@@ -67,6 +68,20 @@ export function planningReplyWrapper(reply: string): string {
     SAME_QUESTION_FORMAT,
     'Put technical notes under "## Notes for developers".',
     `If no further requester questions remain, omit the requester heading and end your summary with the "${SNAG_PLAN_HEADING}" JSON block as instructed earlier.`,
+  ].join("\n");
+}
+
+export function planAdjustmentWrapper(feedback: string): string {
+  return [
+    "The original requester reviewed your plan via Snag and wants it changed:",
+    "",
+    feedback,
+    "",
+    "Revise the plan to match. Do not edit files yet.",
+    'If the feedback leaves a product/UX/scope decision open, list it under "## Questions for requester".',
+    SAME_QUESTION_FORMAT,
+    'Put technical notes under "## Notes for developers".',
+    `Otherwise end your summary with an updated "${SNAG_PLAN_HEADING}" JSON block as instructed earlier, including "changes".`,
   ].join("\n");
 }
 

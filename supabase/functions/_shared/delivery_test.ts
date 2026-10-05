@@ -75,6 +75,7 @@ function project(overrides: Partial<ProjectRow> = {}): ProjectRow {
     allowed_origins: [],
     agent_mode: "execute",
     requester_followups_enabled: true,
+    requester_plan_review_enabled: null,
     execute_delivery: "auto_merge",
     default_outcome: "review_before_execution",
     policy_shadow_mode: false,

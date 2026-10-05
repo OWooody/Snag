@@ -114,6 +114,10 @@ When the agent has questions, the request card shows them with tappable answers 
 
 Requests filed from this browser raise a short toast when they need you or finish, and the tab title shows a count while the page is in the background. After the first request, Snag offers browser notifications once; if the tester allows them, those updates arrive as system notifications while the tab is in the background. The ids of requests filed here are kept in `localStorage`.
 
+### Execute mode: reviewing the plan
+
+When your admin turns on **Requester plan review**, a request stops at **Review the plan** after the agent plans it. The card lists what will change in plain language. **Looks right, build it** hands the plan to Snag's rules (a developer may still need to approve it), and **Adjust** sends what should be different so the agent revises the plan. The iOS SDK does not show this step yet, so keep it off for projects whose testers use the iOS app.
+
 ### Execute mode: checking your own change
 
 When your admin enables execute mode with **Preview, then merge**, a request moves to **Ready for you to check** once the preview deployment is up. Open the preview from the request card, then tap **Looks right** (Snag merges it once CI passes and it goes live) or **Not right** with what should change (the agent revises the same PR). The tab's red waiting-on-you count includes these requests too.

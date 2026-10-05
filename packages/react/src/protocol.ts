@@ -15,6 +15,8 @@ export type SnagRequestStatus =
   | "finished"
   | "error"
   | "needs_input"
+  /** Execute mode: the plan is waiting for the requester to approve it or ask for changes. */
+  | "awaiting_requester"
   /** Execute mode: the plan is waiting for a developer's approval. */
   | "awaiting_approval"
   /** Execute mode: the PR is waiting for a developer to review and merge. */
@@ -82,14 +84,26 @@ export interface ReplySnagRequestResponse {
   status: "running";
 }
 
-/** POST <endpoint> — answer awaiting_confirmation after checking the preview */
+/**
+ * POST <endpoint> — approve the plan at awaiting_requester, or answer
+ * awaiting_confirmation after checking the preview. Plan changes go through
+ * the reply body instead.
+ */
 export type ConfirmSnagRequestBody =
+  | { request_id: string; decision: "approve_plan" }
   | { request_id: string; decision: "looks_right" }
   | { request_id: string; decision: "not_right"; feedback: string };
 
 export interface ConfirmSnagRequestResponse {
   id: string;
-  status: "running";
+  status: SnagRequestStatus;
+}
+
+/** The agent's plan in requester terms. */
+export interface SnagRequestPlan {
+  summary: string | null;
+  /** Plain-language bullets of what will change. */
+  changes: string[];
 }
 
 export interface SnagRequestRow {
@@ -111,6 +125,8 @@ export interface SnagRequestRow {
   phase?: SnagRequestPhase | null;
   /** Short description of an in-progress step, e.g. "Planning" or "Waiting for checks". */
   stage_label?: string | null;
+  /** Execute mode: the plan, once the agent has written one. */
+  plan?: SnagRequestPlan | null;
   /** Host-supplied display id from `getRequester`, when provided. */
   requester: string | null;
   created_at: string;

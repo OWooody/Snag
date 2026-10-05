@@ -6,8 +6,8 @@
  *
  * GET  → { enabled, requester_followups_enabled, agent_mode, requests? }
  * POST create  → { prompt, context, … } — insert + launch agent
- * POST reply   → { request_id, reply } — follow-up on existing agent
- * POST confirm → { request_id, decision, feedback? } — requester verdict on a preview
+ * POST reply   → { request_id, reply } — follow-up on existing agent, or plan changes at awaiting_requester
+ * POST confirm → { request_id, decision, feedback? } — requester verdict on a plan (approve_plan) or a preview
  *
  * Never log prompt or screenshot contents — log entity ids and reasons only.
  */
@@ -26,12 +26,14 @@ import {
 import { decryptSecret, getEncryptionSecret } from "../_shared/crypto.ts";
 import {
   implementingReplyWrapper,
+  planAdjustmentWrapper,
   planningInstructions,
   planningReplyWrapper,
   previewFeedbackPrompt,
 } from "../_shared/execute_prompts.ts";
 import {
   claimTransition,
+  continueAfterRequesterApproval,
   handleAgentTerminal,
   type LifecycleRow,
   REQUEST_LIFECYCLE_COLUMNS,
@@ -120,6 +122,10 @@ const replySchema = z.object({
 });
 
 const confirmSchema = z.discriminatedUnion("decision", [
+  z.object({
+    request_id: z.string().uuid(),
+    decision: z.literal("approve_plan"),
+  }),
   z.object({
     request_id: z.string().uuid(),
     decision: z.literal("looks_right"),
@@ -389,10 +395,6 @@ async function handleReply(
   project: ProjectRow,
   corsHeaders: Record<string, string>,
 ): Promise<Response> {
-  if (!projectFollowupsEnabled(project)) {
-    return json({ error: "Requester follow-ups are disabled" }, 403, corsHeaders);
-  }
-
   const ip =
     req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
 
@@ -405,7 +407,13 @@ async function handleReply(
   const row = await loadOwnedRequest(req, serviceClient, project, body.request_id, ip);
   if (row instanceof Response) return withCors(row, corsHeaders);
 
-  if (row.status !== "needs_input") {
+  // Asking for plan changes is part of plan review, which works without follow-ups.
+  const adjustingPlan = row.status === "awaiting_requester";
+  if (!adjustingPlan && !projectFollowupsEnabled(project)) {
+    return json({ error: "Requester follow-ups are disabled" }, 403, corsHeaders);
+  }
+
+  if (row.status !== "needs_input" && !adjustingPlan) {
     return json({ error: "Request is not waiting for a reply" }, 409, corsHeaders);
   }
 
@@ -413,7 +421,9 @@ async function handleReply(
     return json({ error: "Request has no agent" }, 409, corsHeaders);
   }
 
-  const wrappedReply = row.phase === "planning"
+  const wrappedReply = adjustingPlan
+    ? planAdjustmentWrapper(body.reply)
+    : row.phase === "planning"
     ? planningReplyWrapper(body.reply)
     : row.phase === "implementing"
     ? implementingReplyWrapper(body.reply)
@@ -444,7 +454,10 @@ async function handleReply(
   } catch (error) {
     console.error("snag-relay follow-up failed:", error);
     const message = userFacingLaunchError(error);
-    await claimTransition(serviceClient, row, { status: "needs_input", error: message });
+    await claimTransition(serviceClient, row, {
+      status: adjustingPlan ? "awaiting_requester" : "needs_input",
+      error: message,
+    });
     return json({ error: message }, 502, corsHeaders);
   }
 
@@ -470,6 +483,21 @@ async function handleConfirm(
 
   const row = await loadOwnedRequest(req, serviceClient, project, body.request_id, ip);
   if (row instanceof Response) return withCors(row, corsHeaders);
+
+  if (body.decision === "approve_plan") {
+    if (row.status !== "awaiting_requester") {
+      return json({ error: "Request is not waiting for plan approval" }, 409, corsHeaders);
+    }
+    const version = row.lifecycle_version;
+    await continueAfterRequesterApproval(
+      { service: serviceClient, provider, project },
+      row,
+    );
+    if (row.lifecycle_version === version) {
+      return json({ error: "Request changed; refresh and try again" }, 409, corsHeaders);
+    }
+    return json({ id: row.id, status: row.status }, 200, corsHeaders);
+  }
 
   if (row.status !== "awaiting_confirmation" || row.phase !== "delivering") {
     return json({ error: "Request is not waiting for confirmation" }, 409, corsHeaders);
@@ -741,6 +769,7 @@ async function listRequests(
     handoff_reason: row.status === "awaiting_review" ? row.handoff_reason : null,
     phase: row.phase,
     stage_label: requestStageLabel(row),
+    plan: row.plan ? { summary: row.plan.summary, changes: row.plan.changes ?? [] } : null,
     requester: row.requester ?? null,
     created_at: row.created_at,
   }));

@@ -74,6 +74,7 @@ export const companyProjectUpdateSchema = z.object({
   enabled: z.boolean(),
   agent_mode: projectAgentModeOverrideSchema.optional(),
   requester_followups_enabled: z.boolean().nullable().optional(),
+  requester_plan_review_enabled: z.boolean().nullable().optional(),
   allowed_origins: allowedOriginsSchema.optional(),
 });
 
@@ -85,6 +86,7 @@ export const companyOrganizationUpdateSchema = z.object({
   organization_id: z.string().uuid(),
   agent_mode: agentModeSchema,
   requester_followups_enabled: z.boolean(),
+  requester_plan_review_enabled: z.boolean().optional(),
   execute_delivery: executeDeliverySchema.optional(),
   default_outcome: policyOutcomeSchema.optional(),
   policy_shadow_mode: z.boolean().optional(),
@@ -250,6 +252,7 @@ export const platformTenantUpdateSchema = z.object({
   daily_limit: rateLimitSchema.optional(),
   agent_mode: projectAgentModeOverrideSchema.optional(),
   requester_followups_enabled: z.boolean().nullable().optional(),
+  requester_plan_review_enabled: z.boolean().nullable().optional(),
   cursor_api_key: z.preprocess(
     (val) => (typeof val === "string" && val.trim() === "" ? undefined : val),
     z.string().trim().min(1).max(512).optional(),

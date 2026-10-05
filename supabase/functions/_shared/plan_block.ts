@@ -26,9 +26,13 @@ export interface SnagPlan {
   risk: PlanRisk;
   flags: PlanFlag[];
   summary: string | null;
+  /** Plain-language bullets for the requester. Omitted when the agent gave none. */
+  changes?: string[];
 }
 
 const MAX_PLAN_FILES = 200;
+const MAX_PLAN_CHANGES = 8;
+const MAX_PLAN_CHANGE_LENGTH = 200;
 
 export function parseSnagPlan(summary: string | null | undefined): SnagPlan | null {
   if (!summary) return null;
@@ -69,12 +73,24 @@ export function parseSnagPlan(summary: string | null | undefined): SnagPlan | nu
     ? value.summary.trim().slice(0, 500)
     : null;
 
+  const changes = parsePlanChanges(value.changes);
+
   return {
     files: [...new Set(files)],
     risk,
     flags: [...new Set(flags)],
     summary: planSummary,
+    ...(changes.length > 0 ? { changes } : {}),
   };
+}
+
+function parsePlanChanges(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((change): change is string => typeof change === "string")
+    .map((change) => change.trim().slice(0, MAX_PLAN_CHANGE_LENGTH))
+    .filter((change) => change.length > 0)
+    .slice(0, MAX_PLAN_CHANGES);
 }
 
 export function normalizeRepoPath(path: string): string {
