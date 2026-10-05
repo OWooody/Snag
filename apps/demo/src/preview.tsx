@@ -10,6 +10,7 @@ import { defaultTheme } from "../../../packages/react/src/theme";
 
 const PREVIEW_ENDPOINT = "https://preview.snag.invalid/state";
 const PREVIEW_REQUESTER = "preview@snag.dev";
+const PREVIEW_LATENCY_MS = 1100;
 
 const ROWS: SnagRequestRow[] = [
   {
@@ -199,6 +200,8 @@ function installPreviewRelay(): void {
     if (!url.startsWith(PREVIEW_ENDPOINT)) return nativeFetch(input, init);
     const method = (init?.method ?? "GET").toUpperCase();
     if (method === "GET") {
+      // A real relay takes a moment; an instant reply hides loading motion.
+      await new Promise((resolve) => setTimeout(resolve, PREVIEW_LATENCY_MS));
       return Response.json(STATE);
     }
     return Response.json({

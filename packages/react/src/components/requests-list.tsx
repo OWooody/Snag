@@ -10,7 +10,7 @@ import { LightMarkdown } from "../light-markdown";
 import { GLASS_SURFACE, SHEET_MOTION_MS } from "../sheet";
 import { withAlpha } from "../styles";
 import type { SnagTheme } from "../theme";
-import { FilterChip } from "./controls";
+import { FilterChip, RefreshButton } from "./controls";
 import { PlanReview } from "./plan-review";
 import { QuestionForm } from "./question-form";
 
@@ -46,7 +46,6 @@ export function RequestsList({
   onLoadedRef.current = onLoaded;
   const [rows, setRows] = useState<SnagRequestRow[]>([]);
   const [loaded, setLoaded] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
   const [currentRequester, setCurrentRequester] = useState<string | null>(null);
   const [mineOnly, setMineOnly] = useState(true);
   const [agentMode, setAgentMode] = useState<"plan_only" | "execute" | null>(null);
@@ -60,7 +59,6 @@ export function RequestsList({
   const scrolledToFocus = useRef<string | null>(null);
 
   const load = useCallback(async () => {
-    setRefreshing(true);
     const [state, requester] = await Promise.all([
       fetchRelayState(),
       resolveRequester(),
@@ -69,7 +67,6 @@ export function RequestsList({
     if (state.enabled) onLoadedRef.current?.(state.requests ?? []);
     if (state.agent_mode) setAgentMode(state.agent_mode);
     setCurrentRequester(requester);
-    setRefreshing(false);
     setLoaded(true);
   }, []);
 
@@ -171,23 +168,7 @@ export function RequestsList({
         {currentRequester ? (
           <FilterChip label="Mine" active={mineOnly} theme={theme} onChange={setMineOnly} />
         ) : null}
-        <button
-          type="button"
-          onClick={() => void load()}
-          disabled={refreshing}
-          className="snag-focus"
-          style={{
-            border: "none",
-            background: "transparent",
-            color: theme.accent,
-            fontWeight: 700,
-            cursor: refreshing ? "wait" : "pointer",
-            fontSize: 13,
-            marginLeft: 4,
-          }}
-        >
-          {refreshing ? "Refreshing…" : "Refresh"}
-        </button>
+        <RefreshButton theme={theme} onRefresh={load} />
       </div>
       {!loaded ? (
         <div aria-busy="true" aria-label="Loading requests">

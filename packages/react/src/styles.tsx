@@ -36,6 +36,13 @@ ${root} .snag-shimmer {
   animation: snag-shimmer 1.5s ease-in-out infinite;
 }
 ${root} .snag-step-active { animation: snag-step-pulse 1.6s ease-in-out infinite; }
+${root} .snag-refresh { color: ${withAlpha(theme.text, 0.62)}; }
+${root} .snag-refresh:active { transform: scale(0.94); }
+${root} .snag-refresh[data-state="spinning"] .snag-refresh-arrow { animation: snag-refresh-spin 820ms linear infinite; }
+@media (hover: hover) {
+  ${root} .snag-refresh:hover { color: ${theme.text}; background: rgba(255, 255, 255, 0.78) !important; }
+  ${root} .snag-refresh[data-state="idle"]:hover .snag-refresh-turn { transform: rotate(40deg); }
+}
 ${root} .snag-focus:focus-visible,
 ${root} .snag-switch-input:focus-visible + .snag-switch-track {
   outline: 2px solid ${withAlpha(theme.accent, 0.55)};
@@ -80,8 +87,12 @@ ${root} select {
   0% { background-position: 100% 0; }
   100% { background-position: 0 0; }
 }
+@keyframes snag-refresh-spin {
+  to { transform: rotate(360deg); }
+}
 @media (prefers-reduced-motion: reduce) {
   ${root} * { animation: none !important; }
+  ${root} .snag-refresh[data-state="spinning"] .snag-refresh-arrow { opacity: 0.4; }
   [data-snag-tab] * { transition: none !important; }
 }
 `;
