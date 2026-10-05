@@ -5,7 +5,7 @@
 
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
-export const MAX_SELECTED_ELEMENTS = 3;
+export const MAX_SELECTED_ELEMENTS = 8;
 const MAX_ATTRIBUTES = 16;
 
 const shortText = (max: number) => z.string().max(max);

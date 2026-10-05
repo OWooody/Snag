@@ -4,6 +4,8 @@ import { loadImage } from "./stroke-utils";
 const JPEG_QUALITY = 0.7;
 
 export interface PickedElement {
+  /** The live node, so the picker can reopen with the same selection. */
+  element: Element;
   info: SnagElement;
   /** Box relative to `document.body` in CSS px — the screenshot's coordinate space. */
   pageBox: { x: number; y: number; width: number; height: number };

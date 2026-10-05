@@ -1,6 +1,7 @@
 import { assert, assertEquals, assertStringIncludes } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
   formatSelectedElements,
+  MAX_SELECTED_ELEMENTS,
   type SelectedElement,
   selectedElementsSchema,
 } from "./selected_elements.ts";
@@ -41,8 +42,10 @@ Deno.test("formatSelectedElements keeps page text on one line and out of code sp
 });
 
 Deno.test("selectedElementsSchema caps the number of elements and attributes", () => {
-  assert(selectedElementsSchema.safeParse([button, button, button]).success);
-  assert(!selectedElementsSchema.safeParse([button, button, button, button]).success);
+  assert(selectedElementsSchema.safeParse(Array(MAX_SELECTED_ELEMENTS).fill(button)).success);
+  assert(
+    !selectedElementsSchema.safeParse(Array(MAX_SELECTED_ELEMENTS + 1).fill(button)).success,
+  );
 
   const attributes = Object.fromEntries(
     Array.from({ length: 17 }, (_, i) => [`data-a${i}`, "x"]),

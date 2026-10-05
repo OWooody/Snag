@@ -45,7 +45,7 @@ const SHEET_FLARE = 14;
 const SHEET_CORNER = 18;
 const SHEET_STROKE = "rgba(255, 255, 255, 0.6)";
 /** Keep in sync with the relay's `elements` max. */
-const MAX_ELEMENTS = 3;
+const MAX_ELEMENTS = 8;
 const GO_STATUS = [
   "Reading this screen…",
   "Analyzing the request…",
@@ -156,13 +156,22 @@ export function RequestPanel({
     };
   }, [workingScreenshot, elements, theme.accent]);
 
-  const addElement = (element: Element) => {
-    const picked: PickedElement = { info: describeElement(element), ...pagePosition(element) };
-    setElements((previous) =>
-      previous.some((item) => item.info.selector === picked.info.selector)
-        ? previous
-        : [...previous, picked].slice(0, MAX_ELEMENTS),
-    );
+  const applyPicks = (picked: Element[]) => {
+    setElements((previous) => {
+      // The picker never saw nodes that left the page; keep those picks.
+      const next = previous.filter((item) => !item.element.isConnected);
+      for (const element of picked) {
+        if (next.length >= MAX_ELEMENTS) break;
+        const existing = previous.find((item) => item.element === element);
+        const item = existing ?? {
+          element,
+          info: describeElement(element),
+          ...pagePosition(element),
+        };
+        if (!next.some((other) => other.info.selector === item.info.selector)) next.push(item);
+      }
+      return next;
+    });
   };
 
   const removeElement = (index: number) => {
@@ -244,17 +253,18 @@ export function RequestPanel({
     return (
       <ElementPicker
         theme={theme}
+        initial={elements.map((item) => item.element).filter((node) => node.isConnected)}
+        max={MAX_ELEMENTS}
         onCancel={() => setPicking(false)}
-        onPick={(element) => {
-          addElement(element);
+        onDone={(picked) => {
+          applyPicks(picked);
           setPicking(false);
         }}
       />
     );
   }
 
-  const canPickMore = elements.length < MAX_ELEMENTS;
-  const pickLabel = elements.length > 0 ? "Add element" : "Select element";
+  const pickLabel = elements.length > 0 ? "Edit elements" : "Select elements";
 
   // Narrow viewports get an edge-to-edge sheet, so the flare would fall off-screen.
   const fullFlare =
@@ -612,21 +622,19 @@ export function RequestPanel({
                           <span style={overlayPillStyle}>
                             {isAnnotated ? "Marked up · Edit" : "Mark up"}
                           </span>
-                          {canPickMore ? (
-                            <button
-                              type="button"
-                              onClick={() => setPicking(true)}
-                              disabled={phase === "submitting"}
-                              style={{
-                                ...overlayPillStyle,
-                                border: "none",
-                                pointerEvents: "auto",
-                                cursor: phase === "submitting" ? "not-allowed" : "pointer",
-                              }}
-                            >
-                              {pickLabel}
-                            </button>
-                          ) : null}
+                          <button
+                            type="button"
+                            onClick={() => setPicking(true)}
+                            disabled={phase === "submitting"}
+                            style={{
+                              ...overlayPillStyle,
+                              border: "none",
+                              pointerEvents: "auto",
+                              cursor: phase === "submitting" ? "not-allowed" : "pointer",
+                            }}
+                          >
+                            {pickLabel}
+                          </button>
                         </div>
                       </div>
                       <PickedElementList
@@ -648,25 +656,23 @@ export function RequestPanel({
                     </div>
                   ) : (
                     <div style={{ marginTop: 16 }}>
-                      {canPickMore ? (
-                        <button
-                          type="button"
-                          onClick={() => setPicking(true)}
-                          disabled={phase === "submitting"}
-                          style={{
-                            padding: "8px 12px",
-                            borderRadius: 8,
-                            border: "1px solid rgba(255,255,255,0.55)",
-                            background: GLASS_SURFACE,
-                            color: theme.text,
-                            fontWeight: 700,
-                            fontSize: 12,
-                            cursor: phase === "submitting" ? "not-allowed" : "pointer",
-                          }}
-                        >
-                          {pickLabel}
-                        </button>
-                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() => setPicking(true)}
+                        disabled={phase === "submitting"}
+                        style={{
+                          padding: "8px 12px",
+                          borderRadius: 8,
+                          border: "1px solid rgba(255,255,255,0.55)",
+                          background: GLASS_SURFACE,
+                          color: theme.text,
+                          fontWeight: 700,
+                          fontSize: 12,
+                          cursor: phase === "submitting" ? "not-allowed" : "pointer",
+                        }}
+                      >
+                        {pickLabel}
+                      </button>
                       <PickedElementList
                         elements={elements}
                         theme={theme}

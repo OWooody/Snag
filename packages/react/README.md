@@ -102,7 +102,7 @@ export function App() {
 
 ### Pointing at an element
 
-Next to **Mark up** on the screenshot, **Select element** lets the tester click the exact thing they mean (up to 3 per request). Hover highlights the element under the cursor; click selects it. ↑ / ↓ move to the parent / child, Enter selects, Esc cancels. On touch screens, tap an element and then **Select**.
+Next to **Mark up** on the screenshot, **Select elements** lets the tester click the exact things they mean (up to 8 per request). The picker stays open: hover highlights the element under the cursor, click adds it with a numbered badge, and clicking it again removes it. ↑ / ↓ move to the parent / child, Enter or **Done** finishes, Esc cancels. On touch screens, tap an element and then **Add**.
 
 Each pick is sent as `elements` on the request, and a numbered box is drawn on the screenshot. A pick includes a CSS selector, the visible text, identifying attributes (`aria-label`, `data-testid`, `href` without its query string, `class`, …), and its position. When the page runs a React development build, it also includes the nearest component names and the source file of the element's JSX. Form field values are never read.
 

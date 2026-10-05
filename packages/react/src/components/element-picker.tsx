@@ -13,7 +13,10 @@ import type { SnagTheme } from "../theme";
 
 interface ElementPickerProps {
   theme: SnagTheme;
-  onPick: (element: Element) => void;
+  /** Elements already picked; the picker starts from this selection. */
+  initial: Element[];
+  max: number;
+  onDone: (elements: Element[]) => void;
   onCancel: () => void;
 }
 
@@ -51,18 +54,21 @@ function maxDepth(element: Element | null): number {
 
 /**
  * Full-screen picker: hover highlights the element under the pointer, click
- * selects it. Touch: tap to preview, then confirm. Arrow Up/Down walk to the
- * parent/child, Enter selects, Esc cancels.
+ * adds or removes it from the selection. Touch: tap to preview, then Add.
+ * Arrow Up/Down walk to the parent/child, Enter finishes, Esc cancels.
  */
-export function ElementPicker({ theme, onPick, onCancel }: ElementPickerProps) {
+export function ElementPicker({ theme, initial, max, onDone, onCancel }: ElementPickerProps) {
   const [target, setTarget] = useState<Element | null>(null);
   const [depth, setDepth] = useState(0);
   const [touchMode, setTouchMode] = useState(false);
+  const [picked, setPicked] = useState<Element[]>(initial);
   const [, setLayoutTick] = useState(0);
   const lastPointer = useRef<{ x: number; y: number } | null>(null);
   const targetRef = useRef<Element | null>(null);
 
   const selected = ancestorAt(target, depth);
+  const selectedIsPicked = selected != null && picked.includes(selected);
+  const full = picked.length >= max;
   const label = useMemo(
     () => (selected ? elementLabel(describeElement(selected)) : null),
     [selected],
@@ -76,9 +82,22 @@ export function ElementPicker({ theme, onPick, onCancel }: ElementPickerProps) {
     setDepth(0);
   }, []);
 
-  const pick = useCallback(() => {
-    if (selected) onPick(selected);
-  }, [selected, onPick]);
+  const toggle = useCallback(
+    (element: Element) => {
+      setPicked((current) => {
+        if (current.includes(element)) return current.filter((item) => item !== element);
+        if (current.length >= max) return current;
+        return [...current, element];
+      });
+    },
+    [max],
+  );
+
+  const finish = useCallback(() => {
+    // Enter with nothing picked keeps the old one-step flow: take the hovered element.
+    if (picked.length === 0 && selected) onDone([selected]);
+    else onDone(picked);
+  }, [picked, selected, onDone]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -89,7 +108,7 @@ export function ElementPicker({ theme, onPick, onCancel }: ElementPickerProps) {
       } else if (event.key === "ArrowDown") {
         setDepth((value) => Math.max(0, value - 1));
       } else if (event.key === "Enter") {
-        pick();
+        finish();
       } else {
         return;
       }
@@ -98,7 +117,7 @@ export function ElementPicker({ theme, onPick, onCancel }: ElementPickerProps) {
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [onCancel, pick, target]);
+  }, [onCancel, finish, target]);
 
   useEffect(() => {
     const onLayoutChange = () => {
@@ -132,7 +151,7 @@ export function ElementPicker({ theme, onPick, onCancel }: ElementPickerProps) {
       if (event.button !== 0) return;
       const found = hitTest(event.clientX, event.clientY);
       const element = found === target ? selected : found;
-      if (element) onPick(element);
+      if (element) toggle(element);
       return;
     }
     setTouchMode(true);
@@ -160,7 +179,51 @@ export function ElementPicker({ theme, onPick, onCancel }: ElementPickerProps) {
         }}
       />
 
-      {rect ? (
+      {picked.map((element, index) => {
+        const box = element.getBoundingClientRect();
+        return (
+          <div
+            key={index}
+            aria-hidden="true"
+            style={{
+              position: "fixed",
+              left: box.left,
+              top: box.top,
+              width: box.width,
+              height: box.height,
+              zIndex: 2147483646,
+              pointerEvents: "none",
+              boxSizing: "border-box",
+              border: `2px solid ${theme.accent}`,
+              borderRadius: 4,
+              background: `color-mix(in srgb, ${theme.accent} 8%, transparent)`,
+            }}
+          >
+            <span
+              style={{
+                position: "absolute",
+                top: -10,
+                left: -10,
+                width: 20,
+                height: 20,
+                borderRadius: 999,
+                background: theme.accent,
+                color: "#fff",
+                fontSize: 11,
+                fontWeight: 800,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                boxShadow: "0 0 0 2px #fff",
+              }}
+            >
+              {index + 1}
+            </span>
+          </div>
+        );
+      })}
+
+      {rect && !selectedIsPicked ? (
         <div
           aria-hidden="true"
           style={{
@@ -226,11 +289,15 @@ export function ElementPicker({ theme, onPick, onCancel }: ElementPickerProps) {
       >
         <div aria-live="polite" style={{ minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: theme.text }}>
-            {touchMode ? "Tap an element, then Select" : "Click the element to change"}
+            {full
+              ? `Up to ${max} elements`
+              : touchMode
+                ? "Tap an element, then Add"
+                : "Click the elements to change"}
           </div>
           {!touchMode ? (
             <div style={{ fontSize: 11, color: theme.textMuted }}>
-              ↑ ↓ parent / child · Enter select · Esc cancel
+              Click again to remove · ↑ ↓ parent / child · Enter done · Esc cancel
             </div>
           ) : null}
         </div>
@@ -242,10 +309,22 @@ export function ElementPicker({ theme, onPick, onCancel }: ElementPickerProps) {
               disabled={depth >= maxDepth(target)}
               onClick={() => setDepth((value) => value + 1)}
             />
-            <BannerButton label="Select" theme={theme} primary onClick={pick} />
+            <BannerButton
+              label={selectedIsPicked ? "Remove" : "Add"}
+              theme={theme}
+              disabled={!selectedIsPicked && full}
+              onClick={() => toggle(selected)}
+            />
           </>
         ) : null}
         <BannerButton label="Cancel" theme={theme} onClick={onCancel} />
+        <BannerButton
+          label={picked.length > 0 ? `Done (${picked.length})` : "Done"}
+          theme={theme}
+          primary
+          disabled={picked.length === 0}
+          onClick={() => onDone(picked)}
+        />
       </div>
     </div>
   );
