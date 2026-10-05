@@ -46,6 +46,11 @@ import {
   type ProjectRow,
   projectSettings,
 } from "../_shared/projects.ts";
+import {
+  MARKER_CONTEXT_KEY,
+  markerFromContext,
+  requestMarkerSchema,
+} from "../_shared/request_marker.ts";
 import { requestStageLabel } from "../_shared/request_stage.ts";
 import {
   mapTerminalRequestStatus,
@@ -113,6 +118,7 @@ const createSchema = z.object({
     })
     .optional(),
   elements: selectedElementsSchema.optional(),
+  marker: requestMarkerSchema.optional(),
   locale: z.string().max(10).optional(),
 });
 
@@ -311,9 +317,11 @@ async function handleCreate(
       requester_verified: verified,
       requester_ip: ip,
       prompt: body.prompt,
-      context: body.elements?.length
-        ? { ...body.context, snag_elements: body.elements }
-        : body.context,
+      context: {
+        ...body.context,
+        ...(body.elements?.length ? { snag_elements: body.elements } : {}),
+        ...(body.marker ? { [MARKER_CONTEXT_KEY]: body.marker } : {}),
+      },
       screenshot_included: !!body.screenshot,
       status: "queued",
       phase: agentMode === "execute" ? "planning" : null,
@@ -663,7 +671,7 @@ async function listRequests(
   const followupsEnabled = projectFollowupsEnabled(project);
   const { data: rows, error } = await serviceClient
     .from("snag_requests")
-    .select(`${REQUEST_LIFECYCLE_COLUMNS}, error, rejection_note, created_at`)
+    .select(`${REQUEST_LIFECYCLE_COLUMNS}, error, rejection_note, context, created_at`)
     .eq("project_id", project.id)
     .order("created_at", { ascending: false })
     .limit(LIST_LIMIT);
@@ -674,7 +682,12 @@ async function listRequests(
   }
 
   const requests = (rows ?? []) as Array<
-    LifecycleRow & { error: string | null; rejection_note: string | null; created_at: string }
+    LifecycleRow & {
+      error: string | null;
+      rejection_note: string | null;
+      context: unknown;
+      created_at: string;
+    }
   >;
   const staleCutoff = Date.now() - STALE_RUNNING_MS;
   let conversationBackfills = 0;
@@ -777,6 +790,7 @@ async function listRequests(
         preview: row.plan.preview ?? null,
       }
       : null,
+    marker: markerFromContext(row.context),
     requester: row.requester ?? null,
     created_at: row.created_at,
   }));

@@ -24,6 +24,7 @@ import { countUnseenDone, markDoneSeen } from "../seen-done";
 import { TAB_REST_SHAPE, type TabShape } from "../sheet";
 import { SnagStyles } from "../styles";
 import { FloatingButton } from "./floating-button";
+import { PageMarkers } from "./page-markers";
 import { RequestPanel } from "./request-panel";
 import { StatusToasts, type Toast } from "./status-toasts";
 
@@ -56,6 +57,7 @@ export function SnagOverlay() {
   const [initialTab, setInitialTab] = useState<"new" | "list">("new");
   const [initialFocusId, setInitialFocusId] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [markerRows, setMarkerRows] = useState<SnagRequestRow[]>([]);
   const [screenshot, setScreenshot] = useState<SnagScreenshot | null>(null);
   const [mounted, setMounted] = useState(false);
 
@@ -79,9 +81,11 @@ export function SnagOverlay() {
       setRunningCount(0);
       setDoneCount(0);
       setFollowupsEnabled(false);
+      setMarkerRows([]);
       return;
     }
     setEnabled(true);
+    setMarkerRows((state.requests ?? []).filter((row) => row.marker));
     const followups = state.requester_followups_enabled === true;
     setFollowupsEnabled(followups);
     if (state.agent_mode) setAgentMode(state.agent_mode);
@@ -226,6 +230,13 @@ export function SnagOverlay() {
           theme={theme}
           onDismiss={dismissToast}
           onOpen={(toast) => void openPanel("list", TAB_REST_SHAPE, toast.event.row.id)}
+        />
+      ) : null}
+      {!panelVisible && getSnagConfig()?.markers !== false ? (
+        <PageMarkers
+          rows={markerRows}
+          theme={theme}
+          onOpen={(row) => void openPanel("list", TAB_REST_SHAPE, row.id)}
         />
       ) : null}
       {!panelVisible ? (

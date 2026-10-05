@@ -42,6 +42,7 @@ import { withAlpha } from "../styles";
 import type { SnagTheme } from "../theme";
 import { Switch } from "./controls";
 import { ElementPicker } from "./element-picker";
+import { markerFor } from "./page-markers";
 import { PreviewPill } from "./preview-pill";
 import { ChatIcon, TAB_LABEL } from "./floating-button";
 import { RequestsList } from "./requests-list";
@@ -211,6 +212,7 @@ export function RequestPanel({
             ? await withHighlights(workingScreenshot)
             : undefined,
         elements: elements.length > 0 ? elements.map((item) => item.info) : undefined,
+        marker: markerFor(elements),
         locale: typeof context.locale === "string" ? context.locale : undefined,
       });
       rememberOwnRequest(response.id);

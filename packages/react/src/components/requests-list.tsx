@@ -7,7 +7,7 @@ import type { SnagRequestPhase, SnagRequestRow, SnagRequestStatus } from "../pro
 import type { PreviewOp } from "../dom-preview";
 import { displaySummaryForRequest, parseRequesterQuestions } from "../requester-questions";
 import { LightMarkdown } from "../light-markdown";
-import { GLASS_SURFACE } from "../sheet";
+import { GLASS_SURFACE, SHEET_MOTION_MS } from "../sheet";
 import { withAlpha } from "../styles";
 import type { SnagTheme } from "../theme";
 import { FilterChip } from "./controls";
@@ -87,8 +87,17 @@ export function RequestsList({
     if (!focusRequestId || scrolledToFocus.current === focusRequestId) return;
     const node = cardRefs.current[focusRequestId];
     if (!node) return;
-    scrolledToFocus.current = focusRequestId;
-    node.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    if (scrolledToFocus.current !== null) {
+      scrolledToFocus.current = focusRequestId;
+      node.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      return;
+    }
+    // While the sheet animates open its clipped body would take the scroll instead.
+    const timer = window.setTimeout(() => {
+      scrolledToFocus.current = focusRequestId;
+      node.scrollIntoView({ block: "nearest" });
+    }, SHEET_MOTION_MS);
+    return () => window.clearTimeout(timer);
   }, [focusRequestId, rows]);
 
   const visibleRows = rows.filter((row) => {

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { initSnag } from "../../../packages/react/src/config";
+import { PageMarkers } from "../../../packages/react/src/components/page-markers";
 import { RequestPanel } from "../../../packages/react/src/components/request-panel";
 import { StatusToasts, type Toast } from "../../../packages/react/src/components/status-toasts";
 import type { RelayStateResponse, SnagRequestRow } from "../../../packages/react/src/protocol";
@@ -118,6 +119,7 @@ const ROWS: SnagRequestRow[] = [
         { op: "hide", selector: "[data-testid=preview-intro]" },
       ],
     },
+    marker: { pathname: "/preview", selector: "[data-testid=preview-title]", x: 0, y: 0 },
     requester: PREVIEW_REQUESTER,
     created_at: "2026-10-02T12:12:00.000Z",
   },
@@ -132,6 +134,8 @@ const ROWS: SnagRequestRow[] = [
     error: null,
     phase: "implementing",
     stage_label: "Editing the sheet",
+    // The element is gone, so the marker falls back to where it was filed.
+    marker: { pathname: "/preview", selector: "[data-testid=removed-card]", x: 520, y: 150 },
     requester: PREVIEW_REQUESTER,
     created_at: "2026-10-02T12:05:00.000Z",
   },
@@ -158,6 +162,7 @@ const ROWS: SnagRequestRow[] = [
     pr_url: null,
     summary: null,
     error: null,
+    marker: { pathname: "/preview", selector: "[data-testid=preview-intro]", x: 0, y: 0 },
     requester: "teammate@example.com",
     created_at: "2026-10-02T08:00:00.000Z",
   },
@@ -212,6 +217,7 @@ export function Preview() {
   installPreviewRelay();
   const [open, setOpen] = useState(true);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [focusId, setFocusId] = useState<string | null>(null);
   const showSampleToast = () =>
     setToasts([
       {
@@ -279,6 +285,14 @@ export function Preview() {
       {open ? null : (
         <div data-snag-overlay="true" dir="ltr">
           <SnagStyles theme={defaultTheme} />
+          <PageMarkers
+            rows={ROWS}
+            theme={defaultTheme}
+            onOpen={(row) => {
+              setFocusId(row.id);
+              setOpen(true);
+            }}
+          />
           <StatusToasts
             toasts={toasts}
             theme={defaultTheme}
@@ -297,10 +311,14 @@ export function Preview() {
             screenshot={null}
             theme={defaultTheme}
             initialTab="list"
+            initialFocusRequestId={focusId}
             followupsEnabled
             agentMode="execute"
             badgeCount={1}
-            onClose={() => setOpen(false)}
+            onClose={() => {
+              setFocusId(null);
+              setOpen(false);
+            }}
           />
         </div>
       ) : null}

@@ -37,6 +37,11 @@ export interface SnagConfig {
   getContext?: () =>
     | Promise<Record<string, unknown>>
     | Record<string, unknown>;
+  /**
+   * Pin numbered markers where open requests were filed on the current page.
+   * Defaults to true.
+   */
+  markers?: boolean;
   /** Enable console debug logging. Defaults to non-production. */
   debug?: boolean;
   theme?: Partial<SnagTheme>;

@@ -55,6 +55,17 @@ export interface SnagElement {
   source?: { file: string; line?: number; column?: number };
 }
 
+/** Where on the page a request was filed, for the SDK's page markers. */
+export interface SnagRequestMarker {
+  /** `location.pathname` when the request was filed. */
+  pathname: string;
+  /** The first picked element, when one was picked. */
+  selector?: string;
+  /** Page coordinates in CSS px, used when the selector no longer matches. */
+  x: number;
+  y: number;
+}
+
 /** POST <endpoint> — create */
 export interface CreateSnagRequestBody {
   /** The user's change request, free text. */
@@ -64,6 +75,7 @@ export interface CreateSnagRequestBody {
   screenshot?: SnagScreenshot;
   /** Elements picked on the page; numbered boxes on the screenshot match this order. */
   elements?: SnagElement[];
+  marker?: SnagRequestMarker;
   locale?: string;
 }
 
@@ -129,6 +141,8 @@ export interface SnagRequestRow {
   stage_label?: string | null;
   /** Execute mode: the plan, once the agent has written one. */
   plan?: SnagRequestPlan | null;
+  /** Where the request was filed on the page, when known. */
+  marker?: SnagRequestMarker | null;
   /** Host-supplied display id from `getRequester`, when provided. */
   requester: string | null;
   created_at: string;

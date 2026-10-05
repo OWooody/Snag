@@ -99,6 +99,7 @@ export function App() {
 | `getAuthToken` | Send `Authorization: Bearer` when the user is logged in |
 | `theme` | Override tab/panel colors (`accent` drives the in-progress sweep, `danger` the waiting-on-you glow, `success` the finished state) |
 | `debug: true` | Log probe/request details to the console |
+| `markers: false` | Hide the numbered pins that mark open requests on the page |
 
 ### Pointing at an element
 
@@ -107,6 +108,8 @@ Next to **Mark up** on the screenshot, **Select elements** lets the tester click
 Each pick is sent as `elements` on the request, and a numbered box is drawn on the screenshot. A pick includes a CSS selector, the visible text, identifying attributes (`aria-label`, `data-testid`, `href` without its query string, `class`, …), and its position. When the page runs a React development build, it also includes the nearest component names and the source file of the element's JSX. Form field values are never read.
 
 Production builds strip React's debug info and minify component names, so there the agent relies on the selector, text and attributes. Adding `data-testid` to key elements makes picks much easier to trace back to code.
+
+When a request points at an element, a numbered pin stays next to that element on the same page until the request is done, so others see it's already asked for. Clicking the pin opens the request. If the element is no longer on the page, the pin sits where it was when the request was filed. Pins follow client-side navigation and only show on the page the request was filed from (matched by `location.pathname`).
 
 ### Answering questions and staying in the loop
 

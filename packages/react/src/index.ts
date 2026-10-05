@@ -13,6 +13,7 @@ export type {
   SnagRequestRow,
   SnagElement,
   SnagRequestPhase,
+  SnagRequestMarker,
   SnagRequestPlan,
   SnagRequestStatus,
   SnagScreenshot,
