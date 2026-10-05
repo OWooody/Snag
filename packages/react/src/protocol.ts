@@ -7,6 +7,8 @@
  * branch, PR).
  */
 
+export type SnagRequestPhase = "planning" | "implementing" | "delivering";
+
 export type SnagRequestStatus =
   | "queued"
   | "running"
@@ -106,7 +108,7 @@ export interface SnagRequestRow {
   /** Why the request went to a developer while awaiting_review. Informational, not an error. */
   handoff_reason?: string | null;
   /** Execute mode: planning, implementing, or delivering. Null in plan-only mode. */
-  phase?: "planning" | "implementing" | "delivering" | null;
+  phase?: SnagRequestPhase | null;
   /** Short description of an in-progress step, e.g. "Planning" or "Waiting for checks". */
   stage_label?: string | null;
   /** Host-supplied display id from `getRequester`, when provided. */

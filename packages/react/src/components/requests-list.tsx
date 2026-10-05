@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { confirmSnagRequest, fetchRelayState, replyToSnagRequest } from "../api";
 import { resolveRequester } from "../config";
-import type { SnagRequestRow, SnagRequestStatus } from "../protocol";
+import { ACTIVE_POLL_MS, hasActiveRequest, isActiveRequest, startVisiblePolling } from "../polling";
+import type { SnagRequestPhase, SnagRequestRow, SnagRequestStatus } from "../protocol";
 import { displaySummaryForRequest } from "../requester-questions";
 import { LightMarkdown } from "../light-markdown";
 import { GLASS_SURFACE } from "../sheet";
@@ -70,21 +71,11 @@ export function RequestsList({
     void load();
   }, [load, refreshKey]);
 
-  useEffect(() => {
-    const tick = () => {
-      if (document.hidden) return;
-      void load();
-    };
-    const id = window.setInterval(tick, POLL_INTERVAL_MS);
-    const onVisibility = () => {
-      if (!document.hidden) void load();
-    };
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => {
-      window.clearInterval(id);
-      document.removeEventListener("visibilitychange", onVisibility);
-    };
-  }, [load]);
+  const active = hasActiveRequest(rows);
+  useEffect(
+    () => startVisiblePolling(() => void load(), active ? ACTIVE_POLL_MS : POLL_INTERVAL_MS),
+    [load, active],
+  );
 
   useEffect(() => {
     if (!focusRequestId || scrolledToFocus.current === focusRequestId) return;
@@ -409,6 +400,7 @@ function RequestCard({
     setSummaryOverflows(node != null && node.scrollHeight > COLLAPSED_SUMMARY_MAX_HEIGHT + 4);
   }, [summaryText]);
 
+  const showSteps = row.phase != null && isActiveRequest(row);
   const canToggle = summaryOverflows || canReply || canConfirm;
   const showActions = expanded || !canToggle;
 
@@ -505,7 +497,7 @@ function RequestCard({
           }}
         >
           {STATUS_LABELS[row.status] ?? row.status.toUpperCase()}
-          {row.stage_label ? (
+          {row.stage_label && !showSteps ? (
             <span style={{ fontWeight: 600, letterSpacing: 0, color: theme.textMuted }}>
               {` · ${row.stage_label}`}
             </span>
@@ -518,6 +510,9 @@ function RequestCard({
       <p style={{ fontSize: 14, fontWeight: 600, color: theme.text, margin: 0 }}>
         {row.prompt}
       </p>
+      {showSteps && row.phase ? (
+        <PhaseSteps phase={row.phase} caption={row.stage_label ?? null} theme={theme} />
+      ) : null}
       {row.requester ? (
         <p style={{ fontSize: 12, color: theme.textMuted, marginTop: 4, marginBottom: 0 }}>
           {row.requester}
@@ -728,6 +723,68 @@ function RequestCard({
         <p style={{ fontSize: 11, color: theme.textMuted, marginTop: 4, marginBottom: 0 }}>
           {row.branch_name}
         </p>
+      ) : null}
+    </div>
+  );
+}
+
+const PHASE_STEPS: { phase: SnagRequestPhase; label: string }[] = [
+  { phase: "planning", label: "Planning" },
+  { phase: "implementing", label: "Building" },
+  { phase: "delivering", label: "Delivering" },
+];
+
+function PhaseSteps({
+  phase,
+  caption,
+  theme,
+}: {
+  phase: SnagRequestPhase;
+  caption: string | null;
+  theme: SnagTheme;
+}) {
+  const current = PHASE_STEPS.findIndex((step) => step.phase === phase);
+  const detail = caption && caption !== PHASE_STEPS[current]?.label ? caption : null;
+  return (
+    <div style={{ marginTop: 10 }}>
+      <ol
+        aria-label="Progress"
+        style={{ display: "flex", gap: 6, listStyle: "none", margin: 0, padding: 0 }}
+      >
+        {PHASE_STEPS.map((step, index) => {
+          const done = index < current;
+          const active = index === current;
+          return (
+            <li
+              key={step.phase}
+              aria-current={active ? "step" : undefined}
+              style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}
+            >
+              <span
+                className={active ? "snag-step-active" : undefined}
+                style={{
+                  display: "block",
+                  height: 4,
+                  borderRadius: 999,
+                  background:
+                    done || active ? theme.accent : withAlpha(theme.accent, 0.15),
+                }}
+              />
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: active ? 700 : 600,
+                  color: active ? theme.text : theme.textMuted,
+                }}
+              >
+                {step.label}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+      {detail ? (
+        <p style={{ fontSize: 12, color: theme.textMuted, margin: "4px 0 0" }}>{detail}</p>
       ) : null}
     </div>
   );

@@ -35,6 +35,7 @@ ${root} .snag-shimmer {
   background-size: 300% 100%;
   animation: snag-shimmer 1.5s ease-in-out infinite;
 }
+${root} .snag-step-active { animation: snag-step-pulse 1.6s ease-in-out infinite; }
 ${root} .snag-focus:focus-visible,
 ${root} .snag-switch-input:focus-visible + .snag-switch-track {
   outline: 2px solid ${withAlpha(theme.accent, 0.55)};
@@ -70,6 +71,10 @@ ${root} select {
 @keyframes snag-tab-sweep {
   0% { transform: translateX(-14px); }
   100% { transform: translateX(32px); }
+}
+@keyframes snag-step-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
 }
 @keyframes snag-shimmer {
   0% { background-position: 100% 0; }

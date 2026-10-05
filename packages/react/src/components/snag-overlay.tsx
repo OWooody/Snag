@@ -11,6 +11,7 @@ import {
   resolveTheme,
   startConsoleErrorBuffer,
 } from "../config";
+import { ACTIVE_POLL_MS, isActiveRequest, startVisiblePolling } from "../polling";
 import type { SnagRequestRow, SnagScreenshot } from "../protocol";
 import { captureScreenshot } from "../screenshot";
 import { countUnseenDone, markDoneSeen } from "../seen-done";
@@ -85,9 +86,7 @@ export function SnagOverlay() {
           (followups && row.status === "needs_input"),
       ).length,
     );
-    setRunningCount(
-      mine.filter((row) => row.status === "queued" || row.status === "running").length,
-    );
+    setRunningCount(mine.filter(isActiveRequest).length);
     lastRequester.current = requester;
     setDoneCount(countUnseenDone(requester, doneRequestIds(mine)));
   }, []);
@@ -133,22 +132,15 @@ export function SnagOverlay() {
     };
   }, [initialized, refreshBadge]);
 
+  const active = runningCount > 0;
   useEffect(() => {
-    if (!enabled) return;
-    const tick = () => {
-      if (document.hidden) return;
-      void refreshBadge();
-    };
-    const id = window.setInterval(tick, BADGE_POLL_MS);
-    const onVisibility = () => {
-      if (!document.hidden) void refreshBadge();
-    };
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => {
-      window.clearInterval(id);
-      document.removeEventListener("visibilitychange", onVisibility);
-    };
-  }, [enabled, refreshBadge]);
+    // The open sheet polls the list itself.
+    if (!enabled || panelVisible) return;
+    return startVisiblePolling(
+      () => void refreshBadge(),
+      active ? ACTIVE_POLL_MS : BADGE_POLL_MS,
+    );
+  }, [enabled, panelVisible, active, refreshBadge]);
 
   useEffect(() => {
     if (!enabled) return;
