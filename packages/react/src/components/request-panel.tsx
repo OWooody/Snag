@@ -22,6 +22,7 @@ import {
   requestNotificationPermission,
   shouldOfferNotifications,
 } from "../notifications";
+import type { PreviewOp } from "../dom-preview";
 import type { SnagRequestRow, SnagScreenshot } from "../protocol";
 import {
   GLASS_BLUR_SATURATE,
@@ -41,6 +42,7 @@ import { withAlpha } from "../styles";
 import type { SnagTheme } from "../theme";
 import { Switch } from "./controls";
 import { ElementPicker } from "./element-picker";
+import { PreviewPill } from "./preview-pill";
 import { ChatIcon, TAB_LABEL } from "./floating-button";
 import { RequestsList } from "./requests-list";
 import { ScreenshotAnnotator } from "./screenshot-annotator";
@@ -118,6 +120,9 @@ export function RequestPanel({
   const [submittedId, setSubmittedId] = useState<string | null>(null);
   const [focusRequestId, setFocusRequestId] = useState<string | null>(initialFocusRequestId);
   const [offerNotifications, setOfferNotifications] = useState(false);
+  const [previewing, setPreviewing] = useState<{ requestId: string; ops: PreviewOp[] } | null>(
+    null,
+  );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [listRefreshKey, setListRefreshKey] = useState(0);
   const sheetScrollRef = useRef<HTMLDivElement>(null);
@@ -256,6 +261,19 @@ export function RequestPanel({
           setWorkingScreenshot(result);
           setIsAnnotated(result.base64 !== screenshot?.base64);
           setAnnotating(false);
+        }}
+      />
+    );
+  }
+
+  if (previewing) {
+    return (
+      <PreviewPill
+        ops={previewing.ops}
+        theme={theme}
+        onClose={() => {
+          setFocusRequestId(previewing.requestId);
+          setPreviewing(null);
         }}
       />
     );
@@ -471,6 +489,7 @@ export function RequestPanel({
                   followupsEnabled={followupsEnabled}
                 focusRequestId={focusRequestId}
                 onLoaded={onRequestsViewed}
+                onShowPreview={(requestId, ops) => setPreviewing({ requestId, ops })}
                 onNewRequest={() => {
                     if (phase === "done") {
                       startAnother();

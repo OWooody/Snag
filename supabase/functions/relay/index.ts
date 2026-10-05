@@ -348,6 +348,7 @@ async function handleCreate(
         project.prompt_instructions,
         agentMode,
         followupsEnabled,
+        projectSettings(project).planReviewEnabled,
       ),
       images,
       repository: project.repo_url,
@@ -769,7 +770,13 @@ async function listRequests(
     handoff_reason: row.status === "awaiting_review" ? row.handoff_reason : null,
     phase: row.phase,
     stage_label: requestStageLabel(row),
-    plan: row.plan ? { summary: row.plan.summary, changes: row.plan.changes ?? [] } : null,
+    plan: row.plan
+      ? {
+        summary: row.plan.summary,
+        changes: row.plan.changes ?? [],
+        preview: row.plan.preview ?? null,
+      }
+      : null,
     requester: row.requester ?? null,
     created_at: row.created_at,
   }));
@@ -783,6 +790,7 @@ function buildAgentPrompt(
   promptInstructions: string,
   agentMode: AgentMode,
   followupsEnabled: boolean,
+  planReviewEnabled: boolean,
 ): string {
   const elementSections = formatSelectedElements(elements);
   const sections = [
@@ -813,7 +821,7 @@ function buildAgentPrompt(
       "   - Risks and edge cases",
     );
   } else {
-    sections.push(...planningInstructions(followupsEnabled));
+    sections.push(...planningInstructions(followupsEnabled, planReviewEnabled));
     return sections.join("\n");
   }
 

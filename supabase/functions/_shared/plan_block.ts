@@ -4,6 +4,8 @@
  * (Deno edge functions cannot import the npm package).
  */
 
+import { parsePreviewOps, type PreviewOp } from "./preview_ops.ts";
+
 export const SNAG_PLAN_HEADING = "## Snag plan";
 
 export const PLAN_RISKS = ["low", "medium", "high"] as const;
@@ -28,6 +30,8 @@ export interface SnagPlan {
   summary: string | null;
   /** Plain-language bullets for the requester. Omitted when the agent gave none. */
   changes?: string[];
+  /** Temporary page edits the SDK can show as an approximate preview. */
+  preview?: PreviewOp[];
 }
 
 const MAX_PLAN_FILES = 200;
@@ -74,6 +78,7 @@ export function parseSnagPlan(summary: string | null | undefined): SnagPlan | nu
     : null;
 
   const changes = parsePlanChanges(value.changes);
+  const preview = parsePreviewOps(value.preview);
 
   return {
     files: [...new Set(files)],
@@ -81,6 +86,7 @@ export function parseSnagPlan(summary: string | null | undefined): SnagPlan | nu
     flags: [...new Set(flags)],
     summary: planSummary,
     ...(changes.length > 0 ? { changes } : {}),
+    ...(preview ? { preview } : {}),
   };
 }
 

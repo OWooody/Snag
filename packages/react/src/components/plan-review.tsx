@@ -1,6 +1,7 @@
-import { useState, type CSSProperties } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 
 import { confirmSnagRequest, replyToSnagRequest } from "../api";
+import { parsePreviewOps, type PreviewOp } from "../dom-preview";
 import type { SnagRequestPlan } from "../protocol";
 import type { SnagTheme } from "../theme";
 
@@ -17,6 +18,7 @@ export function PlanReview({
   fieldStyle,
   buttonStyle,
   onDone,
+  onShowPreview,
 }: {
   requestId: string;
   plan: SnagRequestPlan;
@@ -24,7 +26,10 @@ export function PlanReview({
   fieldStyle: CSSProperties;
   buttonStyle: (primary: boolean, busy: boolean) => CSSProperties;
   onDone: () => void;
+  /** Collapse the sheet and show `ops` on the page. */
+  onShowPreview?: (ops: PreviewOp[]) => void;
 }) {
+  const previewOps = useMemo(() => parsePreviewOps(plan.preview), [plan.preview]);
   const [adjusting, setAdjusting] = useState(false);
   const [feedback, setFeedback] = useState("");
   const [busy, setBusy] = useState(false);
@@ -76,6 +81,16 @@ export function PlanReview({
       <p style={{ fontSize: 12, color: theme.textMuted, margin: "0 0 10px" }}>
         Nothing is built until you approve. A developer may still check it before it goes live.
       </p>
+      {previewOps && onShowPreview ? (
+        <button
+          type="button"
+          onClick={() => onShowPreview(previewOps)}
+          disabled={busy}
+          style={{ ...buttonStyle(false, busy), width: "100%", marginBottom: 8 }}
+        >
+          Show me the expected result
+        </button>
+      ) : null}
       {adjusting ? (
         <>
           <textarea

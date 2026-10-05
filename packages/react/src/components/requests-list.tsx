@@ -4,6 +4,7 @@ import { confirmSnagRequest, fetchRelayState, replyToSnagRequest } from "../api"
 import { resolveRequester } from "../config";
 import { ACTIVE_POLL_MS, hasActiveRequest, isActiveRequest, startVisiblePolling } from "../polling";
 import type { SnagRequestPhase, SnagRequestRow, SnagRequestStatus } from "../protocol";
+import type { PreviewOp } from "../dom-preview";
 import { displaySummaryForRequest, parseRequesterQuestions } from "../requester-questions";
 import { LightMarkdown } from "../light-markdown";
 import { GLASS_SURFACE } from "../sheet";
@@ -28,6 +29,8 @@ interface RequestsListProps {
   onNewRequest?: () => void;
   /** Receives the rows from every successful load. */
   onLoaded?: (rows: SnagRequestRow[]) => void;
+  /** Show a plan's approximate preview on the page. */
+  onShowPreview?: (requestId: string, ops: PreviewOp[]) => void;
 }
 
 export function RequestsList({
@@ -37,6 +40,7 @@ export function RequestsList({
   focusRequestId = null,
   onNewRequest,
   onLoaded,
+  onShowPreview,
 }: RequestsListProps) {
   const onLoadedRef = useRef(onLoaded);
   onLoadedRef.current = onLoaded;
@@ -224,6 +228,9 @@ export function RequestsList({
                   setExpandedOverrides((current) => ({ ...current, [row.id]: next }))
                 }
                 onReplied={() => void load()}
+                onShowPreview={
+                  onShowPreview ? (ops) => onShowPreview(row.id, ops) : undefined
+                }
               />
             </div>
           );
@@ -376,6 +383,7 @@ function RequestCard({
   expanded,
   onToggleExpanded,
   onReplied,
+  onShowPreview,
 }: {
   row: SnagRequestRow;
   theme: SnagTheme;
@@ -384,6 +392,7 @@ function RequestCard({
   expanded: boolean;
   onToggleExpanded: (expanded: boolean) => void;
   onReplied: () => void;
+  onShowPreview?: (ops: PreviewOp[]) => void;
 }) {
   const link = row.pr_url ?? row.agent_url;
   const [reply, setReply] = useState("");
@@ -650,6 +659,7 @@ function RequestCard({
           fieldStyle={fieldStyle}
           buttonStyle={buttonStyle}
           onDone={onReplied}
+          onShowPreview={onShowPreview}
         />
       ) : null}
       {canConfirm && showActions ? (

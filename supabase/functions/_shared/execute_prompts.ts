@@ -10,7 +10,23 @@ import { requesterQuestionsFormatLines } from "./requester_questions.ts";
 const SAME_QUESTION_FORMAT =
   "Use the same format as before: Markdown bullets plus the fenced JSON block.";
 
-export function planningInstructions(followupsEnabled: boolean): string[] {
+/**
+ * The requester can preview a plan on the live page before approving it.
+ * Ops are validated by preview_ops.ts; keep the two lists in sync.
+ */
+function previewInstructions(): string[] {
+  return [
+    '   - preview (optional): page edits the requester\'s browser can apply temporarily to show roughly what the change looks like, e.g. [{"op": "css", "selector": "[data-testid=save]", "style": {"background": "#2563eb", "color": "#fff"}}].',
+    '     Allowed ops: css (selector + style properties), text (selector + plain "text"), hide (selector), move (selector + "before" or "after" a sibling selector), attr (selector + "name" of placeholder, title, aria-label, or alt + "value").',
+    "     Use selectors that match the running page (data-testid, ids, or the selectors from Selected elements). No url() values.",
+    "     Omit preview (or use null) when the change involves logic, data, new pages, or new components.",
+  ];
+}
+
+export function planningInstructions(
+  followupsEnabled: boolean,
+  planReviewEnabled = false,
+): string[] {
   const lines = [
     "1. PLANNING PHASE ONLY: locate the exact code behind the request and write a short plan (files, edits, risks).",
     "   Do NOT edit files, commit, push, or open a pull request yet. Snag decides whether implementation starts automatically or waits for a developer.",
@@ -51,6 +67,9 @@ export function planningInstructions(followupsEnabled: boolean): string[] {
     `   - flags: every one that applies from: ${PLAN_FLAGS.join(", ")}.`,
     "   - changes: 1 to 5 short bullets describing what the requester will see change, in plain language with no file names or code.",
   );
+  if (planReviewEnabled) {
+    lines.push(...previewInstructions());
+  }
   if (followupsEnabled) {
     lines.push("   Omit this block while you still have questions for the requester.");
   }
@@ -81,7 +100,7 @@ export function planAdjustmentWrapper(feedback: string): string {
     'If the feedback leaves a product/UX/scope decision open, list it under "## Questions for requester".',
     SAME_QUESTION_FORMAT,
     'Put technical notes under "## Notes for developers".',
-    `Otherwise end your summary with an updated "${SNAG_PLAN_HEADING}" JSON block as instructed earlier, including "changes".`,
+    `Otherwise end your summary with an updated "${SNAG_PLAN_HEADING}" JSON block as instructed earlier, including "changes" (and "preview" when the change can be previewed).`,
   ].join("\n");
 }
 

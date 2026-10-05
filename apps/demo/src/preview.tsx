@@ -112,6 +112,11 @@ const ROWS: SnagRequestRow[] = [
         "Save moves to the right of Cancel",
         "Nothing else on the page changes",
       ],
+      preview: [
+        { op: "text", selector: "[data-testid=preview-title]", text: "Snag preview, friendlier" },
+        { op: "css", selector: "[data-testid=preview-title]", style: { color: "#5B4CF5" } },
+        { op: "hide", selector: "[data-testid=preview-intro]" },
+      ],
     },
     requester: PREVIEW_REQUESTER,
     created_at: "2026-10-02T12:12:00.000Z",
@@ -230,8 +235,10 @@ export function Preview() {
   return (
     <div style={{ fontFamily: "system-ui, sans-serif", minHeight: "100vh", background: "#fafafa" }}>
       <main style={{ padding: 24, maxWidth: 720 }}>
-        <h1 style={{ marginTop: 0 }}>Snag preview</h1>
-        <p>
+        <h1 data-testid="preview-title" style={{ marginTop: 0 }}>
+          Snag preview
+        </h1>
+        <p data-testid="preview-intro">
           This is the React sheet from <code>packages/react/src</code>, with sample requests.
           Nothing here talks to the relay.
         </p>

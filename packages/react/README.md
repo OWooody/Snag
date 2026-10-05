@@ -116,7 +116,7 @@ Requests filed from this browser raise a short toast when they need you or finis
 
 ### Execute mode: reviewing the plan
 
-When your admin turns on **Requester plan review**, a request stops at **Review the plan** after the agent plans it. The card lists what will change in plain language. **Looks right, build it** hands the plan to Snag's rules (a developer may still need to approve it), and **Adjust** sends what should be different so the agent revises the plan. The iOS SDK does not show this step yet, so keep it off for projects whose testers use the iOS app.
+When your admin turns on **Requester plan review**, a request stops at **Review the plan** after the agent plans it. The card lists what will change in plain language. **Looks right, build it** hands the plan to Snag's rules (a developer may still need to approve it), and **Adjust** sends what should be different so the agent revises the plan. When the plan is a visual or copy change, **Show me the expected result** applies an approximate version to the page you're on (styles, text, hiding, reordering siblings, and a few attributes) until you tap **Back to plan**. It never runs code or inserts HTML, and the real change may look a little different. The iOS SDK does not show this step yet, so keep it off for projects whose testers use the iOS app.
 
 ### Execute mode: checking your own change
 

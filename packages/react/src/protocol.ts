@@ -104,6 +104,8 @@ export interface SnagRequestPlan {
   summary: string | null;
   /** Plain-language bullets of what will change. */
   changes: string[];
+  /** Temporary page edits for an approximate preview. Validated by the SDK before use. */
+  preview?: unknown;
 }
 
 export interface SnagRequestRow {
