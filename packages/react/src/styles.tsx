@@ -43,6 +43,16 @@ ${root} .snag-refresh[data-state="spinning"] .snag-refresh-arrow { animation: sn
   ${root} .snag-refresh:hover { color: ${theme.text}; background: rgba(255, 255, 255, 0.78) !important; }
   ${root} .snag-refresh[data-state="idle"]:hover .snag-refresh-turn { transform: rotate(40deg); }
 }
+${root} .snag-tabbar-tab { color: ${withAlpha(theme.text, 0.55)}; transition: color 160ms ease; }
+${root} .snag-tabbar-tab[aria-selected="true"] { color: ${theme.text}; }
+${root} .snag-tabbar-icon { opacity: 0.6; transition: opacity 160ms ease; }
+${root} .snag-tabbar-tab[aria-selected="true"] .snag-tabbar-icon { opacity: 1; }
+${root} .snag-tabbar-hover { opacity: 0; transition: opacity 160ms ease; }
+@media (hover: hover) {
+  ${root} .snag-tabbar-tab[aria-selected="false"]:hover { color: ${theme.text}; }
+  ${root} .snag-tabbar-tab[aria-selected="false"]:hover .snag-tabbar-icon { opacity: 0.85; }
+  ${root} .snag-tabbar-tab[aria-selected="false"]:hover .snag-tabbar-hover { opacity: 1; }
+}
 ${root} .snag-focus:focus-visible,
 ${root} .snag-switch-input:focus-visible + .snag-switch-track {
   outline: 2px solid ${withAlpha(theme.accent, 0.55)};
@@ -94,6 +104,7 @@ ${root} select {
   ${root} * { animation: none !important; }
   ${root} .snag-refresh[data-state="spinning"] .snag-refresh-arrow { opacity: 0.4; }
   [data-snag-tab] * { transition: none !important; }
+  ${root} .snag-tabbar-indicator { transition: none !important; }
 }
 `;
   return <style>{css}</style>;

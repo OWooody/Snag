@@ -451,36 +451,23 @@ export function RequestPanel({
             </button>
           </div>
 
-          <div
-            style={{
-              display: "flex",
-              gap: 8,
-              marginBottom: 16,
-            }}
-          >
-            <TabButton
-              active={tab === "new"}
-              label="New request"
-              theme={theme}
-              onClick={() => {
+          <TabBar
+            tab={tab}
+            theme={theme}
+            badgeCount={badgeCount}
+            onSelect={(next) => {
+              if (next === "new") {
                 if (phase === "done") {
                   startAnother();
                   return;
                 }
                 setTab("new");
-              }}
-            />
-            <TabButton
-              active={tab === "list"}
-              label="Requests"
-              theme={theme}
-              badgeCount={badgeCount}
-              onClick={() => {
-                setFocusRequestId(null);
-                setTab("list");
-              }}
-            />
-          </div>
+                return;
+              }
+              setFocusRequestId(null);
+              setTab("list");
+            }}
+          />
 
           <AnimatedTabBody tab={tab}>
             {(activeTab) =>
@@ -1059,15 +1046,86 @@ function PickedElementList({
   );
 }
 
+const TAB_UNDERLINE_WIDTH = 72;
+
+function TabBar({
+  tab,
+  theme,
+  badgeCount,
+  onSelect,
+}: {
+  tab: Tab;
+  theme: SnagTheme;
+  badgeCount: number;
+  onSelect: (tab: Tab) => void;
+}) {
+  const tabs: { id: Tab; label: string; icon: ReactNode; badgeCount?: number }[] = [
+    { id: "new", label: "New request", icon: <ChatIcon size={20} /> },
+    { id: "list", label: "Requests", icon: <InboxIcon />, badgeCount },
+  ];
+  const index = Math.max(0, tabs.findIndex((t) => t.id === tab));
+  const share = 100 / tabs.length;
+
+  return (
+    <div
+      role="tablist"
+      aria-label="Snag"
+      style={{
+        position: "relative",
+        display: "flex",
+        marginBottom: 16,
+        borderBottom: `1px solid ${withAlpha(theme.text, 0.1)}`,
+      }}
+    >
+      {tabs.map((t) => (
+        <TabButton
+          key={t.id}
+          active={tab === t.id}
+          label={t.label}
+          icon={t.icon}
+          theme={theme}
+          badgeCount={t.badgeCount}
+          onClick={() => onSelect(t.id)}
+        />
+      ))}
+      <span
+        aria-hidden="true"
+        className="snag-tabbar-indicator"
+        style={{
+          position: "absolute",
+          bottom: -1,
+          left: `${index * share}%`,
+          width: `${share}%`,
+          display: "flex",
+          justifyContent: "center",
+          pointerEvents: "none",
+          transition: `left ${TAB_MOTION_MS}ms cubic-bezier(0.32, 0.72, 0, 1)`,
+        }}
+      >
+        <span
+          style={{
+            width: TAB_UNDERLINE_WIDTH,
+            height: 2,
+            borderRadius: 1,
+            background: theme.text,
+          }}
+        />
+      </span>
+    </div>
+  );
+}
+
 function TabButton({
   active,
   label,
+  icon,
   theme,
   onClick,
   badgeCount = 0,
 }: {
   active: boolean;
   label: string;
+  icon: ReactNode;
   theme: SnagTheme;
   onClick: () => void;
   badgeCount?: number;
@@ -1076,6 +1134,9 @@ function TabButton({
   return (
     <button
       type="button"
+      role="tab"
+      aria-selected={active}
+      className="snag-tabbar-tab snag-focus"
       onClick={onClick}
       aria-label={
         badgeCount > 0 ? `${label}. ${badgeCount} awaiting your reply` : label
@@ -1083,40 +1144,84 @@ function TabButton({
       style={{
         position: "relative",
         flex: 1,
-        padding: "10px 12px",
-        borderRadius: 10,
-        border: active ? "none" : "1px solid rgba(255,255,255,0.55)",
-        background: active ? theme.accent : GLASS_SURFACE,
-        color: active ? "#fff" : theme.text,
-        fontWeight: 700,
-        fontSize: 13,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 6,
+        padding: "6px 12px 12px",
+        border: "none",
+        borderRadius: 8,
+        background: "transparent",
+        fontWeight: active ? 700 : 600,
+        fontSize: 12,
         cursor: "pointer",
       }}
     >
+      <span
+        className="snag-tabbar-icon"
+        style={{ position: "relative", display: "flex", height: 20 }}
+      >
+        {icon}
+        {badgeCount > 0 ? (
+          <span
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              top: -6,
+              left: 14,
+              minWidth: 16,
+              height: 16,
+              padding: "0 4px",
+              borderRadius: 8,
+              background: theme.danger,
+              color: "#fff",
+              fontSize: 10,
+              fontWeight: 800,
+              lineHeight: "16px",
+              textAlign: "center",
+              boxSizing: "border-box",
+            }}
+          >
+            {badgeLabel}
+          </span>
+        ) : null}
+      </span>
       {label}
-      {badgeCount > 0 ? (
-        <span
-          aria-hidden="true"
-          style={{
-            position: "absolute",
-            top: -6,
-            right: -4,
-            minWidth: 18,
-            height: 18,
-            padding: "0 5px",
-            borderRadius: 9,
-            background: theme.danger,
-            color: "#fff",
-            fontSize: 11,
-            fontWeight: 800,
-            lineHeight: "18px",
-            textAlign: "center",
-            boxSizing: "border-box",
-          }}
-        >
-          {badgeLabel}
-        </span>
-      ) : null}
+      <span
+        aria-hidden="true"
+        className="snag-tabbar-hover"
+        style={{
+          position: "absolute",
+          bottom: -1,
+          left: "50%",
+          width: TAB_UNDERLINE_WIDTH,
+          height: 2,
+          marginLeft: -TAB_UNDERLINE_WIDTH / 2,
+          borderRadius: 1,
+          background: withAlpha(theme.text, 0.18),
+        }}
+      />
     </button>
+  );
+}
+
+function InboxIcon() {
+  return (
+    <svg width={20} height={20} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M22 12h-6l-2 3h-4l-2-3H2"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
