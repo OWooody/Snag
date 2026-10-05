@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { initSnag } from "../../../packages/react/src/config";
 import { RequestPanel } from "../../../packages/react/src/components/request-panel";
+import { StatusToasts, type Toast } from "../../../packages/react/src/components/status-toasts";
 import type { RelayStateResponse, SnagRequestRow } from "../../../packages/react/src/protocol";
 import { SnagStyles } from "../../../packages/react/src/styles";
 import { defaultTheme } from "../../../packages/react/src/theme";
@@ -184,6 +185,18 @@ function installPreviewRelay(): void {
 export function Preview() {
   installPreviewRelay();
   const [open, setOpen] = useState(true);
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const showSampleToast = () =>
+    setToasts([
+      {
+        key: `sample-${Date.now()}`,
+        event: {
+          row: ROWS.find((row) => row.status === "needs_input") ?? ROWS[0],
+          status: "needs_input",
+          title: "The agent has a question for you",
+        },
+      },
+    ]);
 
   useEffect(() => {
     const previous = document.body.style.margin;
@@ -217,7 +230,38 @@ export function Preview() {
             Open sheet
           </button>
         )}
+        {open ? null : (
+          <button
+            type="button"
+            onClick={showSampleToast}
+            style={{
+              marginLeft: 8,
+              padding: "10px 16px",
+              borderRadius: 8,
+              border: "1px solid #5B4CF5",
+              background: "transparent",
+              color: "#5B4CF5",
+              fontWeight: 700,
+            }}
+          >
+            Show sample toast
+          </button>
+        )}
       </main>
+      {open ? null : (
+        <div data-snag-overlay="true" dir="ltr">
+          <SnagStyles theme={defaultTheme} />
+          <StatusToasts
+            toasts={toasts}
+            theme={defaultTheme}
+            onDismiss={(key) => setToasts((current) => current.filter((toast) => toast.key !== key))}
+            onOpen={() => {
+              setToasts([]);
+              setOpen(true);
+            }}
+          />
+        </div>
+      )}
       {open ? (
         <div data-snag-overlay="true" dir="ltr">
           <SnagStyles theme={defaultTheme} />

@@ -108,6 +108,12 @@ Each pick is sent as `elements` on the request, and a numbered box is drawn on t
 
 Production builds strip React's debug info and minify component names, so there the agent relies on the selector, text and attributes. Adding `data-testid` to key elements makes picks much easier to trace back to code.
 
+### Answering questions and staying in the loop
+
+When the agent has questions, the request card shows them with tappable answers (plus a free-text **Other** where it makes sense). **Reply in your own words** switches back to a single text box. While a request is queued or running, the SDK checks for updates every few seconds and the card shows its progress steps (Planning, Building, Delivering).
+
+Requests filed from this browser raise a short toast when they need you or finish, and the tab title shows a count while the page is in the background. After the first request, Snag offers browser notifications once; if the tester allows them, those updates arrive as system notifications while the tab is in the background. The ids of requests filed here are kept in `localStorage`.
+
 ### Execute mode: checking your own change
 
 When your admin enables execute mode with **Preview, then merge**, a request moves to **Ready for you to check** once the preview deployment is up. Open the preview from the request card, then tap **Looks right** (Snag merges it once CI passes and it goes live) or **Not right** with what should change (the agent revises the same PR). The tab's red waiting-on-you count includes these requests too.

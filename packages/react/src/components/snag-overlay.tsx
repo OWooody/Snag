@@ -11,6 +11,12 @@ import {
   resolveTheme,
   startConsoleErrorBuffer,
 } from "../config";
+import {
+  notificationsGranted,
+  setTitleCount,
+  showBrowserNotification,
+  subscribeStatusEvents,
+} from "../notifications";
 import { ACTIVE_POLL_MS, isActiveRequest, startVisiblePolling } from "../polling";
 import type { SnagRequestRow, SnagScreenshot } from "../protocol";
 import { captureScreenshot } from "../screenshot";
@@ -19,6 +25,7 @@ import { TAB_REST_SHAPE, type TabShape } from "../sheet";
 import { SnagStyles } from "../styles";
 import { FloatingButton } from "./floating-button";
 import { RequestPanel } from "./request-panel";
+import { StatusToasts, type Toast } from "./status-toasts";
 
 const BADGE_POLL_MS = 30_000;
 
@@ -47,6 +54,8 @@ export function SnagOverlay() {
   const [opening, setOpening] = useState(false);
   const [morphFrom, setMorphFrom] = useState<TabShape>(TAB_REST_SHAPE);
   const [initialTab, setInitialTab] = useState<"new" | "list">("new");
+  const [initialFocusId, setInitialFocusId] = useState<string | null>(null);
+  const [toasts, setToasts] = useState<Toast[]>([]);
   const [screenshot, setScreenshot] = useState<SnagScreenshot | null>(null);
   const [mounted, setMounted] = useState(false);
 
@@ -133,38 +142,91 @@ export function SnagOverlay() {
   }, [initialized, refreshBadge]);
 
   const active = runningCount > 0;
+  // Background tabs keep checking only when a browser notification can come of it.
+  const pollWhileHidden = active && notificationsGranted();
   useEffect(() => {
-    // The open sheet polls the list itself.
-    if (!enabled || panelVisible) return;
+    // The open sheet polls the list itself while the tab is visible.
+    if (!enabled || (panelVisible && !pollWhileHidden)) return;
     return startVisiblePolling(
       () => void refreshBadge(),
       active ? ACTIVE_POLL_MS : BADGE_POLL_MS,
+      { whileHidden: pollWhileHidden, whileVisible: !panelVisible },
     );
-  }, [enabled, panelVisible, active, refreshBadge]);
+  }, [enabled, panelVisible, active, pollWhileHidden, refreshBadge]);
 
   useEffect(() => {
     if (!enabled) return;
     return startConsoleErrorBuffer();
   }, [enabled]);
 
+  const openPanelRef = useRef<(tab: "new" | "list", from: TabShape, focusId?: string) => void>(
+    () => {},
+  );
+
+  useEffect(() => {
+    if (!enabled) return;
+    let hiddenCount = 0;
+    const unsubscribe = subscribeStatusEvents((event) => {
+      if (document.hidden) {
+        hiddenCount += 1;
+        setTitleCount(hiddenCount);
+      }
+      const notified = showBrowserNotification(event, () =>
+        openPanelRef.current("list", TAB_REST_SHAPE, event.row.id),
+      );
+      if (!notified) {
+        setToasts((current) => [
+          ...current.filter((toast) => toast.event.row.id !== event.row.id),
+          { key: `${event.row.id}:${event.status}`, event },
+        ]);
+      }
+    });
+    const onVisibility = () => {
+      if (document.hidden || hiddenCount === 0) return;
+      hiddenCount = 0;
+      setTitleCount(0);
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      unsubscribe();
+      document.removeEventListener("visibilitychange", onVisibility);
+      setTitleCount(0);
+    };
+  }, [enabled]);
+
+  const dismissToast = useCallback((key: string) => {
+    setToasts((current) => current.filter((toast) => toast.key !== key));
+  }, []);
+
   if (!mounted || !enabled) return null;
 
   const theme = resolveTheme();
 
-  const openPanel = async (tab: "new" | "list", from: TabShape) => {
-    if (opening) return;
+  const openPanel = async (tab: "new" | "list", from: TabShape, focusId?: string) => {
+    if (opening || panelVisible) return;
     setOpening(true);
     setInitialTab(tab);
+    setInitialFocusId(focusId ?? null);
+    setToasts([]);
     setMorphFrom(from);
     // Capture BEFORE the panel mounts so it never appears in the screenshot.
     setScreenshot(await captureScreenshot());
     setPanelVisible(true);
     setOpening(false);
   };
+  openPanelRef.current = (tab, from, focusId) => void openPanel(tab, from, focusId);
 
   return createPortal(
     <div data-snag-overlay="true" dir="ltr">
       <SnagStyles theme={theme} />
+      {!panelVisible ? (
+        <StatusToasts
+          toasts={toasts}
+          theme={theme}
+          onDismiss={dismissToast}
+          onOpen={(toast) => void openPanel("list", TAB_REST_SHAPE, toast.event.row.id)}
+        />
+      ) : null}
       {!panelVisible ? (
         <FloatingButton
           environmentLabel={environmentLabel}
@@ -184,6 +246,7 @@ export function SnagOverlay() {
           theme={theme}
           morphFrom={morphFrom}
           initialTab={initialTab}
+          initialFocusRequestId={initialFocusId}
           followupsEnabled={followupsEnabled}
           agentMode={agentMode}
           badgeCount={badgeCount}

@@ -16,6 +16,12 @@ import {
   type PickedElement,
 } from "../element-highlights";
 import { describeElement, elementLabel } from "../element-info";
+import {
+  dismissNotificationOffer,
+  rememberOwnRequest,
+  requestNotificationPermission,
+  shouldOfferNotifications,
+} from "../notifications";
 import type { SnagRequestRow, SnagScreenshot } from "../protocol";
 import {
   GLASS_BLUR_SATURATE,
@@ -69,6 +75,8 @@ interface RequestPanelProps {
   theme: SnagTheme;
   onClose: () => void;
   initialTab?: Tab;
+  /** Request to expand and scroll to when the sheet opens on the list. */
+  initialFocusRequestId?: string | null;
   followupsEnabled?: boolean;
   agentMode?: "plan_only" | "execute" | null;
   /** Pending needs_input count for the Requests tab badge. */
@@ -86,6 +94,7 @@ export function RequestPanel({
   onRequestsViewed,
   onClose,
   initialTab = "new",
+  initialFocusRequestId = null,
   followupsEnabled = false,
   agentMode = null,
   badgeCount = 0,
@@ -107,7 +116,8 @@ export function RequestPanel({
   );
   const [agentUrl, setAgentUrl] = useState<string | null>(null);
   const [submittedId, setSubmittedId] = useState<string | null>(null);
-  const [focusRequestId, setFocusRequestId] = useState<string | null>(null);
+  const [focusRequestId, setFocusRequestId] = useState<string | null>(initialFocusRequestId);
+  const [offerNotifications, setOfferNotifications] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [listRefreshKey, setListRefreshKey] = useState(0);
   const sheetScrollRef = useRef<HTMLDivElement>(null);
@@ -198,6 +208,8 @@ export function RequestPanel({
         elements: elements.length > 0 ? elements.map((item) => item.info) : undefined,
         locale: typeof context.locale === "string" ? context.locale : undefined,
       });
+      rememberOwnRequest(response.id);
+      setOfferNotifications(shouldOfferNotifications());
       setAgentUrl(response.agent_url);
       setSubmittedId(response.id);
       setPhase("done");
@@ -493,6 +505,9 @@ export function RequestPanel({
                     >
                       Open agent
                     </a>
+                  ) : null}
+                  {offerNotifications ? (
+                    <NotifyOffer theme={theme} onDone={() => setOfferNotifications(false)} />
                   ) : null}
                   <button
                     type="button"
@@ -862,6 +877,68 @@ function AnimatedTabBody({
         }}
       >
         {children(displayTab)}
+      </div>
+    </div>
+  );
+}
+
+/** One-time offer after the first submit; the permission prompt needs this click. */
+function NotifyOffer({ theme, onDone }: { theme: SnagTheme; onDone: () => void }) {
+  const [asking, setAsking] = useState(false);
+  return (
+    <div
+      style={{
+        marginTop: 16,
+        padding: 12,
+        borderRadius: 12,
+        background: GLASS_SURFACE,
+        border: "1px solid rgba(255,255,255,0.55)",
+      }}
+    >
+      <p style={{ margin: 0, fontSize: 13, color: theme.text }}>
+        Get a browser notification when the agent has a question or your change is ready, even
+        in another tab.
+      </p>
+      <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+        <button
+          type="button"
+          disabled={asking}
+          onClick={() => {
+            setAsking(true);
+            void requestNotificationPermission().finally(onDone);
+          }}
+          style={{
+            padding: "8px 12px",
+            borderRadius: 8,
+            border: "none",
+            background: theme.accent,
+            color: "#fff",
+            fontWeight: 700,
+            fontSize: 12,
+            cursor: asking ? "wait" : "pointer",
+          }}
+        >
+          Notify me when it's ready
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            dismissNotificationOffer();
+            onDone();
+          }}
+          style={{
+            padding: "8px 12px",
+            borderRadius: 8,
+            border: "none",
+            background: "transparent",
+            color: theme.textMuted,
+            fontWeight: 700,
+            fontSize: 12,
+            cursor: "pointer",
+          }}
+        >
+          No thanks
+        </button>
       </div>
     </div>
   );

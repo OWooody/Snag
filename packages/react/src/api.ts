@@ -4,6 +4,7 @@ import {
   resolveRequester,
   resolveRequesterToken,
 } from "./config";
+import { trackRequestStatuses } from "./notifications";
 import type {
   ConfirmSnagRequestBody,
   ConfirmSnagRequestResponse,
@@ -78,7 +79,9 @@ export async function fetchRelayState(): Promise<RelayStateResponse> {
     debugLog("probe response", response.status, body);
     if (!response.ok) return { enabled: false };
     const relay = body as RelayStateResponse;
-    return relay.enabled ? relay : { enabled: false };
+    if (!relay.enabled) return { enabled: false };
+    if (relay.requests) trackRequestStatuses(relay.requests);
+    return relay;
   } catch (error) {
     debugLog("probe error", error);
     return { enabled: false };
