@@ -1,6 +1,6 @@
 {
   "name": "@snag-tech/react",
-  "version": "0.15.0",
+  "version": "0.16.0",
   "description": "Snag — in-app change requests that launch AI coding agents. React web SDK.",
   "license": "MIT",
   "repository": {
