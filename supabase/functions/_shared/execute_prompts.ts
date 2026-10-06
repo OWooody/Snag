@@ -18,8 +18,10 @@ function previewInstructions(): string[] {
   return [
     '   - preview (optional): page edits the requester\'s browser can apply temporarily to show roughly what the change looks like, e.g. [{"op": "css", "selector": "[data-testid=save]", "style": {"background": "#2563eb", "color": "#fff"}}].',
     '     Allowed ops: css (selector + style properties), text (selector + plain "text"), hide (selector), move (selector + "before" or "after" a sibling selector), attr (selector + "name" of placeholder, title, aria-label, or alt + "value").',
-    "     Use selectors that match the running page (data-testid, ids, or the selectors from Selected elements). No url() values.",
+    "     Use selectors that match the running page (data-testid, ids, or the selectors from Selected elements). Selectors must match real elements: pseudo-elements such as ::before or ::after never match, so do not use them or the content property.",
+    "     Limits: at most 20 ops, at most 12 style properties per css op, and no url(), braces, semicolons, or backslashes in values. If any op breaks a rule, Snag discards the whole preview, so keep it to a few simple edits.",
     "     Omit preview (or use null) when the change involves logic, data, new pages, or new components.",
+    "     Do not describe the preview or how to turn it on in your summary; the requester's panel shows it when it is available.",
   ];
 }
 

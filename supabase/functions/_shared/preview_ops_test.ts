@@ -56,6 +56,20 @@ Deno.test("parseSnagPlan attaches a valid preview and ignores an invalid one", (
   assertEquals("preview" in plan([{ op: "script" }])!, false);
 });
 
+Deno.test("planning instructions state the limits parsePreviewOps enforces", () => {
+  const instructions = planningInstructions(true, true).join("\n");
+  assertStringIncludes(instructions, "at most 20 ops");
+  assertStringIncludes(instructions, "at most 12 style properties");
+  const styleOf = (count: number) =>
+    Object.fromEntries(Array.from({ length: count }, (_, i) => [`--p${i}`, "1px"]));
+  const hides = (count: number) =>
+    Array.from({ length: count }, () => ({ op: "hide", selector: ".x" }));
+  assertEquals(parsePreviewOps([{ op: "css", selector: "a", style: styleOf(12) }])?.length, 1);
+  assertEquals(parsePreviewOps([{ op: "css", selector: "a", style: styleOf(13) }]), null);
+  assertEquals(parsePreviewOps(hides(20))?.length, 20);
+  assertEquals(parsePreviewOps(hides(21)), null);
+});
+
 Deno.test("planning instructions describe preview ops only when plan review is on", () => {
   assertStringIncludes(planningInstructions(true, true).join("\n"), "Allowed ops: css");
   assertEquals(planningInstructions(true, false).join("\n").includes("Allowed ops"), false);
