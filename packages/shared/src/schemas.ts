@@ -94,6 +94,17 @@ export const companyOrganizationUpdateSchema = z.object({
   acknowledge_auto_merge: z.boolean().optional(),
 });
 
+export const orgMemberRoleSchema = z.enum(["owner", "admin", "viewer"]);
+
+export const orgMemberInviteSchema = z.object({
+  email: z.string().trim().toLowerCase().email().max(320),
+  role: orgMemberRoleSchema,
+});
+
+export const orgMemberUpdateSchema = z.object({
+  role: orgMemberRoleSchema,
+});
+
 export const requesterIdSchema = z
   .string()
   .trim()

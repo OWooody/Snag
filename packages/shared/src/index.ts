@@ -6,6 +6,7 @@ export * from "./preview-ops";
 export * from "./execution-posture";
 export * from "./policy-templates";
 export * from "./requester-followups";
+export * from "./org-members";
 export * from "./crypto";
 export * from "./keys";
 export * from "./origins";

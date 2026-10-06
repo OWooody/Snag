@@ -6,10 +6,12 @@ import {
   ExecutionSettingsCard,
   type OrganizationExecutionDefaults,
 } from "@/components/execution-settings-card";
+import { MembersCard } from "@/components/members-card";
 import { PlatformTenantForm } from "@/components/platform-tenant-form";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { loadActivationFacts } from "@/lib/activation-facts";
 import { requirePlatformAdmin } from "@/lib/auth";
+import { loadOrgMembers } from "@/lib/members";
 import { createServiceClient } from "@/lib/service";
 
 export default async function PlatformTenantDetailPage({
@@ -17,7 +19,7 @@ export default async function PlatformTenantDetailPage({
 }: {
   params: Promise<{ slug: string }>;
 }) {
-  await requirePlatformAdmin();
+  const ctx = await requirePlatformAdmin();
   const { slug } = await params;
   const service = createServiceClient();
 
@@ -57,7 +59,7 @@ export default async function PlatformTenantDetailPage({
     }
   }
 
-  const [{ data: auditLog }, facts] = await Promise.all([
+  const [{ data: auditLog }, facts, members] = await Promise.all([
     service
       .from("snag_audit_log")
       .select("id, action, actor_id, metadata, created_at")
@@ -65,7 +67,10 @@ export default async function PlatformTenantDetailPage({
       .order("created_at", { ascending: false })
       .limit(20),
     loadActivationFacts(service, project),
+    project.organization_id ? loadOrgMembers(project.organization_id) : Promise.resolve([]),
   ]);
+  const canManageMembers =
+    !ctx.impersonatingOrgId || ctx.impersonatingOrgId === project.organization_id;
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -85,6 +90,15 @@ export default async function PlatformTenantDetailPage({
       <PlatformTenantForm project={project} orgFollowupsEnabled={orgFollowupsEnabled} />
 
       <ExecutionSettingsCard project={project} orgDefaults={orgExecution} />
+
+      {project.organization_id && (
+        <MembersCard
+          organizationId={project.organization_id}
+          members={members}
+          level={canManageMembers ? "owner" : null}
+          currentUserId={ctx.userId}
+        />
+      )}
 
       <Card>
         <CardHeader>

@@ -1,3 +1,4 @@
+import type { OrgMemberManageLevel } from "@snag/shared";
 import { NextResponse } from "next/server";
 import { getEffectiveImpersonationOrgId } from "@/lib/impersonation";
 import { createClient } from "@/lib/supabase/server";
@@ -111,6 +112,31 @@ export async function canManageOrganization(userId: string, organizationId: stri
     .maybeSingle();
 
   return member?.role === "owner" || member?.role === "admin";
+}
+
+/**
+ * How much the user may change this org's memberships. Platform admins act as
+ * owners (while impersonating, only for the impersonated org).
+ */
+export async function orgMemberManageLevel(
+  userId: string,
+  organizationId: string,
+): Promise<OrgMemberManageLevel | null> {
+  const impersonatingOrgId = await getEffectiveImpersonationOrgId(userId);
+  if (impersonatingOrgId) return organizationId === impersonatingOrgId ? "owner" : null;
+  if (await isPlatformAdminUser(userId)) return "owner";
+
+  const service = createServiceClient();
+  const { data: member } = await service
+    .from("snag_org_members")
+    .select("role")
+    .eq("organization_id", organizationId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (member?.role === "owner") return "owner";
+  if (member?.role === "admin") return "admin";
+  return null;
 }
 
 export async function getProjectBySlug(slug: string) {

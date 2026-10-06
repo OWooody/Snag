@@ -5,7 +5,7 @@ Web admin for Snag platform operators and company admins.
 ## Prerequisites
 
 - Node.js 18+
-- Supabase project with migrations applied (`00001`–`00006`, including admin auth, requester follow-ups, and execute-mode policy)
+- Supabase project with all migrations in `supabase/migrations` applied (including `00014_org_member_management.sql` for the Members card)
 - Same `SNAG_KEY_ENCRYPTION_SECRET` as Edge Functions
 
 ## Local setup
@@ -63,6 +63,15 @@ If the build fails with `Can't resolve '@snag/shared'`, confirm Root Directory i
 | Platform admin | All tenants, create/edit/disable, global requests, read-only impersonation |
 | Company owner/admin | Their org's project: settings, Cursor key, GitHub token or Origin app, rules, plan approvals, requests, integration |
 | Company viewer | Read-only dashboard, requests, rules, integration |
+
+### Members
+
+**Settings → Members** (and **Platform → Tenants → (tenant)** for platform admins) lists the organization's members and pending invites.
+
+- Owners and admins add people by email with a role. New people get an invite email; people who already have a Snag account get access immediately.
+- Admins can add, change, and remove admins and viewers. Only owners (and platform admins) can add owners or change or remove an existing owner.
+- The last owner cannot be removed or given another role.
+- Viewers see the list read-only. Changes are written to `snag_audit_log` as `organization.member.add`, `organization.member.update`, and `organization.member.remove`.
 
 ## Execute mode: rules and delivery
 
