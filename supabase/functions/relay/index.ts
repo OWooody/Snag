@@ -30,6 +30,7 @@ import {
   planningInstructions,
   planningReplyWrapper,
   previewFeedbackPrompt,
+  scopeInstructions,
 } from "../_shared/execute_prompts.ts";
 import {
   claimTransition,
@@ -824,7 +825,13 @@ function buildAgentPrompt(
     sections.push("", "## Repo orientation", promptInstructions.trim());
   }
 
-  sections.push("", "## Instructions");
+  sections.push(
+    "",
+    "## Scope",
+    ...scopeInstructions(followupsEnabled, agentMode !== "plan_only"),
+    "",
+    "## Instructions",
+  );
 
   if (agentMode === "plan_only") {
     sections.push(

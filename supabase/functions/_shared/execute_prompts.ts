@@ -23,6 +23,26 @@ function previewInstructions(): string[] {
   ];
 }
 
+/**
+ * The agent can only work in the project's repository, so requests about
+ * other code must come back as an explanation rather than a plan.
+ */
+export function scopeInstructions(
+  followupsEnabled: boolean,
+  executeMode: boolean,
+): string[] {
+  const lines = [
+    "You can only change this repository. If the request is about code that is not in it (another service or repository, a third-party library, or the Snag tool used to file this request), do not plan or make a change.",
+    followupsEnabled
+      ? '- Explain this under "## Questions for requester" in plain language, say where the change likely belongs, and ask whether they meant something in this app instead.'
+      : '- Explain this under "## Notes for developers" and say where the change likely belongs.',
+  ];
+  if (executeMode) {
+    lines.push(`- Omit the "${SNAG_PLAN_HEADING}" block.`);
+  }
+  return lines;
+}
+
 export function planningInstructions(
   followupsEnabled: boolean,
   planReviewEnabled = false,
