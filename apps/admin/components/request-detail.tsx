@@ -6,13 +6,20 @@ import {
   stripRequesterQuestionsJson,
   stripSnagPlanSection,
   type PolicyStageDecision,
-  type SnagRequestRow,
+  type SnagRequestDetailRow,
   type SnagRequestStatus,
 } from "@snag/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
+import {
+  ActivityCard,
+  ConversationCard,
+  PlanPreviewCard,
+  RequestDetailsCard,
+  RequesterContextCard,
+} from "@/components/request-debug-panels";
 import { StatusBadge } from "@/components/status-badge";
 import {
   AlertDialog,
@@ -139,7 +146,7 @@ export function RequestDetail({
     queryFn: async () => {
       const res = await fetch(`/api/projects/${projectSlug}/requests/${requestId}`);
       if (!res.ok) throw new Error(res.status === 404 ? "Request not found" : "Failed to load");
-      return (await res.json()) as SnagRequestRow;
+      return (await res.json()) as SnagRequestDetailRow;
     },
     refetchInterval: (query) =>
       query.state.data && ACTIVE_STATUSES.includes(query.state.data.status) ? 30_000 : false,
@@ -171,7 +178,10 @@ export function RequestDetail({
           : "Plan rejected",
     );
     setNote("");
-    queryClient.setQueryData(queryKey, body as SnagRequestRow);
+    queryClient.setQueryData<SnagRequestDetailRow>(queryKey, (current) =>
+      current ? { ...current, ...(body as Partial<SnagRequestDetailRow>) } : current,
+    );
+    void queryClient.invalidateQueries({ queryKey });
     void queryClient.invalidateQueries({ queryKey: ["requests", projectSlug] });
   }
 
@@ -335,6 +345,16 @@ export function RequestDetail({
                 </Badge>
               ))}
             </div>
+            {request.plan.changes?.length ? (
+              <div>
+                <p className="text-zinc-500">What the requester sees change</p>
+                <ul className="mt-1 list-disc space-y-0.5 pl-5">
+                  {request.plan.changes.map((change) => (
+                    <li key={change}>{change}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
             <div>
               <p className="text-zinc-500">Files ({request.plan.files.length})</p>
               <ul className="mt-1 space-y-0.5 font-mono text-xs">
@@ -346,6 +366,8 @@ export function RequestDetail({
           </CardContent>
         </Card>
       ) : null}
+
+      <PlanPreviewCard request={request} />
 
       {decision?.plan || decision?.diff ? (
         <Card>
@@ -375,6 +397,11 @@ export function RequestDetail({
           </CardContent>
         </Card>
       ) : null}
+
+      <ConversationCard projectSlug={projectSlug} request={request} />
+      <ActivityCard projectSlug={projectSlug} request={request} />
+      <RequesterContextCard request={request} />
+      <RequestDetailsCard request={request} />
     </div>
   );
 }

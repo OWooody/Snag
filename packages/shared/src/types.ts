@@ -125,6 +125,42 @@ export interface SnagRequestRow {
   updated_at: string;
 }
 
+/** Extra columns the admin request detail page loads for debugging. */
+export interface SnagRequestDetailRow extends SnagRequestRow {
+  agent_id: string | null;
+  context: Record<string, unknown> | null;
+  screenshot_included: boolean;
+  phase_started_at: string | null;
+  confirmed_at: string | null;
+}
+
+export interface SnagRequestTransition {
+  id: number;
+  from_status: SnagRequestStatus | null;
+  to_status: SnagRequestStatus;
+  phase: SnagRequestPhase | null;
+  at: string;
+}
+
+export interface SnagRequestAuditEntry {
+  id: string;
+  action: string;
+  actor_email: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface SnagRequestActivity {
+  transitions: SnagRequestTransition[];
+  audit: SnagRequestAuditEntry[];
+}
+
+export interface AgentConversationMessage {
+  id: string;
+  role: "user" | "assistant";
+  text: string;
+}
+
 export interface DurationStats {
   count: number;
   p50_seconds: number | null;

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireProjectAccess } from "@/lib/project-route";
-import { REQUEST_COLUMNS } from "@/lib/requests";
+import { REQUEST_DETAIL_COLUMNS } from "@/lib/requests";
 import { createServiceClient } from "@/lib/service";
 
 export async function GET(
@@ -14,7 +14,7 @@ export async function GET(
   const service = createServiceClient();
   const { data, error } = await service
     .from("snag_requests")
-    .select(REQUEST_COLUMNS)
+    .select(REQUEST_DETAIL_COLUMNS)
     .eq("id", id)
     .eq("project_id", access.project.id)
     .maybeSingle();

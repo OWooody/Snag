@@ -243,21 +243,8 @@ const MAX_PLAN_CHANGE_LENGTH = 200;
  * Mirrored in supabase/functions/_shared/plan_block.ts.
  */
 export function parseSnagPlan(summary: string | null | undefined): SnagPlan | null {
-  if (!summary) return null;
-  const headingIndex = summary.lastIndexOf(SNAG_PLAN_HEADING);
-  if (headingIndex < 0) return null;
-  const section = summary.slice(headingIndex + SNAG_PLAN_HEADING.length);
-  const fence = section.match(/```(?:json)?\s*\n([\s\S]*?)\n\s*```/);
-  if (!fence) return null;
-
-  let raw: unknown;
-  try {
-    raw = JSON.parse(fence[1]);
-  } catch {
-    return null;
-  }
-  if (!raw || typeof raw !== "object") return null;
-  const value = raw as Record<string, unknown>;
+  const value = rawSnagPlanBlock(summary);
+  if (!value) return null;
 
   if (!Array.isArray(value.files)) return null;
   const files = value.files
@@ -293,6 +280,27 @@ export function parseSnagPlan(summary: string | null | undefined): SnagPlan | nu
     ...(changes.length > 0 ? { changes } : {}),
     ...(preview ? { preview } : {}),
   };
+}
+
+/** The unvalidated JSON object under "## Snag plan", as the agent wrote it. */
+export function rawSnagPlanBlock(
+  summary: string | null | undefined,
+): Record<string, unknown> | null {
+  if (!summary) return null;
+  const headingIndex = summary.lastIndexOf(SNAG_PLAN_HEADING);
+  if (headingIndex < 0) return null;
+  const section = summary.slice(headingIndex + SNAG_PLAN_HEADING.length);
+  const fence = section.match(/```(?:json)?\s*\n([\s\S]*?)\n\s*```/);
+  if (!fence) return null;
+
+  let raw: unknown;
+  try {
+    raw = JSON.parse(fence[1]);
+  } catch {
+    return null;
+  }
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  return raw as Record<string, unknown>;
 }
 
 function parsePlanChanges(value: unknown): string[] {
