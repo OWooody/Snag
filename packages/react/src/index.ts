@@ -16,5 +16,7 @@ export type {
   SnagRequestMarker,
   SnagRequestPlan,
   SnagRequestStatus,
+  SnagReferenceFile,
+  SnagReferenceImage,
   SnagScreenshot,
 } from "./protocol";

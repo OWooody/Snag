@@ -1,9 +1,11 @@
 import { useState, type CSSProperties } from "react";
 
+import type { LocalAttachment } from "../attachments";
 import { formatRequesterAnswers, type RequesterQuestion } from "../requester-questions";
 import { GLASS_SURFACE, SNAG_EASE } from "../sheet";
 import { withAlpha } from "../styles";
 import type { SnagTheme } from "../theme";
+import { AttachmentPicker } from "./attachment-picker";
 
 const OTHER = "\u0000other";
 const MAX_OTHER_LENGTH = 300;
@@ -95,11 +97,12 @@ export function QuestionForm({
   sending: boolean;
   error: string | null;
   fieldStyle: CSSProperties;
-  onSubmit: (reply: string) => void;
+  onSubmit: (reply: string, attachments: LocalAttachment[]) => void;
   onWriteInstead: () => void;
 }) {
   const [choices, setChoices] = useState<Record<string, string>>({});
   const [others, setOthers] = useState<Record<string, string>>({});
+  const [attachments, setAttachments] = useState<LocalAttachment[]>([]);
 
   const answerFor = (question: RequesterQuestion): string | undefined => {
     const choice = choices[question.id];
@@ -110,7 +113,8 @@ export function QuestionForm({
 
   const submit = () => {
     const answers = Object.fromEntries(questions.map((question) => [question.id, answerFor(question)]));
-    onSubmit(formatRequesterAnswers(questions, answers));
+    const reply = answered === 0 ? "" : formatRequesterAnswers(questions, answers);
+    onSubmit(reply, attachments);
   };
 
   return (
@@ -194,12 +198,18 @@ export function QuestionForm({
           </fieldset>
         );
       })}
+      <AttachmentPicker
+        attachments={attachments}
+        onChange={setAttachments}
+        disabled={sending}
+        theme={theme}
+      />
       {error ? <p style={{ fontSize: 12, color: theme.danger, margin: 0 }}>{error}</p> : null}
       <div>
         <button
           type="button"
           onClick={submit}
-          disabled={sending || answered === 0}
+          disabled={sending || (answered === 0 && attachments.length === 0)}
           style={{
             width: "100%",
             padding: "10px 12px",
@@ -208,8 +218,8 @@ export function QuestionForm({
             background: theme.accent,
             color: "#fff",
             fontWeight: 700,
-            cursor: sending ? "wait" : answered === 0 ? "not-allowed" : "pointer",
-            opacity: answered === 0 ? 0.6 : 1,
+            cursor: sending ? "wait" : answered === 0 && attachments.length === 0 ? "not-allowed" : "pointer",
+            opacity: answered === 0 && attachments.length === 0 ? 0.6 : 1,
             fontSize: 13,
           }}
         >

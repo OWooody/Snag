@@ -86,7 +86,7 @@ export function formatSelectedElements(elements: SelectedElement[] | undefined):
   if (!elements || elements.length === 0) return [];
   const sections = [
     "## Selected elements",
-    "The requester clicked these exact elements on the page. Numbered boxes on the screenshot match these numbers. Start here when locating the code.",
+    "The requester clicked these exact elements on the page. Numbered boxes on the page screenshot match these numbers. Those boxes appear only on that screenshot, never on an image the requester uploaded. Start here when locating the code.",
   ];
   elements.forEach((element, index) => {
     sections.push("", ...formatElement(element, index));

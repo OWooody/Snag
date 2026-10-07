@@ -35,6 +35,22 @@ export interface SnagScreenshot {
   height: number;
 }
 
+/** An image the requester attached for the agent to use as visual reference. */
+export interface SnagReferenceImage {
+  /** Original file name, so the agent can tell images apart. */
+  name: string;
+  /** JPEG image data, base64-encoded (no data-URI prefix). */
+  base64: string;
+  width: number;
+  height: number;
+}
+
+/** A text file the requester attached. Contents are inlined into the agent prompt. */
+export interface SnagReferenceFile {
+  name: string;
+  text: string;
+}
+
 /** A page element the requester pointed at with the element picker. */
 export interface SnagElement {
   /** Short CSS selector; prefers id / data-testid anchors. */
@@ -73,6 +89,10 @@ export interface CreateSnagRequestBody {
   /** Host-provided context: route, locale, app version, environment, ... */
   context: Record<string, unknown>;
   screenshot?: SnagScreenshot;
+  /** Extra images, sent to the agent after the page screenshot as visual reference. */
+  images?: SnagReferenceImage[];
+  /** Text files inlined into the agent prompt. */
+  files?: SnagReferenceFile[];
   /** Elements picked on the page; numbered boxes on the screenshot match this order. */
   elements?: SnagElement[];
   marker?: SnagRequestMarker;
@@ -89,6 +109,9 @@ export interface CreateSnagRequestResponse {
 export interface ReplySnagRequestBody {
   request_id: string;
   reply: string;
+  /** Images the agent should use as visual reference for this reply. */
+  images?: SnagReferenceImage[];
+  files?: SnagReferenceFile[];
 }
 
 export interface ReplySnagRequestResponse {
@@ -104,7 +127,13 @@ export interface ReplySnagRequestResponse {
 export type ConfirmSnagRequestBody =
   | { request_id: string; decision: "approve_plan" }
   | { request_id: string; decision: "looks_right" }
-  | { request_id: string; decision: "not_right"; feedback: string };
+  | {
+      request_id: string;
+      decision: "not_right";
+      feedback: string;
+      images?: SnagReferenceImage[];
+      files?: SnagReferenceFile[];
+    };
 
 export interface ConfirmSnagRequestResponse {
   id: string;

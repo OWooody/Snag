@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { confirmSnagRequest, fetchRelayState, replyToSnagRequest } from "../api";
+import { attachmentFields, messageWithAttachments, type LocalAttachment } from "../attachments";
 import { resolveRequester } from "../config";
 import { ACTIVE_POLL_MS, hasActiveRequest, isActiveRequest, startVisiblePolling } from "../polling";
 import type { SnagRequestPhase, SnagRequestRow, SnagRequestStatus } from "../protocol";
@@ -10,6 +11,7 @@ import { LightMarkdown } from "../light-markdown";
 import { GLASS_SURFACE, SHEET_MOTION_MS } from "../sheet";
 import { withAlpha } from "../styles";
 import type { SnagTheme } from "../theme";
+import { AttachmentPicker, COMPOSER_PADDING } from "./attachment-picker";
 import { FilterChip, RefreshButton } from "./controls";
 import { PlanReview } from "./plan-review";
 import { QuestionForm } from "./question-form";
@@ -386,10 +388,12 @@ function RequestCard({
 }) {
   const link = row.pr_url ?? row.agent_url;
   const [reply, setReply] = useState("");
+  const [replyAttachments, setReplyAttachments] = useState<LocalAttachment[]>([]);
   const [sending, setSending] = useState(false);
   const [replyError, setReplyError] = useState<string | null>(null);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [feedback, setFeedback] = useState("");
+  const [feedbackAttachments, setFeedbackAttachments] = useState<LocalAttachment[]>([]);
   const [confirming, setConfirming] = useState(false);
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const canReply = followupsEnabled && row.status === "needs_input";
@@ -417,17 +421,18 @@ function RequestCard({
   const canToggle = summaryOverflows || canReply || canConfirm || reviewPlan;
   const showActions = expanded || !canToggle;
 
-  const submitReply = async (text: string) => {
-    const trimmed = text.trim();
-    if (!trimmed) {
-      setReplyError("Write a reply first.");
+  const submitReply = async (text: string, attachments: LocalAttachment[]) => {
+    const message = messageWithAttachments(text, attachments, MAX_REPLY_LENGTH);
+    if (!message) {
+      setReplyError("Write a reply or attach an image or file.");
       return;
     }
     setSending(true);
     setReplyError(null);
     try {
-      await replyToSnagRequest(row.id, trimmed.slice(0, MAX_REPLY_LENGTH));
+      await replyToSnagRequest(row.id, message, attachmentFields(attachments));
       setReply("");
+      setReplyAttachments([]);
       onReplied();
     } catch (error) {
       setReplyError(error instanceof Error ? error.message : "Reply failed");
@@ -437,9 +442,9 @@ function RequestCard({
   };
 
   const confirm = async (decision: "looks_right" | "not_right") => {
-    const trimmed = feedback.trim();
-    if (decision === "not_right" && !trimmed) {
-      setConfirmError("Tell us what is not right first.");
+    const message = messageWithAttachments(feedback, feedbackAttachments, MAX_REPLY_LENGTH);
+    if (decision === "not_right" && !message) {
+      setConfirmError("Describe what is not right, or attach an image or file.");
       return;
     }
     setConfirming(true);
@@ -448,9 +453,15 @@ function RequestCard({
       await confirmSnagRequest(
         decision === "looks_right"
           ? { request_id: row.id, decision }
-          : { request_id: row.id, decision, feedback: trimmed },
+          : {
+              request_id: row.id,
+              decision,
+              feedback: message,
+              ...attachmentFields(feedbackAttachments),
+            },
       );
       setFeedback("");
+      setFeedbackAttachments([]);
       setFeedbackOpen(false);
       onReplied();
     } catch (error) {
@@ -601,20 +612,27 @@ function RequestCard({
           sending={sending}
           error={replyError}
           fieldStyle={fieldStyle}
-          onSubmit={(text) => void submitReply(text)}
+          onSubmit={(text, attachments) => void submitReply(text, attachments)}
           onWriteInstead={() => setWriteInstead(true)}
         />
       ) : null}
       {canReply && showActions && !showQuestionForm ? (
         <div style={{ marginTop: 10 }}>
-          <textarea
-            value={reply}
-            onChange={(event) => setReply(event.target.value.slice(0, MAX_REPLY_LENGTH))}
+          <AttachmentPicker
+            attachments={replyAttachments}
+            onChange={setReplyAttachments}
             disabled={sending}
-            placeholder="Answer the questions above…"
-            rows={3}
-            style={fieldStyle}
-          />
+            theme={theme}
+          >
+            <textarea
+              value={reply}
+              onChange={(event) => setReply(event.target.value.slice(0, MAX_REPLY_LENGTH))}
+              disabled={sending}
+              placeholder="Answer the questions above…"
+              rows={3}
+              style={{ ...fieldStyle, padding: COMPOSER_PADDING }}
+            />
+          </AttachmentPicker>
           {replyError ? (
             <p style={{ fontSize: 12, color: theme.danger, margin: "6px 0 0" }}>
               {replyError}
@@ -622,7 +640,7 @@ function RequestCard({
           ) : null}
           <button
             type="button"
-            onClick={() => void submitReply(reply)}
+            onClick={() => void submitReply(reply, replyAttachments)}
             disabled={sending}
             style={{
               marginTop: 8,
@@ -681,16 +699,23 @@ function RequestCard({
           ) : null}
           {feedbackOpen ? (
             <>
-              <textarea
-                value={feedback}
-                onChange={(event) =>
-                  setFeedback(event.target.value.slice(0, MAX_REPLY_LENGTH))
-                }
+              <AttachmentPicker
+                attachments={feedbackAttachments}
+                onChange={setFeedbackAttachments}
                 disabled={confirming}
-                placeholder="What should be different?"
-                rows={3}
-                style={fieldStyle}
-              />
+                theme={theme}
+              >
+                <textarea
+                  value={feedback}
+                  onChange={(event) =>
+                    setFeedback(event.target.value.slice(0, MAX_REPLY_LENGTH))
+                  }
+                  disabled={confirming}
+                  placeholder="What should be different?"
+                  rows={3}
+                  style={{ ...fieldStyle, padding: COMPOSER_PADDING }}
+                />
+              </AttachmentPicker>
               <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
                 <button
                   type="button"
