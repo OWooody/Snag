@@ -5,9 +5,9 @@
  * Security boundary = project key resolution + per-project rate limits + origin allowlist.
  *
  * GET  → { enabled, requester_followups_enabled, agent_mode, requests? }
- * POST create  → { prompt, context, … } — insert + launch agent
- * POST reply   → { request_id, reply } — follow-up on existing agent, or plan changes at awaiting_requester
- * POST confirm → { request_id, decision, feedback? } — requester verdict on a plan (approve_plan) or a preview
+ * POST create  → { prompt, context, images?, files?, … } — insert + launch agent
+ * POST reply   → { request_id, reply, images?, files? } — follow-up on existing agent, or plan changes at awaiting_requester
+ * POST confirm → { request_id, decision, feedback?, images?, files? } — requester verdict on a plan (approve_plan) or a preview
  *
  * Never log prompt or screenshot contents — log entity ids and reasons only.
  */
@@ -20,9 +20,19 @@ import {
   resolveSummaryWithConversationFallback,
   resolveTerminalSummary,
   summaryNeedsConversation,
-  type AgentImage,
   type AgentProvider,
 } from "../_shared/agent_provider.ts";
+import {
+  appendReferenceContext,
+  attachmentsTooLarge,
+  formatReferenceContext,
+  referenceFilesField,
+  referenceImagesField,
+  replyOrAttachmentNote,
+  toAgentImages,
+  type ReferenceFile,
+  type ReferenceImage,
+} from "../_shared/attachments.ts";
 import { decryptSecret, getEncryptionSecret } from "../_shared/crypto.ts";
 import {
   implementingReplyWrapper,
@@ -118,15 +128,30 @@ const createSchema = z.object({
       height: z.number().int().positive().max(8000),
     })
     .optional(),
+  images: referenceImagesField,
+  files: referenceFilesField,
   elements: selectedElementsSchema.optional(),
   marker: requestMarkerSchema.optional(),
   locale: z.string().max(10).optional(),
 });
 
-const replySchema = z.object({
-  request_id: z.string().uuid(),
-  reply: z.string().trim().min(1).max(2000),
-});
+const replySchema = z
+  .object({
+    request_id: z.string().uuid(),
+    reply: z.string().trim().max(2000).optional().default(""),
+    images: referenceImagesField,
+    files: referenceFilesField,
+  })
+  .superRefine((value, ctx) => {
+    const attached = (value.images?.length ?? 0) > 0 || (value.files?.length ?? 0) > 0;
+    if (!value.reply && !attached) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Reply required",
+        path: ["reply"],
+      });
+    }
+  });
 
 const confirmSchema = z.discriminatedUnion("decision", [
   z.object({
@@ -141,6 +166,8 @@ const confirmSchema = z.discriminatedUnion("decision", [
     request_id: z.string().uuid(),
     decision: z.literal("not_right"),
     feedback: z.string().trim().min(1).max(2000),
+    images: referenceImagesField,
+    files: referenceFilesField,
   }),
 ]);
 
@@ -296,6 +323,10 @@ async function handleCreate(
     console.warn("snag-relay rejected: context_too_large");
     return json({ error: "Context too large" }, 422, corsHeaders);
   }
+  if (attachmentsTooLarge(body.screenshot?.base64.length ?? 0, body.images)) {
+    console.warn("snag-relay rejected: attachments_too_large");
+    return json({ error: "Attachments are too large" }, 422, corsHeaders);
+  }
 
   const ip =
     req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
@@ -337,17 +368,11 @@ async function handleCreate(
   }
 
   try {
-    const images: AgentImage[] = body.screenshot
-      ? [
-          {
-            base64: body.screenshot.base64,
-            width: body.screenshot.width,
-            height: body.screenshot.height,
-          },
-        ]
-      : [];
+    const images = toAgentImages(body.screenshot, body.images);
+    console.info(
+      `snag-relay create screenshot=${body.screenshot ? 1 : 0} uploads=${body.images?.length ?? 0} files=${body.files?.length ?? 0} agent_images=${images.length}`,
+    );
 
-    const webhookSecret = Deno.env.get("SNAG_WEBHOOK_SECRET");
     const task = await provider.createTask({
       prompt: buildAgentPrompt(
         body.prompt,
@@ -358,17 +383,17 @@ async function handleCreate(
         agentMode,
         followupsEnabled,
         projectSettings(project).planReviewEnabled,
+        {
+          screenshotIncluded: !!body.screenshot,
+          images: body.images,
+          files: body.files,
+        },
       ),
-      images,
+      images: images.length > 0 ? images : undefined,
       repository: project.repo_url,
       ref: project.repo_ref,
       model: project.model ?? undefined,
-      webhook: webhookSecret
-        ? {
-            url: `${Deno.env.get("SUPABASE_URL")}/functions/v1/webhook`,
-            secret: webhookSecret,
-          }
-        : undefined,
+      webhook: agentWebhook(),
     });
 
     await serviceClient
@@ -430,17 +455,25 @@ async function handleReply(
   if (!row.agent_id) {
     return json({ error: "Request has no agent" }, 409, corsHeaders);
   }
+  if (attachmentsTooLarge(0, body.images)) {
+    console.warn("snag-relay reply rejected: attachments_too_large");
+    return json({ error: "Attachments are too large" }, 422, corsHeaders);
+  }
 
+  const reply = replyOrAttachmentNote(
+    body.reply,
+    (body.images?.length ?? 0) > 0 || (body.files?.length ?? 0) > 0,
+  );
   const wrappedReply = adjustingPlan
-    ? planAdjustmentWrapper(body.reply)
+    ? planAdjustmentWrapper(reply)
     : row.phase === "planning"
-    ? planningReplyWrapper(body.reply)
+    ? planningReplyWrapper(reply)
     : row.phase === "implementing"
-    ? implementingReplyWrapper(body.reply)
+    ? implementingReplyWrapper(reply)
     : [
       "The original requester answered your open questions via Snag:",
       "",
-      body.reply,
+      reply,
       "",
       "Continue with this clarification.",
       'If you are still blocked on product/UX/scope decisions, list remaining questions under "## Questions for requester" at the top of your summary.',
@@ -460,7 +493,16 @@ async function handleReply(
   }
 
   try {
-    await provider.followUp(row.agent_id, wrappedReply);
+    const images = toAgentImages(undefined, body.images);
+    await provider.followUp(
+      row.agent_id,
+      appendReferenceContext(wrappedReply, {
+        screenshotIncluded: false,
+        images: body.images,
+        files: body.files,
+      }),
+      images.length > 0 ? images : undefined,
+    );
   } catch (error) {
     console.error("snag-relay follow-up failed:", error);
     const message = userFacingLaunchError(error);
@@ -527,6 +569,10 @@ async function handleConfirm(
   if (!row.agent_id) {
     return json({ error: "Request has no agent" }, 409, corsHeaders);
   }
+  if (attachmentsTooLarge(0, body.decision === "not_right" ? body.images : undefined)) {
+    console.warn("snag-relay confirm rejected: attachments_too_large");
+    return json({ error: "Attachments are too large" }, 422, corsHeaders);
+  }
 
   const claimed = await claimTransition(serviceClient, row, {
     status: "running",
@@ -541,7 +587,16 @@ async function handleConfirm(
   }
 
   try {
-    await provider.followUp(row.agent_id, previewFeedbackPrompt(body.feedback));
+    const images = toAgentImages(undefined, body.images);
+    await provider.followUp(
+      row.agent_id,
+      appendReferenceContext(previewFeedbackPrompt(body.feedback), {
+        screenshotIncluded: false,
+        images: body.images,
+        files: body.files,
+      }),
+      images.length > 0 ? images : undefined,
+    );
   } catch (error) {
     console.error("snag-relay preview feedback failed:", error);
     const message = userFacingLaunchError(error);
@@ -797,6 +852,13 @@ async function listRequests(
   }));
 }
 
+function agentWebhook(): { url: string; secret: string } | undefined {
+  const secret = Deno.env.get("SNAG_WEBHOOK_SECRET");
+  const base = Deno.env.get("SNAG_SUPABASE_URL") ?? Deno.env.get("SUPABASE_URL");
+  if (!secret || !base?.startsWith("https://")) return undefined;
+  return { url: `${base}/functions/v1/webhook`, secret };
+}
+
 function buildAgentPrompt(
   prompt: string,
   context: Record<string, unknown>,
@@ -806,13 +868,23 @@ function buildAgentPrompt(
   agentMode: AgentMode,
   followupsEnabled: boolean,
   planReviewEnabled: boolean,
+  reference?: {
+    screenshotIncluded: boolean;
+    images?: ReferenceImage[];
+    files?: ReferenceFile[];
+  },
 ): string {
   const elementSections = formatSelectedElements(elements);
+  const referenceText = reference ? formatReferenceContext(reference) : null;
+  const hasReferenceImages = (reference?.images?.length ?? 0) > 0;
   const sections = [
-    "An internal tester filed an in-app change request via Snag while using a development/staging build. A screenshot of the exact screen is attached when available.",
+    hasReferenceImages
+      ? "An internal tester filed an in-app change request via Snag while using a development/staging build. A screenshot of the current screen is attached when available. Any other image was uploaded by the requester and is what their request means by \"this image\". Do not use the page screenshot as that image."
+      : "An internal tester filed an in-app change request via Snag while using a development/staging build. A screenshot of the exact screen is attached when available.",
     "",
     "## Change request",
     prompt,
+    ...(referenceText ? ["", referenceText] : []),
     "",
     ...(elementSections.length > 0 ? [...elementSections, ""] : []),
     "## Screen context (captured automatically)",

@@ -12,6 +12,8 @@ import type {
   CreateSnagRequestResponse,
   RelayStateResponse,
   ReplySnagRequestResponse,
+  SnagReferenceFile,
+  SnagReferenceImage,
 } from "./protocol";
 
 function debugLog(...args: unknown[]): void {
@@ -111,13 +113,19 @@ export async function createSnagRequest(
 export async function replyToSnagRequest(
   requestId: string,
   reply: string,
+  attachments?: { images?: SnagReferenceImage[]; files?: SnagReferenceFile[] },
 ): Promise<ReplySnagRequestResponse> {
   const config = getSnagConfig();
   if (!config) throw new Error("Snag is not initialized");
   const response = await fetch(config.endpoint, {
     method: "POST",
     headers: await buildHeaders(),
-    body: JSON.stringify({ request_id: requestId, reply }),
+    body: JSON.stringify({
+      request_id: requestId,
+      reply,
+      ...(attachments?.images?.length ? { images: attachments.images } : {}),
+      ...(attachments?.files?.length ? { files: attachments.files } : {}),
+    }),
   });
   const payload = (await response.json().catch(() => null)) as
     | (ReplySnagRequestResponse & { error?: string })

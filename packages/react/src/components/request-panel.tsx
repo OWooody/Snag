@@ -9,6 +9,7 @@ import {
 } from "react";
 
 import { createSnagRequest } from "../api";
+import { attachmentFields, attachmentsExceedBudget, type LocalAttachment } from "../attachments";
 import { resolveContext } from "../config";
 import {
   compositeElementHighlights,
@@ -40,6 +41,7 @@ import {
 } from "../sheet";
 import { withAlpha } from "../styles";
 import type { SnagTheme } from "../theme";
+import { AttachmentPicker, COMPOSER_PADDING } from "./attachment-picker";
 import { Switch } from "./controls";
 import { ElementPicker } from "./element-picker";
 import { markerFor } from "./page-markers";
@@ -106,6 +108,7 @@ export function RequestPanel({
   const [phase, setPhase] = useState<Phase>("editing");
   const [statusIndex, setStatusIndex] = useState(0);
   const [prompt, setPrompt] = useState("");
+  const [attachments, setAttachments] = useState<LocalAttachment[]>([]);
   const [includeScreenshot, setIncludeScreenshot] = useState(true);
   const [workingScreenshot, setWorkingScreenshot] = useState<SnagScreenshot | null>(
     screenshot,
@@ -200,6 +203,12 @@ export function RequestPanel({
       setErrorMessage("Describe the change first.");
       return;
     }
+    const screenshotBase64Length =
+      includeScreenshot && workingScreenshot ? workingScreenshot.base64.length : 0;
+    if (attachmentsExceedBudget(screenshotBase64Length, attachments)) {
+      setErrorMessage("Attachments are too large. Remove an image and try again.");
+      return;
+    }
     setPhase("submitting");
     setErrorMessage(null);
     try {
@@ -207,6 +216,7 @@ export function RequestPanel({
       const response = await createSnagRequest({
         prompt: trimmed,
         context,
+        ...attachmentFields(attachments),
         screenshot:
           includeScreenshot && workingScreenshot
             ? await withHighlights(workingScreenshot)
@@ -230,6 +240,7 @@ export function RequestPanel({
   const startAnother = () => {
     setPhase("editing");
     setPrompt("");
+    setAttachments([]);
     setAgentUrl(null);
     setSubmittedId(null);
     setErrorMessage(null);
@@ -572,27 +583,34 @@ export function RequestPanel({
                   >
                     CHANGE REQUEST
                   </label>
-                  <textarea
-                    id="snag-prompt"
-                    value={prompt}
-                    onChange={(event) => setPrompt(event.target.value)}
-                    maxLength={MAX_PROMPT_LENGTH}
+                  <AttachmentPicker
+                    attachments={attachments}
+                    onChange={setAttachments}
                     disabled={phase === "submitting"}
-                    placeholder="What should change on this screen?"
-                    rows={5}
-                    style={{
-                      width: "100%",
-                      boxSizing: "border-box",
-                      borderRadius: 12,
-                      border: "1px solid rgba(255,255,255,0.55)",
-                      background: GLASS_SURFACE,
-                      color: theme.text,
-                      padding: 12,
-                      fontSize: 14,
-                      resize: "vertical",
-                      fontFamily: "inherit",
-                    }}
-                  />
+                    theme={theme}
+                  >
+                    <textarea
+                      id="snag-prompt"
+                      value={prompt}
+                      onChange={(event) => setPrompt(event.target.value)}
+                      maxLength={MAX_PROMPT_LENGTH}
+                      disabled={phase === "submitting"}
+                      placeholder="What should change on this screen?"
+                      rows={5}
+                      style={{
+                        width: "100%",
+                        boxSizing: "border-box",
+                        borderRadius: 12,
+                        border: "1px solid rgba(255,255,255,0.55)",
+                        background: GLASS_SURFACE,
+                        color: theme.text,
+                        padding: COMPOSER_PADDING,
+                        fontSize: 14,
+                        resize: "vertical",
+                        fontFamily: "inherit",
+                      }}
+                    />
+                  </AttachmentPicker>
 
                   {workingScreenshot ? (
                     <div

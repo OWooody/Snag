@@ -1,9 +1,11 @@
 import { useMemo, useState, type CSSProperties } from "react";
 
 import { confirmSnagRequest, replyToSnagRequest } from "../api";
+import { attachmentFields, messageWithAttachments, type LocalAttachment } from "../attachments";
 import { parsePreviewOps, type PreviewOp } from "../dom-preview";
 import type { SnagRequestPlan } from "../protocol";
 import type { SnagTheme } from "../theme";
+import { AttachmentPicker, COMPOSER_PADDING } from "./attachment-picker";
 
 const MAX_FEEDBACK_LENGTH = 2000;
 
@@ -32,6 +34,7 @@ export function PlanReview({
   const previewOps = useMemo(() => parsePreviewOps(plan.preview), [plan.preview]);
   const [adjusting, setAdjusting] = useState(false);
   const [feedback, setFeedback] = useState("");
+  const [attachments, setAttachments] = useState<LocalAttachment[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -41,6 +44,7 @@ export function PlanReview({
     try {
       await action();
       setFeedback("");
+      setAttachments([]);
       setAdjusting(false);
       onDone();
     } catch (failure) {
@@ -54,12 +58,12 @@ export function PlanReview({
     void run(() => confirmSnagRequest({ request_id: requestId, decision: "approve_plan" }));
 
   const sendAdjustment = () => {
-    const trimmed = feedback.trim();
-    if (!trimmed) {
-      setError("Tell the agent what should be different first.");
+    const message = messageWithAttachments(feedback, attachments, MAX_FEEDBACK_LENGTH);
+    if (!message) {
+      setError("Describe the change or attach an image or file.");
       return;
     }
-    void run(() => replyToSnagRequest(requestId, trimmed));
+    void run(() => replyToSnagRequest(requestId, message, attachmentFields(attachments)));
   };
 
   return (
@@ -93,14 +97,21 @@ export function PlanReview({
       ) : null}
       {adjusting ? (
         <>
-          <textarea
-            value={feedback}
-            onChange={(event) => setFeedback(event.target.value.slice(0, MAX_FEEDBACK_LENGTH))}
+          <AttachmentPicker
+            attachments={attachments}
+            onChange={setAttachments}
             disabled={busy}
-            placeholder="What should be different?"
-            rows={3}
-            style={fieldStyle}
-          />
+            theme={theme}
+          >
+            <textarea
+              value={feedback}
+              onChange={(event) => setFeedback(event.target.value.slice(0, MAX_FEEDBACK_LENGTH))}
+              disabled={busy}
+              placeholder="What should be different?"
+              rows={3}
+              style={{ ...fieldStyle, padding: COMPOSER_PADDING }}
+            />
+          </AttachmentPicker>
           <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
             <button
               type="button"
