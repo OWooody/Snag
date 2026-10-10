@@ -52,6 +52,8 @@ Migration: `supabase/migrations/00012_origin_credentials.sql` → per-project Cu
 
 Migrations `00007`–`00010` → `rejected` status and `rejection_note`, `handoff_reason`, the `snag_request_transitions` status history (written by a trigger on `snag_requests`), and the `snag_execute_metrics` function behind the dashboard's execute-mode metrics.
 
+Migration `00015_impact_metrics.sql` → `snag_impact_metrics` and the service-role-only `snag_platform_impact_metrics`, behind the admin panel's Insights pages.
+
 If policies already exist from a partial run:
 
 ```sh

@@ -147,6 +147,19 @@ Rules marked **Check these paths** use common path guesses; adjust them to the r
 
 When the project's effective agent mode is **Plan and execute**, the dashboard has an **Execute mode** section covering the last 7 or 30 days. It shows the outcome mix, merges by Snag versus by a developer, the median and p90 time spent in plan approval, PR review, and preview confirmation, the rules that escalated most, how often shadow rules would have changed a decision, and the most common handoff reasons. It reports counts and durations only, never prompts or summaries. Wait times come from `snag_request_transitions`, so they only cover status changes after migration `00009`.
 
+### Insights
+
+**Insights** (needs migration `00015`) covers every project, in either agent mode, over the last 7, 30, or 90 UTC days:
+
+- **Volume** — requests per day, stacked by where they ended up (merged, agent finished, in progress, error, rejected).
+- **Funnel** — submitted, agent finished the work, PR opened, merged.
+- **Time to ship** — median and p90 from submit to agent done and to merge, agent run time, and how many requests needed requester follow-ups.
+- **Hotspots** — the pages, components, and source files that draw the most requests. Pages come from the SDK's auto context (`pathname` on web, `screenName` on iOS) with record ids collapsed to `:id`; components and files come from the element picker, and source files only appear for development builds.
+
+Requesters are reported as a count only. Timings rely on `snag_request_transitions`, like the dashboard metrics. Cursor's API reports no cost, so **agent time** (time spent in `running`) stands in for agent effort.
+
+Platform admins also get **Platform → Insights**: totals, a cross-tenant volume chart, and a sortable per-tenant table (requests, merge rate, errors, requesters, median time to merge, agent time). It reads `snag_platform_impact_metrics`, which only the service role can call.
+
 All rule, setting, token, secret, and approval changes are written to `snag_audit_log` (without prompts, notes, or secrets).
 
 ## Security notes

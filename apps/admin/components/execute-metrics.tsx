@@ -7,6 +7,7 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatSeconds } from "@/lib/metrics-format";
 
 const RANGES = [7, 30] as const;
 
@@ -24,25 +25,15 @@ const WAIT_ROWS: { key: keyof ExecuteMetrics["waits"]; label: string }[] = [
   { key: "awaiting_confirmation", label: "Preview confirmation" },
 ];
 
-function formatDuration(seconds: number | null): string {
-  if (seconds === null) return "—";
-  if (seconds < 60) return `${Math.round(seconds)}s`;
-  const minutes = seconds / 60;
-  if (minutes < 60) return `${Math.round(minutes)}m`;
-  const hours = minutes / 60;
-  if (hours < 48) return `${hours.toFixed(hours < 10 ? 1 : 0)}h`;
-  return `${Math.round(hours / 24)}d`;
-}
-
 function DurationLine({ label, stats }: { label: string; stats: DurationStats | undefined }) {
   return (
     <div className="flex items-center justify-between gap-4 text-sm">
       <span className="text-zinc-600">{label}</span>
       {stats && stats.count > 0 ? (
         <span className="tabular-nums">
-          {formatDuration(stats.p50_seconds)}
+          {formatSeconds(stats.p50_seconds)}
           <span className="text-zinc-400"> median · </span>
-          {formatDuration(stats.p90_seconds)}
+          {formatSeconds(stats.p90_seconds)}
           <span className="text-zinc-400"> p90 · {stats.count}</span>
         </span>
       ) : (
@@ -141,7 +132,7 @@ function ExecuteMetricsSection({ projectSlug }: { projectSlug: string }) {
             <CardHeader className="pb-2">
               <CardDescription>Time waiting on a developer</CardDescription>
               <CardTitle className="text-2xl">
-                {formatDuration(data.submit_to_merge.p50_seconds)}
+                {formatSeconds(data.submit_to_merge.p50_seconds)}
                 <span className="text-sm font-normal text-zinc-500"> median submit to merge</span>
               </CardTitle>
             </CardHeader>
@@ -215,4 +206,4 @@ function ExecuteMetricsSection({ projectSlug }: { projectSlug: string }) {
   );
 }
 
-export { ExecuteMetricsSection };
+export { DurationLine, ExecuteMetricsSection };

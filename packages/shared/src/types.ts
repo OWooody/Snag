@@ -188,6 +188,77 @@ export interface ExecuteMetrics {
   history_started_at: string | null;
 }
 
+/** Where a request ended up, as grouped by the impact metrics. */
+export type ImpactOutcome = "merged" | "finished" | "in_progress" | "error" | "rejected";
+
+export interface ImpactHotspot {
+  key: string;
+  requests: number;
+  merged: number;
+}
+
+export type ImpactDailyPoint = { day: string } & Record<ImpactOutcome, number>;
+
+/** Result of the snag_impact_metrics SQL function: aggregates only, no prompts or requester ids. */
+export interface ImpactMetrics {
+  range_days: number;
+  since: string;
+  total: number;
+  outcomes: Partial<Record<ImpactOutcome, number>>;
+  funnel: { submitted: number; agent_done: number; pr_opened: number; merged: number };
+  daily: ImpactDailyPoint[];
+  hotspots: {
+    pages: ImpactHotspot[];
+    components: ImpactHotspot[];
+    files: ImpactHotspot[];
+    with_page: number;
+    with_elements: number;
+  };
+  speed: { submit_to_agent_done: DurationStats; submit_to_merge: DurationStats };
+  effort: {
+    agent_run: DurationStats;
+    total_agent_seconds: number;
+    tracked_requests: number;
+    with_followups: number;
+    followup_rounds: number;
+  };
+  requesters: { active: number };
+  history_started_at: string | null;
+}
+
+export interface PlatformImpactTenant {
+  slug: string;
+  name: string;
+  enabled: boolean;
+  organization_name: string | null;
+  total: number;
+  pr_opened: number;
+  merged: number;
+  errored: number;
+  rejected: number;
+  requesters: number;
+  p50_submit_to_merge_seconds: number | null;
+  p50_agent_run_seconds: number | null;
+  total_agent_seconds: number;
+}
+
+/** Result of the snag_platform_impact_metrics SQL function (service role only). */
+export interface PlatformImpactMetrics {
+  range_days: number;
+  since: string;
+  totals: {
+    requests: number;
+    pr_opened: number;
+    merged: number;
+    errored: number;
+    active_tenants: number;
+    requesters: number;
+    total_agent_seconds: number;
+  };
+  daily: { day: string; requests: number; merged: number }[];
+  tenants: PlatformImpactTenant[];
+}
+
 export interface SnagOrganization {
   id: string;
   name: string;

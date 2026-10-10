@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Building2,
+  ChartColumn,
   FileText,
   LayoutDashboard,
   LogOut,
@@ -31,6 +32,7 @@ interface AppShellProps {
 const companyLinks = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/requests", label: "Requests", icon: FileText },
+  { href: "/insights", label: "Insights", icon: ChartColumn },
   { href: "/rules", label: "Rules", icon: ShieldCheck },
   { href: "/integration", label: "Integration", icon: Plug },
   { href: "/settings", label: "Settings", icon: Settings },
@@ -39,6 +41,7 @@ const companyLinks = [
 const platformLinks = [
   { href: "/platform/tenants", label: "Tenants", icon: Users },
   { href: "/platform/requests", label: "All requests", icon: FileText },
+  { href: "/platform/insights", label: "Insights", icon: ChartColumn },
   { href: "/platform/system", label: "System", icon: Server },
 ];
 
