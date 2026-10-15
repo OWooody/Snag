@@ -8,6 +8,7 @@
  * POST create  → { prompt, context, images?, files?, … } — insert + launch agent
  * POST reply   → { request_id, reply, images?, files? } — follow-up on existing agent, or plan changes at awaiting_requester
  * POST confirm → { request_id, decision, feedback?, images?, files? } — requester verdict on a plan (approve_plan) or a preview
+ * POST close   → { request_id, action: "close", note? } — requester closes a request that is still open
  *
  * Never log prompt or screenshot contents — log entity ids and reasons only.
  */
@@ -67,6 +68,7 @@ import {
   mapTerminalRequestStatus,
   requesterQuestionsFormatLines,
 } from "../_shared/requester_questions.ts";
+import { CLOSE_NOTE_MAX, requesterCanClose } from "../_shared/requester_close.ts";
 import { verifyRequesterToken } from "../_shared/requester_token.ts";
 import {
   formatSelectedElements,
@@ -152,6 +154,12 @@ const replySchema = z
       });
     }
   });
+
+const closeSchema = z.object({
+  request_id: z.string().uuid(),
+  action: z.literal("close"),
+  note: z.string().trim().max(CLOSE_NOTE_MAX).optional(),
+});
 
 const confirmSchema = z.discriminatedUnion("decision", [
   z.object({
@@ -251,6 +259,18 @@ Deno.serve(async (req) => {
     }
 
     const rawBody = await req.json();
+    if (
+      rawBody && typeof rawBody === "object" && "request_id" in rawBody &&
+      "action" in rawBody && rawBody.action === "close"
+    ) {
+      return await handleClose(
+        req,
+        closeSchema.parse(rawBody),
+        serviceClient,
+        project,
+        corsHeaders,
+      );
+    }
     if (
       rawBody && typeof rawBody === "object" && "request_id" in rawBody &&
       "decision" in rawBody
@@ -607,6 +627,38 @@ async function handleConfirm(
   return json({ id: row.id, status: "running" }, 200, corsHeaders);
 }
 
+async function handleClose(
+  req: Request,
+  body: z.infer<typeof closeSchema>,
+  serviceClient: SupabaseClient,
+  project: ProjectRow,
+  corsHeaders: Record<string, string>,
+): Promise<Response> {
+  const ip =
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+
+  const row = await loadOwnedRequest(req, serviceClient, project, body.request_id, ip);
+  if (row instanceof Response) return withCors(row, corsHeaders);
+
+  if (!requesterCanClose(row.status)) {
+    return json({ error: "This request can no longer be closed" }, 409, corsHeaders);
+  }
+
+  const fromStatus = row.status;
+  const note = body.note?.trim() || null;
+  const claimed = await claimTransition(serviceClient, row, {
+    status: "closed_by_requester",
+    error: null,
+    close_note: note,
+  });
+  if (!claimed) {
+    return json({ error: "Request changed; refresh and try again" }, 409, corsHeaders);
+  }
+
+  console.log(`snag-relay closed request=${row.id} project=${project.id} from=${fromStatus}`);
+  return json({ id: row.id, status: "closed_by_requester" }, 200, corsHeaders);
+}
+
 function withCors(response: Response, corsHeaders: Record<string, string>): Response {
   const headers = new Headers(response.headers);
   for (const [key, value] of Object.entries(corsHeaders)) headers.set(key, value);
@@ -727,7 +779,7 @@ async function listRequests(
   const followupsEnabled = projectFollowupsEnabled(project);
   const { data: rows, error } = await serviceClient
     .from("snag_requests")
-    .select(`${REQUEST_LIFECYCLE_COLUMNS}, error, rejection_note, context, created_at`)
+    .select(`${REQUEST_LIFECYCLE_COLUMNS}, error, rejection_note, close_note, context, created_at`)
     .eq("project_id", project.id)
     .order("created_at", { ascending: false })
     .limit(LIST_LIMIT);
@@ -741,6 +793,7 @@ async function listRequests(
     LifecycleRow & {
       error: string | null;
       rejection_note: string | null;
+      close_note: string | null;
       context: unknown;
       created_at: string;
     }
@@ -836,6 +889,7 @@ async function listRequests(
     summary: row.summary,
     error: row.error,
     rejection_note: row.status === "rejected" ? row.rejection_note : null,
+    close_note: row.status === "closed_by_requester" ? row.close_note : null,
     handoff_reason: row.status === "awaiting_review" ? row.handoff_reason : null,
     phase: row.phase,
     stage_label: requestStageLabel(row),

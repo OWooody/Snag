@@ -18,6 +18,7 @@ const STATUS_VARIANT: Record<
   merged: "success",
   error: "destructive",
   rejected: "secondary",
+  closed_by_requester: "secondary",
 };
 
 export const STATUS_LABELS: Record<SnagRequestStatus, string> = {
@@ -32,6 +33,7 @@ export const STATUS_LABELS: Record<SnagRequestStatus, string> = {
   merged: "merged",
   error: "error",
   rejected: "rejected",
+  closed_by_requester: "closed by requester",
 };
 
 export function StatusBadge({ status }: { status: SnagRequestStatus }) {

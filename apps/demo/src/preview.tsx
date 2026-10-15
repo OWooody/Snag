@@ -155,6 +155,19 @@ const ROWS: SnagRequestRow[] = [
     created_at: "2026-10-02T12:08:00.000Z",
   },
   {
+    id: "preview-closed",
+    prompt: "Try a darker sidebar",
+    status: "closed_by_requester",
+    agent_url: "https://cursor.com/agents/preview-closed",
+    branch_name: null,
+    pr_url: null,
+    summary: null,
+    error: null,
+    close_note: "We decided to leave the sidebar as it is.",
+    requester: PREVIEW_REQUESTER,
+    created_at: "2026-10-02T07:40:00.000Z",
+  },
+  {
     id: "preview-other",
     prompt: "Rename the queue heading",
     status: "queued",
@@ -203,6 +216,16 @@ function installPreviewRelay(): void {
       // A real relay takes a moment; an instant reply hides loading motion.
       await new Promise((resolve) => setTimeout(resolve, PREVIEW_LATENCY_MS));
       return Response.json(STATE);
+    }
+    const raw = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : {};
+    if (raw.action === "close" && typeof raw.request_id === "string") {
+      const note = typeof raw.note === "string" && raw.note.trim() ? raw.note.trim() : null;
+      STATE.requests = (STATE.requests ?? []).map((row) =>
+        row.id === raw.request_id
+          ? { ...row, status: "closed_by_requester", close_note: note, error: null }
+          : row,
+      );
+      return Response.json({ id: raw.request_id, status: "closed_by_requester" });
     }
     return Response.json({
       id: "preview-submitted",

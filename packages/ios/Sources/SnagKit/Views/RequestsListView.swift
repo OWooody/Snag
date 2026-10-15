@@ -76,6 +76,7 @@ struct RequestsListView: View {
                         row: row,
                         theme: theme,
                         followupsEnabled: followupsEnabled,
+                        currentRequester: model.currentRequester,
                         client: model.client,
                         focused: row.id == focusRequestId,
                         expanded: model.isExpanded(
@@ -173,6 +174,7 @@ final class RequestsListModel: ObservableObject {
         if let override = expandedOverrides[row.id] { return override }
         return row.id == focusRequestId
             || row.status == .awaitingConfirmation
+            || row.status == .awaitingRequester
             || (followupsEnabled && row.status == .needsInput)
     }
 
@@ -190,7 +192,9 @@ final class RequestsListModel: ObservableObject {
         rows.filter { row in
             if row.id == focusRequestId { return true }
             if followupsEnabled && needsAttentionOnly
-                && row.status != .needsInput && row.status != .awaitingConfirmation {
+                && row.status != .needsInput
+                && row.status != .awaitingRequester
+                && row.status != .awaitingConfirmation {
                 return false
             }
             if mineOnly, let currentRequester, row.requester != currentRequester {
@@ -215,6 +219,7 @@ struct RequestCardView: View {
     let row: SnagRequestRow
     let theme: SnagTheme
     let followupsEnabled: Bool
+    let currentRequester: String?
     let client: RelayClient
     var focused = false
     let expanded: Bool
@@ -228,6 +233,28 @@ struct RequestCardView: View {
     @State private var feedback = ""
     @State private var confirming = false
     @State private var confirmError: String?
+    @State private var closeOpen = false
+    @State private var closeNote = ""
+    @State private var closing = false
+    @State private var closeError: String?
+
+    private var owned: Bool {
+        if let requester = row.requester {
+            return currentRequester != nil && requester == currentRequester
+        }
+        return currentRequester == nil
+    }
+
+    private var canClose: Bool {
+        guard owned else { return false }
+        switch row.status {
+        case .queued, .running, .needsInput, .awaitingRequester, .awaitingApproval,
+             .awaitingReview, .awaitingConfirmation:
+            return true
+        case .finished, .error, .merged, .rejected, .closedByRequester, .unknown:
+            return false
+        }
+    }
 
     private var canReply: Bool {
         followupsEnabled && row.status == .needsInput
@@ -319,6 +346,12 @@ struct RequestCardView: View {
                     .foregroundColor(theme.textMuted)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            if row.status == .closedByRequester {
+                Text(closedSummary)
+                    .font(.system(size: 12))
+                    .foregroundColor(theme.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if canReply && showActions {
                 ZStack(alignment: .topLeading) {
                     TextEditor(text: $reply)
@@ -377,6 +410,9 @@ struct RequestCardView: View {
                     .font(.system(size: 11))
                     .foregroundColor(theme.textMuted)
             }
+            if canClose {
+                closeSection
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
@@ -392,6 +428,7 @@ struct RequestCardView: View {
         case .queued: return "QUEUED"
         case .running, .unknown: return "IN PROGRESS"
         case .needsInput: return "NEEDS YOUR REPLY"
+        case .awaitingRequester: return "REVIEW THE PLAN"
         case .awaitingApproval: return "WAITING FOR A DEVELOPER"
         case .awaitingReview: return "IN DEVELOPER REVIEW"
         case .awaitingConfirmation: return "READY FOR YOU TO CHECK"
@@ -399,7 +436,126 @@ struct RequestCardView: View {
         case .merged: return "LIVE"
         case .error: return "ERROR"
         case .rejected: return "NOT APPROVED"
+        case .closedByRequester: return owned ? "CLOSED BY YOU" : "CLOSED"
         }
+    }
+
+    private var closedSummary: String {
+        let who = owned ? "You closed this request." : "The requester closed this request."
+        let note = row.closeNote?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if note.isEmpty { return "\(who) Nothing further will be built from it." }
+        return "\(who) \(note)"
+    }
+
+    private var closeExplanation: String {
+        switch row.status {
+        case .queued, .running:
+            return "Snag will stop following this request. If an agent is already working, it may finish in the background, but the result will not be merged or sent on for review."
+        case .needsInput, .awaitingRequester:
+            return "You will not need to reply, and nothing further will be built from this request."
+        case .awaitingApproval:
+            return "A developer will no longer be asked to approve this, and nothing further will be built from it."
+        case .awaitingReview, .awaitingConfirmation:
+            let pull = row.prUrl == nil
+                ? ""
+                : " An open pull request stays open until someone closes it on the repository."
+            return row.status == .awaitingConfirmation
+                ? "Snag will not merge this change.\(pull)"
+                : "A developer will no longer be asked to review this.\(pull)"
+        case .finished, .error, .merged, .rejected, .closedByRequester, .unknown:
+            return "Snag will stop following this request."
+        }
+    }
+
+    @ViewBuilder
+    private var closeSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if closeOpen {
+                Text("Close this request?")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(theme.text)
+                Text(closeExplanation)
+                    .font(.system(size: 12))
+                    .foregroundColor(theme.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+                ZStack(alignment: .topLeading) {
+                    TextEditor(text: $closeNote)
+                        .frame(minHeight: 56)
+                        .font(.system(size: 13))
+                        .foregroundColor(theme.text)
+                        .disabled(closing)
+                        .snagClearTextEditorBackground()
+                        .padding(8)
+                    if closeNote.isEmpty {
+                        Text("Add a note for the developer (optional)")
+                            .font(.system(size: 13))
+                            .foregroundColor(theme.textMuted)
+                            .padding(.top, 16)
+                            .padding(.leading, 12)
+                            .allowsHitTesting(false)
+                    }
+                }
+                .background(RoundedRectangle(cornerRadius: 10).fill(theme.background))
+                .onChange(of: closeNote) { value in
+                    if value.count > 500 {
+                        closeNote = String(value.prefix(500))
+                    }
+                }
+                if let closeError {
+                    Text(closeError)
+                        .font(.system(size: 12))
+                        .foregroundColor(theme.danger)
+                }
+                HStack(spacing: 8) {
+                    Button {
+                        closeOpen = false
+                        closeError = nil
+                    } label: {
+                        Text("Keep it open")
+                            .font(.system(size: 13, weight: .bold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(theme.textMuted, lineWidth: 1))
+                            .foregroundColor(theme.text)
+                    }
+                    .disabled(closing)
+                    Button {
+                        Task { await submitClose() }
+                    } label: {
+                        Text(closing ? "Closing…" : "Close request")
+                            .font(.system(size: 13, weight: .bold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(RoundedRectangle(cornerRadius: 10).fill(theme.danger))
+                            .foregroundColor(.white)
+                    }
+                    .disabled(closing)
+                }
+            } else {
+                Button {
+                    closeOpen = true
+                } label: {
+                    Text("Close request")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(theme.textMuted)
+                }
+            }
+        }
+        .padding(.top, 4)
+    }
+
+    private func submitClose() async {
+        closing = true
+        closeError = nil
+        do {
+            try await client.closeRequest(requestId: row.id, note: closeNote)
+            closeNote = ""
+            closeOpen = false
+            onReplied()
+        } catch {
+            closeError = (error as? SnagRelayError)?.message ?? "Could not close the request"
+        }
+        closing = false
     }
 
     private var rejectionText: String {
@@ -530,10 +686,10 @@ struct RequestCardView: View {
             return theme.success
         case .error:
             return theme.danger
-        case .rejected:
+        case .rejected, .closedByRequester:
             return theme.textMuted
-        case .queued, .running, .needsInput, .awaitingApproval, .awaitingReview,
-             .awaitingConfirmation, .unknown:
+        case .queued, .running, .needsInput, .awaitingRequester, .awaitingApproval,
+             .awaitingReview, .awaitingConfirmation, .unknown:
             return theme.accent
         }
     }

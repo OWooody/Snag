@@ -403,6 +403,7 @@ final class OverlayModel: ObservableObject {
         let rows = relay.requests ?? []
         badgeCount = rows.filter { row in
             let needsRequester = row.status == .awaitingConfirmation
+                || row.status == .awaitingRequester
                 || (followups && row.status == .needsInput)
             guard needsRequester else { return false }
             if let requester, let rowRequester = row.requester {

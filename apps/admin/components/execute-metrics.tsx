@@ -16,6 +16,7 @@ const OUTCOME_ROWS: { key: keyof ExecuteMetrics["outcomes"]; label: string }[] =
   { key: "review_before_merge", label: POLICY_OUTCOME_LABELS.review_before_merge },
   { key: "review_before_execution", label: POLICY_OUTCOME_LABELS.review_before_execution },
   { key: "rejected", label: "Rejected by a developer" },
+  { key: "closed_by_requester", label: "Closed by the requester" },
   { key: "undecided", label: "Not decided yet" },
 ];
 

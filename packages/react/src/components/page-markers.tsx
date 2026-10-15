@@ -10,6 +10,7 @@ const CLOSED_STATUSES: ReadonlySet<SnagRequestStatus> = new Set([
   "error",
   "merged",
   "rejected",
+  "closed_by_requester",
 ]);
 
 /** Marker for a new request: the top-right corner of the first picked element. */

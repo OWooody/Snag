@@ -26,6 +26,7 @@ const OUTCOME_SERIES: { key: ImpactOutcome; label: string; color: string }[] = [
   { key: "in_progress", label: "In progress", color: "#f59e0b" },
   { key: "error", label: "Error", color: "#dc2626" },
   { key: "rejected", label: "Rejected", color: "#a1a1aa" },
+  { key: "closed_by_requester", label: "Closed by requester", color: "#71717a" },
 ];
 
 function StatCard({ label, value, detail }: { label: string; value: string; detail?: string }) {
@@ -256,6 +257,7 @@ function ImpactInsights({ projectSlug }: { projectSlug: string }) {
                 <ProportionBar label="Merged" count={data.funnel.merged} total={data.total} />
                 <p className="pt-1 text-xs text-zinc-500">
                   {data.outcomes.error ?? 0} errored, {data.outcomes.rejected ?? 0} rejected,{" "}
+                  {data.outcomes.closed_by_requester ?? 0} closed by the requester,{" "}
                   {data.outcomes.in_progress ?? 0} still in progress.
                 </p>
               </CardContent>

@@ -26,7 +26,9 @@ export type SnagRequestStatus =
   /** Execute mode: Snag merged the PR. */
   | "merged"
   /** Execute mode: a developer rejected the plan; nothing was changed. */
-  | "rejected";
+  | "rejected"
+  /** The requester closed the request. Snag stops following it. */
+  | "closed_by_requester";
 
 export interface SnagScreenshot {
   /** JPEG image data, base64-encoded (no data-URI prefix). */
@@ -140,6 +142,19 @@ export interface ConfirmSnagRequestResponse {
   status: SnagRequestStatus;
 }
 
+/** POST <endpoint> — requester closes a request that is still open. */
+export interface CloseSnagRequestBody {
+  request_id: string;
+  action: "close";
+  /** Optional note shown to developers. */
+  note?: string;
+}
+
+export interface CloseSnagRequestResponse {
+  id: string;
+  status: "closed_by_requester";
+}
+
 /** The agent's plan in requester terms. */
 export interface SnagRequestPlan {
   summary: string | null;
@@ -162,6 +177,8 @@ export interface SnagRequestRow {
   error: string | null;
   /** The developer's note when the plan was rejected. */
   rejection_note?: string | null;
+  /** The requester's note when they closed the request. */
+  close_note?: string | null;
   /** Why the request went to a developer while awaiting_review. Informational, not an error. */
   handoff_reason?: string | null;
   /** Execute mode: planning, implementing, or delivering. Null in plan-only mode. */

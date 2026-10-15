@@ -253,8 +253,30 @@ final class ProtocolTests: XCTestCase {
         let row = try JSONDecoder().decode(SnagRequestRow.self, from: Data(json.utf8))
         XCTAssertEqual(row.status, .rejected)
         XCTAssertEqual(row.rejectionNote, "The footer is required for legal.")
+        XCTAssertNil(row.closeNote)
         XCTAssertEqual(row.phase, "planning")
         XCTAssertNil(row.stageLabel)
+    }
+
+    func testDecodesClosedByRequester() throws {
+        let json = """
+        {
+          "id": "e",
+          "prompt": "Try a darker sidebar",
+          "status": "closed_by_requester",
+          "agent_url": null,
+          "branch_name": null,
+          "pr_url": null,
+          "summary": null,
+          "error": null,
+          "close_note": "We decided to leave the sidebar as it is.",
+          "requester": "preview@snag.dev",
+          "created_at": "2026-10-02T07:40:00Z"
+        }
+        """
+        let row = try JSONDecoder().decode(SnagRequestRow.self, from: Data(json.utf8))
+        XCTAssertEqual(row.status, .closedByRequester)
+        XCTAssertEqual(row.closeNote, "We decided to leave the sidebar as it is.")
     }
 
     func testDecodesStageLabel() throws {

@@ -6,6 +6,7 @@ import {
 } from "./config";
 import { trackRequestStatuses } from "./notifications";
 import type {
+  CloseSnagRequestResponse,
   ConfirmSnagRequestBody,
   ConfirmSnagRequestResponse,
   CreateSnagRequestBody,
@@ -153,6 +154,32 @@ export async function confirmSnagRequest(
   if (!response.ok || !payload?.id) {
     debugLog("confirm failed", response.status, payload);
     throw new Error(payload?.error ?? `Confirmation failed (${response.status})`);
+  }
+  return payload;
+}
+
+export async function closeSnagRequest(
+  requestId: string,
+  note?: string,
+): Promise<CloseSnagRequestResponse> {
+  const config = getSnagConfig();
+  if (!config) throw new Error("Snag is not initialized");
+  const trimmed = note?.trim();
+  const response = await fetch(config.endpoint, {
+    method: "POST",
+    headers: await buildHeaders(),
+    body: JSON.stringify({
+      request_id: requestId,
+      action: "close",
+      ...(trimmed ? { note: trimmed } : {}),
+    }),
+  });
+  const payload = (await response.json().catch(() => null)) as
+    | (CloseSnagRequestResponse & { error?: string })
+    | null;
+  if (!response.ok || !payload?.id) {
+    debugLog("close failed", response.status, payload);
+    throw new Error(payload?.error ?? `Could not close the request (${response.status})`);
   }
   return payload;
 }
