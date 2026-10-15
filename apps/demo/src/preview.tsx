@@ -52,6 +52,21 @@ const ROWS: SnagRequestRow[] = [
     created_at: "2026-10-01T18:57:14.000Z",
   },
   {
+    id: "preview-followup",
+    prompt: "Make the label plural: Vendor reviews",
+    status: "running",
+    agent_url: "https://cursor.com/agents/preview-followup",
+    branch_name: null,
+    pr_url: null,
+    summary: null,
+    error: null,
+    phase: "planning",
+    stage_label: "Planning",
+    continues_request_id: "preview-live",
+    requester: PREVIEW_REQUESTER,
+    created_at: "2026-10-02T19:04:00.000Z",
+  },
+  {
     id: "preview-needs-you",
     prompt: "Move the refresh control closer to the filters",
     status: "needs_input",
@@ -204,9 +219,33 @@ function installPreviewRelay(): void {
       await new Promise((resolve) => setTimeout(resolve, PREVIEW_LATENCY_MS));
       return Response.json(STATE);
     }
+    const raw = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : {};
+    const continuesFrom = typeof raw.continues_request_id === "string" ? raw.continues_request_id : null;
+    const id = continuesFrom ? `preview-followup-${Date.now()}` : "preview-submitted";
+    if (continuesFrom) {
+      const prompt = typeof raw.prompt === "string" ? raw.prompt : "Follow-up";
+      STATE.requests = [
+        {
+          id,
+          prompt,
+          status: "queued",
+          agent_url: null,
+          branch_name: null,
+          pr_url: null,
+          summary: null,
+          error: null,
+          phase: "planning",
+          stage_label: "Planning",
+          continues_request_id: continuesFrom,
+          requester: PREVIEW_REQUESTER,
+          created_at: new Date().toISOString(),
+        },
+        ...(STATE.requests ?? []),
+      ];
+    }
     return Response.json({
-      id: "preview-submitted",
-      agent_url: "https://cursor.com/agents/preview-submitted",
+      id,
+      agent_url: continuesFrom ? null : "https://cursor.com/agents/preview-submitted",
       status: "queued",
     });
   };

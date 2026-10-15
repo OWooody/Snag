@@ -97,6 +97,11 @@ export interface CreateSnagRequestBody {
   elements?: SnagElement[];
   marker?: SnagRequestMarker;
   locale?: string;
+  /**
+   * Earlier request this one continues. The new request keeps its own
+   * lifecycle; the relay includes the earlier prompt and outcome for the agent.
+   */
+  continues_request_id?: string;
 }
 
 export interface CreateSnagRequestResponse {
@@ -174,6 +179,8 @@ export interface SnagRequestRow {
   marker?: SnagRequestMarker | null;
   /** Host-supplied display id from `getRequester`, when provided. */
   requester: string | null;
+  /** Earlier request this one continues, when it was started as a follow-up. */
+  continues_request_id?: string | null;
   created_at: string;
 }
 
