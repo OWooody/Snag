@@ -490,6 +490,7 @@ export function RequestPanel({
                 focusRequestId={focusRequestId}
                 onLoaded={onRequestsViewed}
                 onShowPreview={(requestId, ops) => setPreviewing({ requestId, ops })}
+                onContinued={(id) => setFocusRequestId(id)}
                 onNewRequest={() => {
                     if (phase === "done") {
                       startAnother();

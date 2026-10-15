@@ -207,6 +207,14 @@ export function RequestDetail({
           {request.phase ? <Badge variant="outline">{request.phase}</Badge> : null}
         </div>
         <p className="whitespace-pre-wrap text-zinc-800">{request.prompt}</p>
+        {request.continues_request_id ? (
+          <p className="text-sm text-zinc-500">
+            Follow-up to{" "}
+            <Link href={`/requests/${request.continues_request_id}`} className="underline">
+              an earlier request
+            </Link>
+          </p>
+        ) : null}
         <div className="flex flex-wrap gap-4 text-sm text-zinc-500">
           <span>
             Requester: {request.requester ?? "anonymous"}

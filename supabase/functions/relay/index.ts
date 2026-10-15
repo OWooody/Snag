@@ -5,7 +5,7 @@
  * Security boundary = project key resolution + per-project rate limits + origin allowlist.
  *
  * GET  → { enabled, requester_followups_enabled, agent_mode, requests? }
- * POST create  → { prompt, context, images?, files?, … } — insert + launch agent
+ * POST create  → { prompt, context, images?, files?, continues_request_id?, … } — insert + launch agent
  * POST reply   → { request_id, reply, images?, files? } — follow-up on existing agent, or plan changes at awaiting_requester
  * POST confirm → { request_id, decision, feedback?, images?, files? } — requester verdict on a plan (approve_plan) or a preview
  *
@@ -33,6 +33,7 @@ import {
   type ReferenceFile,
   type ReferenceImage,
 } from "../_shared/attachments.ts";
+import { formatContinuationSection } from "../_shared/continuation.ts";
 import { decryptSecret, getEncryptionSecret } from "../_shared/crypto.ts";
 import {
   implementingReplyWrapper,
@@ -133,6 +134,8 @@ const createSchema = z.object({
   elements: selectedElementsSchema.optional(),
   marker: requestMarkerSchema.optional(),
   locale: z.string().max(10).optional(),
+  /** Earlier request this one continues. Any status is allowed; the new row has its own lifecycle. */
+  continues_request_id: z.string().uuid().optional(),
 });
 
 const replySchema = z
@@ -341,6 +344,26 @@ async function handleCreate(
   const followupsEnabled = projectFollowupsEnabled(project);
   const agentMode = resolveEffectiveAgentMode(project);
 
+  let continuation: string | null = null;
+  if (body.continues_request_id) {
+    const parent = await loadOwnedRequest(
+      req,
+      serviceClient,
+      project,
+      body.continues_request_id,
+      ip,
+    );
+    if (parent instanceof Response) return withCors(parent, corsHeaders);
+    continuation = formatContinuationSection({
+      id: parent.id,
+      prompt: parent.prompt,
+      status: parent.status,
+      summary: parent.summary,
+      pr_url: parent.pr_url,
+      branch_name: parent.branch_name,
+    });
+  }
+
   const { data: row, error: insertError } = await serviceClient
     .from("snag_requests")
     .insert({
@@ -349,6 +372,7 @@ async function handleCreate(
       requester_verified: verified,
       requester_ip: ip,
       prompt: body.prompt,
+      continues_request_id: body.continues_request_id ?? null,
       context: {
         ...body.context,
         ...(body.elements?.length ? { snag_elements: body.elements } : {}),
@@ -388,6 +412,7 @@ async function handleCreate(
           images: body.images,
           files: body.files,
         },
+        continuation,
       ),
       images: images.length > 0 ? images : undefined,
       repository: project.repo_url,
@@ -727,7 +752,9 @@ async function listRequests(
   const followupsEnabled = projectFollowupsEnabled(project);
   const { data: rows, error } = await serviceClient
     .from("snag_requests")
-    .select(`${REQUEST_LIFECYCLE_COLUMNS}, error, rejection_note, context, created_at`)
+    .select(
+      `${REQUEST_LIFECYCLE_COLUMNS}, error, rejection_note, context, created_at, continues_request_id`,
+    )
     .eq("project_id", project.id)
     .order("created_at", { ascending: false })
     .limit(LIST_LIMIT);
@@ -743,6 +770,7 @@ async function listRequests(
       rejection_note: string | null;
       context: unknown;
       created_at: string;
+      continues_request_id: string | null;
     }
   >;
   const staleCutoff = Date.now() - STALE_RUNNING_MS;
@@ -848,6 +876,7 @@ async function listRequests(
       : null,
     marker: markerFromContext(row.context),
     requester: row.requester ?? null,
+    continues_request_id: row.continues_request_id ?? null,
     created_at: row.created_at,
   }));
 }
@@ -873,6 +902,7 @@ function buildAgentPrompt(
     images?: ReferenceImage[];
     files?: ReferenceFile[];
   },
+  continuation?: string | null,
 ): string {
   const elementSections = formatSelectedElements(elements);
   const referenceText = reference ? formatReferenceContext(reference) : null;
@@ -882,6 +912,7 @@ function buildAgentPrompt(
       ? "An internal tester filed an in-app change request via Snag while using a development/staging build. A screenshot of the current screen is attached when available. Any other image was uploaded by the requester and is what their request means by \"this image\". Do not use the page screenshot as that image."
       : "An internal tester filed an in-app change request via Snag while using a development/staging build. A screenshot of the exact screen is attached when available.",
     "",
+    ...(continuation ? [continuation, ""] : []),
     "## Change request",
     prompt,
     ...(referenceText ? ["", referenceText] : []),
