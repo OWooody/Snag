@@ -1,8 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
-import { closeSnagRequest, confirmSnagRequest, fetchRelayState, replyToSnagRequest } from "../api";
+import {
+  closeSnagRequest,
+  confirmSnagRequest,
+  createSnagRequest,
+  fetchRelayState,
+  replyToSnagRequest,
+} from "../api";
 import { attachmentFields, messageWithAttachments, type LocalAttachment } from "../attachments";
-import { resolveRequester } from "../config";
+import { resolveContext, resolveRequester } from "../config";
 import { ACTIVE_POLL_MS, hasActiveRequest, isActiveRequest, startVisiblePolling } from "../polling";
 import type { SnagRequestPhase, SnagRequestRow, SnagRequestStatus } from "../protocol";
 import type { PreviewOp } from "../dom-preview";
@@ -44,6 +50,8 @@ interface RequestsListProps {
   onLoaded?: (rows: SnagRequestRow[]) => void;
   /** Show a plan's approximate preview on the page. */
   onShowPreview?: (requestId: string, ops: PreviewOp[]) => void;
+  /** A follow-up request was created; focus it once the list reloads. */
+  onContinued?: (requestId: string) => void;
 }
 
 export function RequestsList({
@@ -54,6 +62,7 @@ export function RequestsList({
   onNewRequest,
   onLoaded,
   onShowPreview,
+  onContinued,
 }: RequestsListProps) {
   const onLoadedRef = useRef(onLoaded);
   onLoadedRef.current = onLoaded;
@@ -214,6 +223,9 @@ export function RequestsList({
             row.status === "awaiting_confirmation" ||
             (followupsEnabled && row.status === "needs_input");
           const focused = row.id === focusRequestId;
+          const parent = row.continues_request_id
+            ? rows.find((candidate) => candidate.id === row.continues_request_id)
+            : undefined;
           return (
             <div
               key={row.id}
@@ -232,6 +244,26 @@ export function RequestsList({
                   setExpandedOverrides((current) => ({ ...current, [row.id]: next }))
                 }
                 onReplied={() => void load()}
+                continuedFrom={
+                  row.continues_request_id
+                    ? { id: row.continues_request_id, prompt: parent?.prompt ?? null }
+                    : null
+                }
+                onOpenEarlier={
+                  parent
+                    ? () => {
+                        setExpandedOverrides((current) => ({ ...current, [parent.id]: true }));
+                        cardRefs.current[parent.id]?.scrollIntoView({
+                          block: "nearest",
+                          behavior: "smooth",
+                        });
+                      }
+                    : undefined
+                }
+                onContinued={(id) => {
+                  onContinued?.(id);
+                  void load();
+                }}
                 onShowPreview={
                   onShowPreview ? (ops) => onShowPreview(row.id, ops) : undefined
                 }
@@ -393,6 +425,9 @@ function RequestCard({
   expanded,
   onToggleExpanded,
   onReplied,
+  continuedFrom = null,
+  onOpenEarlier,
+  onContinued,
   onShowPreview,
 }: {
   row: SnagRequestRow;
@@ -403,6 +438,9 @@ function RequestCard({
   expanded: boolean;
   onToggleExpanded: (expanded: boolean) => void;
   onReplied: () => void;
+  continuedFrom?: { id: string; prompt: string | null } | null;
+  onOpenEarlier?: () => void;
+  onContinued?: (requestId: string) => void;
   onShowPreview?: (ops: PreviewOp[]) => void;
 }) {
   const link = row.pr_url ?? row.agent_url;
@@ -556,6 +594,33 @@ function RequestCard({
           {new Date(row.created_at).toLocaleString()}
         </span>
       </div>
+      {continuedFrom ? (
+        <p style={{ fontSize: 12, color: theme.textMuted, margin: "0 0 6px" }}>
+          Follow-up to{" "}
+          {continuedFrom.prompt && onOpenEarlier ? (
+            <button
+              type="button"
+              onClick={onOpenEarlier}
+              className="snag-focus"
+              style={{
+                border: "none",
+                background: "transparent",
+                padding: 0,
+                color: theme.accent,
+                fontWeight: 700,
+                fontSize: 12,
+                cursor: "pointer",
+              }}
+            >
+              {clipPrompt(continuedFrom.prompt)}
+            </button>
+          ) : (
+            <span style={{ fontWeight: 600 }}>
+              {continuedFrom.prompt ? clipPrompt(continuedFrom.prompt) : "an earlier request"}
+            </span>
+          )}
+        </p>
+      ) : null}
       <p style={{ fontSize: 14, fontWeight: 600, color: theme.text, margin: 0 }}>
         {row.prompt}
       </p>
@@ -847,6 +912,16 @@ function RequestCard({
           onClosed={onReplied}
         />
       ) : null}
+      {!canReply && !canConfirm && !reviewPlan ? (
+        <ContinueRequest
+          requestId={row.id}
+          status={row.status}
+          theme={theme}
+          fieldStyle={fieldStyle}
+          buttonStyle={buttonStyle}
+          onContinued={onContinued}
+        />
+      ) : null}
     </div>
   );
 }
@@ -1041,6 +1116,199 @@ function CloseRequest({
           }}
         >
           Close request
+        </button>
+      )}
+    </div>
+  );
+}
+
+function clipPrompt(prompt: string, max = 72): string {
+  const flat = prompt.replace(/\s+/g, " ").trim();
+  if (flat.length <= max) return flat;
+  return `${flat.slice(0, max - 1)}…`;
+}
+
+function continuationHint(status: SnagRequestStatus): string {
+  switch (status) {
+    case "merged":
+      return "This change is already live. Your note starts a new request and brings this context with it.";
+    case "finished":
+      return "This request is finished. Your note starts a new request and brings this context with it.";
+    case "error":
+      return "Say what you still want. Your note starts a new request and brings this context with it.";
+    case "rejected":
+      return "Say what should be different. Your note starts a new request and brings this context with it.";
+    case "queued":
+    case "running":
+    case "awaiting_approval":
+    case "awaiting_review":
+      return "This request is still in progress. A follow-up starts a separate request and leaves this one alone.";
+    default:
+      return "Your note starts a new request and brings this context with it.";
+  }
+}
+
+function ContinueRequest({
+  requestId,
+  status,
+  theme,
+  fieldStyle,
+  buttonStyle,
+  onContinued,
+}: {
+  requestId: string;
+  status: SnagRequestStatus;
+  theme: SnagTheme;
+  fieldStyle: {
+    width: string;
+    boxSizing: "border-box";
+    borderRadius: number;
+    border: string;
+    background: string;
+    padding: number;
+    fontSize: number;
+    color: string;
+    resize: "vertical";
+  };
+  buttonStyle: (primary: boolean, busy: boolean) => CSSProperties;
+  onContinued?: (requestId: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState("");
+  const [attachments, setAttachments] = useState<LocalAttachment[]>([]);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    panelRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [open]);
+
+  const submit = async () => {
+    const message = messageWithAttachments(text, attachments, MAX_REPLY_LENGTH);
+    if (!message) {
+      setError("Write what should change, or attach an image or file.");
+      return;
+    }
+    setSending(true);
+    setError(null);
+    try {
+      const created = await createSnagRequest({
+        prompt: message,
+        context: await resolveContext(),
+        continues_request_id: requestId,
+        ...attachmentFields(attachments),
+      });
+      setText("");
+      setAttachments([]);
+      setOpen(false);
+      onContinued?.(created.id);
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "Could not start the follow-up");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div
+      ref={panelRef}
+      style={{
+        marginTop: 10,
+        paddingTop: 10,
+        borderTop: "1px solid rgba(255,255,255,0.45)",
+      }}
+    >
+      {open ? (
+        <>
+          <p style={{ fontSize: 13, fontWeight: 700, color: theme.text, margin: 0 }}>
+            Continue this request
+          </p>
+          <p
+            style={{
+              fontSize: 12,
+              lineHeight: 1.45,
+              color: theme.textMuted,
+              margin: "4px 0 8px",
+            }}
+          >
+            {continuationHint(status)}
+          </p>
+          <AttachmentPicker
+            attachments={attachments}
+            onChange={setAttachments}
+            disabled={sending}
+            theme={theme}
+          >
+            <textarea
+              value={text}
+              autoFocus
+              onChange={(event) => {
+                setText(event.target.value.slice(0, MAX_REPLY_LENGTH));
+                if (error) setError(null);
+              }}
+              disabled={sending}
+              placeholder="What should we change next?"
+              rows={3}
+              style={{ ...fieldStyle, padding: COMPOSER_PADDING }}
+            />
+          </AttachmentPicker>
+          {error ? (
+            <p style={{ fontSize: 12, color: theme.danger, margin: "6px 0 0" }}>{error}</p>
+          ) : null}
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                setError(null);
+              }}
+              disabled={sending}
+              className="snag-focus"
+              style={buttonStyle(false, sending)}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => void submit()}
+              disabled={sending}
+              className="snag-focus"
+              style={buttonStyle(true, sending)}
+            >
+              {sending ? "Starting…" : "Start follow-up"}
+            </button>
+          </div>
+        </>
+      ) : status === "merged" ||
+        status === "finished" ||
+        status === "error" ||
+        status === "rejected" ? (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="snag-focus"
+          style={{ ...buttonStyle(false, false), width: "100%" }}
+        >
+          Continue this request
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="snag-focus"
+          style={{
+            border: "none",
+            background: "transparent",
+            padding: 0,
+            color: theme.accent,
+            fontWeight: 700,
+            fontSize: 12,
+            cursor: "pointer",
+          }}
+        >
+          Continue in a new request
         </button>
       )}
     </div>

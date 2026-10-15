@@ -125,6 +125,8 @@ export interface SnagRequestRow {
   approved_at: string | null;
   merged_at: string | null;
   merge_commit_sha: string | null;
+  /** Earlier request this one continues. Null when it was filed on its own. */
+  continues_request_id?: string | null;
   created_at: string;
   updated_at: string;
 }
