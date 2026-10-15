@@ -18,7 +18,9 @@ export type SnagRequestStatus =
   | "awaiting_review"
   | "awaiting_confirmation"
   | "merged"
-  | "rejected";
+  | "rejected"
+  /** The requester closed the request. Snag stops following it. */
+  | "closed_by_requester";
 
 export type SnagRequestPhase = "planning" | "implementing" | "delivering";
 
@@ -114,6 +116,8 @@ export interface SnagRequestRow {
   error: string | null;
   /** Developer's note when the plan was rejected; shown to the requester. */
   rejection_note: string | null;
+  /** Optional note the requester left when they closed the request. */
+  close_note: string | null;
   /** Why Snag handed the request to a developer (awaiting_review). */
   handoff_reason: string | null;
   plan: SnagPlan | null;
@@ -173,7 +177,9 @@ export interface DurationStats {
 export interface ExecuteMetrics {
   range_days: number;
   total: number;
-  outcomes: Partial<Record<PolicyOutcome | "rejected" | "undecided", number>>;
+  outcomes: Partial<
+    Record<PolicyOutcome | "rejected" | "undecided" | "closed_by_requester", number>
+  >;
   merged: { by_snag: number; by_developer: number };
   top_escalations: {
     id: string;
@@ -191,7 +197,13 @@ export interface ExecuteMetrics {
 }
 
 /** Where a request ended up, as grouped by the impact metrics. */
-export type ImpactOutcome = "merged" | "finished" | "in_progress" | "error" | "rejected";
+export type ImpactOutcome =
+  | "merged"
+  | "finished"
+  | "in_progress"
+  | "error"
+  | "rejected"
+  | "closed_by_requester";
 
 export interface ImpactHotspot {
   key: string;

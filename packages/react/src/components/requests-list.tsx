@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
-import { confirmSnagRequest, createSnagRequest, fetchRelayState, replyToSnagRequest } from "../api";
+import {
+  closeSnagRequest,
+  confirmSnagRequest,
+  createSnagRequest,
+  fetchRelayState,
+  replyToSnagRequest,
+} from "../api";
 import { attachmentFields, messageWithAttachments, type LocalAttachment } from "../attachments";
 import { resolveContext, resolveRequester } from "../config";
 import { ACTIVE_POLL_MS, hasActiveRequest, isActiveRequest, startVisiblePolling } from "../polling";
@@ -18,7 +24,18 @@ import { QuestionForm } from "./question-form";
 
 const POLL_INTERVAL_MS = 10_000;
 const MAX_REPLY_LENGTH = 2000;
+const MAX_CLOSE_NOTE_LENGTH = 500;
 const COLLAPSED_SUMMARY_MAX_HEIGHT = 64;
+
+const CLOSABLE_STATUSES: ReadonlySet<SnagRequestStatus> = new Set([
+  "queued",
+  "running",
+  "needs_input",
+  "awaiting_requester",
+  "awaiting_approval",
+  "awaiting_review",
+  "awaiting_confirmation",
+]);
 
 interface RequestsListProps {
   theme: SnagTheme;
@@ -219,6 +236,7 @@ export function RequestsList({
               <RequestCard
                 row={row}
                 theme={theme}
+                currentRequester={currentRequester}
                 followupsEnabled={followupsEnabled}
                 focused={focused}
                 expanded={expandedOverrides[row.id] ?? (needsRequester || focused)}
@@ -393,9 +411,15 @@ function EmptyState({
   );
 }
 
+function ownsRequest(row: SnagRequestRow, currentRequester: string | null): boolean {
+  if (row.requester) return currentRequester != null && row.requester === currentRequester;
+  return currentRequester == null;
+}
+
 function RequestCard({
   row,
   theme,
+  currentRequester,
   followupsEnabled,
   focused = false,
   expanded,
@@ -408,6 +432,7 @@ function RequestCard({
 }: {
   row: SnagRequestRow;
   theme: SnagTheme;
+  currentRequester: string | null;
   followupsEnabled: boolean;
   focused?: boolean;
   expanded: boolean;
@@ -431,6 +456,8 @@ function RequestCard({
   const canReply = followupsEnabled && row.status === "needs_input";
   const canConfirm = row.status === "awaiting_confirmation";
   const reviewPlan = row.status === "awaiting_requester" && row.plan != null;
+  const owned = ownsRequest(row, currentRequester);
+  const canClose = owned && CLOSABLE_STATUSES.has(row.status);
   const [writeInstead, setWriteInstead] = useState(false);
   const structuredQuestions = useMemo(
     () => (canReply ? parseRequesterQuestions(row.summary) : null),
@@ -552,7 +579,11 @@ function RequestCard({
             color: statusColor(row.status, theme),
           }}
         >
-          {STATUS_LABELS[row.status] ?? row.status.toUpperCase()}
+          {row.status === "closed_by_requester"
+            ? owned
+              ? "CLOSED BY YOU"
+              : "CLOSED"
+            : (STATUS_LABELS[row.status] ?? row.status.toUpperCase())}
           {row.stage_label && !showSteps ? (
             <span style={{ fontWeight: 600, letterSpacing: 0, color: theme.textMuted }}>
               {` · ${row.stage_label}`}
@@ -662,6 +693,19 @@ function RequestCard({
           {row.rejection_note
             ? `A developer decided not to make this change: ${row.rejection_note}`
             : "A developer decided not to make this change. File a new request if it is still needed."}
+        </p>
+      ) : null}
+      {row.status === "closed_by_requester" ? (
+        <p
+          style={{
+            fontSize: 12,
+            color: theme.textMuted,
+            marginTop: 6,
+            marginBottom: 0,
+            whiteSpace: "pre-wrap",
+          }}
+        >
+          {closedSummary(owned, row.close_note)}
         </p>
       ) : null}
       {canReply && showActions && structuredQuestions && !writeInstead ? (
@@ -857,6 +901,17 @@ function RequestCard({
           {row.branch_name}
         </p>
       ) : null}
+      {canClose ? (
+        <CloseRequest
+          requestId={row.id}
+          status={row.status}
+          hasPullRequest={row.pr_url != null}
+          divided={canReply || canConfirm || reviewPlan}
+          theme={theme}
+          fieldStyle={fieldStyle}
+          onClosed={onReplied}
+        />
+      ) : null}
       {!canReply && !canConfirm && !reviewPlan ? (
         <ContinueRequest
           requestId={row.id}
@@ -867,6 +922,202 @@ function RequestCard({
           onContinued={onContinued}
         />
       ) : null}
+    </div>
+  );
+}
+
+function closedSummary(owned: boolean, note: string | null | undefined): string {
+  const who = owned ? "You closed this request." : "The requester closed this request.";
+  const trimmed = note?.trim();
+  if (!trimmed) return `${who} Nothing further will be built from it.`;
+  return `${who} ${trimmed}`;
+}
+
+function closeExplanation(status: SnagRequestStatus, hasPullRequest: boolean): string {
+  const pullRequest = hasPullRequest
+    ? " An open pull request stays open until someone closes it on the repository."
+    : "";
+  switch (status) {
+    case "queued":
+    case "running":
+      return "Snag will stop following this request. If an agent is already working, it may finish in the background, but the result will not be merged or sent on for review.";
+    case "needs_input":
+    case "awaiting_requester":
+      return "You will not need to reply, and nothing further will be built from this request.";
+    case "awaiting_approval":
+      return "A developer will no longer be asked to approve this, and nothing further will be built from it.";
+    case "awaiting_review":
+      return `A developer will no longer be asked to review this.${pullRequest}`;
+    case "awaiting_confirmation":
+      return `Snag will not merge this change.${pullRequest}`;
+    default:
+      return "Snag will stop following this request.";
+  }
+}
+
+function CloseRequest({
+  requestId,
+  status,
+  hasPullRequest,
+  divided,
+  theme,
+  fieldStyle,
+  onClosed,
+}: {
+  requestId: string;
+  status: SnagRequestStatus;
+  hasPullRequest: boolean;
+  divided: boolean;
+  theme: SnagTheme;
+  fieldStyle: {
+    width: string;
+    boxSizing: "border-box";
+    borderRadius: number;
+    border: string;
+    background: string;
+    padding: number;
+    fontSize: number;
+    color: string;
+    resize: "vertical";
+  };
+  onClosed: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [note, setNote] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    panelRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [open]);
+
+  const submit = async () => {
+    setSending(true);
+    setError(null);
+    try {
+      await closeSnagRequest(requestId, note);
+      setNote("");
+      setOpen(false);
+      onClosed();
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "Could not close the request");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div
+      ref={panelRef}
+      style={{
+        marginTop: 10,
+        ...(divided
+          ? { paddingTop: 10, borderTop: "1px solid rgba(255,255,255,0.45)" }
+          : {}),
+      }}
+    >
+      {open ? (
+        <div
+          style={{
+            padding: 10,
+            borderRadius: 10,
+            background: "rgba(255,255,255,0.45)",
+            border: "1px solid rgba(255,255,255,0.55)",
+          }}
+        >
+          <p style={{ fontSize: 13, fontWeight: 700, color: theme.text, margin: 0 }}>
+            Close this request?
+          </p>
+          <p
+            style={{
+              fontSize: 12,
+              lineHeight: 1.45,
+              color: theme.textMuted,
+              margin: "4px 0 8px",
+            }}
+          >
+            {closeExplanation(status, hasPullRequest)}
+          </p>
+          <textarea
+            value={note}
+            autoFocus
+            onChange={(event) => {
+              setNote(event.target.value.slice(0, MAX_CLOSE_NOTE_LENGTH));
+              if (error) setError(null);
+            }}
+            disabled={sending}
+            placeholder="Add a note for the developer (optional)"
+            rows={2}
+            aria-label="Note for the developer"
+            style={fieldStyle}
+          />
+          {error ? (
+            <p style={{ fontSize: 12, color: theme.danger, margin: "6px 0 0" }}>{error}</p>
+          ) : null}
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                setError(null);
+              }}
+              disabled={sending}
+              className="snag-focus"
+              style={{
+                flex: 1,
+                padding: "10px 12px",
+                borderRadius: 10,
+                border: `1px solid ${withAlpha(theme.textMuted, 0.45)}`,
+                background: "transparent",
+                color: theme.text,
+                fontWeight: 700,
+                cursor: sending ? "wait" : "pointer",
+                fontSize: 13,
+              }}
+            >
+              Keep it open
+            </button>
+            <button
+              type="button"
+              onClick={() => void submit()}
+              disabled={sending}
+              className="snag-focus"
+              style={{
+                flex: 1,
+                padding: "10px 12px",
+                borderRadius: 10,
+                border: "none",
+                background: theme.danger,
+                color: "#fff",
+                fontWeight: 700,
+                cursor: sending ? "wait" : "pointer",
+                fontSize: 13,
+              }}
+            >
+              {sending ? "Closing…" : "Close request"}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="snag-focus"
+          style={{
+            border: "none",
+            background: "transparent",
+            padding: 0,
+            color: theme.textMuted,
+            fontWeight: 700,
+            fontSize: 12,
+            cursor: "pointer",
+          }}
+        >
+          Close request
+        </button>
+      )}
     </div>
   );
 }
@@ -1138,6 +1389,7 @@ const STATUS_LABELS: Record<SnagRequestStatus, string> = {
   merged: "LIVE",
   error: "ERROR",
   rejected: "NOT APPROVED",
+  closed_by_requester: "CLOSED",
 };
 
 function statusColor(status: SnagRequestStatus, theme: SnagTheme): string {
@@ -1148,6 +1400,7 @@ function statusColor(status: SnagRequestStatus, theme: SnagTheme): string {
     case "error":
       return theme.danger;
     case "rejected":
+    case "closed_by_requester":
       return theme.textMuted;
     case "needs_input":
       return theme.accent;

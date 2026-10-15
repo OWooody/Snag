@@ -161,6 +161,32 @@ final class RelayClient: @unchecked Sendable {
         )
     }
 
+    func closeRequest(requestId: String, note: String?) async throws {
+        var body: [String: Any] = [
+            "request_id": requestId,
+            "action": "close",
+        ]
+        let trimmed = note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmed.isEmpty {
+            body["note"] = trimmed
+        }
+
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        await applyHeaders(to: &request)
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response) = try await send(request)
+        if response.statusCode == 200 { return }
+
+        debugLog("close failed", String(response.statusCode))
+        let serverMessage =
+            ((try? JSONSerialization.jsonObject(with: data)) as? [String: Any])?["error"] as? String
+        throw SnagRelayError(
+            message: serverMessage ?? "Could not close the request (\(response.statusCode))"
+        )
+    }
+
     private func applyHeaders(to request: inout URLRequest) async {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(projectKey, forHTTPHeaderField: "x-snag-key")

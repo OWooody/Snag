@@ -3,7 +3,7 @@ import { createServiceClient } from "@/lib/service";
 import { createClient } from "@/lib/supabase/server";
 
 export const REQUEST_COLUMNS =
-  "id, project_id, requester, requester_verified, prompt, status, phase, agent_url, branch_name, pr_url, preview_url, summary, error, rejection_note, handoff_reason, plan, policy_decision, approved_at, merged_at, merge_commit_sha, continues_request_id, created_at, updated_at";
+  "id, project_id, requester, requester_verified, prompt, status, phase, agent_url, branch_name, pr_url, preview_url, summary, error, rejection_note, close_note, handoff_reason, plan, policy_decision, approved_at, merged_at, merge_commit_sha, continues_request_id, created_at, updated_at";
 
 export const REQUEST_DETAIL_COLUMNS = `${REQUEST_COLUMNS}, agent_id, context, screenshot_included, phase_started_at, confirmed_at`;
 

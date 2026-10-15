@@ -243,6 +243,26 @@ export function RequestDetail({
         ) : null}
       </div>
 
+      {request.status === "closed_by_requester" ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Closed by the requester</CardTitle>
+            <CardDescription>
+              The requester stopped this request. Snag will not merge it or ask a developer to
+              review it.
+              {request.pr_url
+                ? " An open pull request stays open on the repository host until someone closes it there."
+                : ""}
+            </CardDescription>
+          </CardHeader>
+          {request.close_note ? (
+            <CardContent>
+              <p className="whitespace-pre-wrap text-sm text-zinc-700">{request.close_note}</p>
+            </CardContent>
+          ) : null}
+        </Card>
+      ) : null}
+
       {request.status === "awaiting_approval" ? (
         <Card>
           <CardHeader>

@@ -11,6 +11,8 @@ public enum SnagRequestStatus: String, Codable, Sendable {
     case finished
     case error
     case needsInput = "needs_input"
+    /// Execute mode: the plan is waiting for the requester to approve it or ask for changes.
+    case awaitingRequester = "awaiting_requester"
     /// Execute mode: the plan is waiting for a developer's approval.
     case awaitingApproval = "awaiting_approval"
     /// Execute mode: the PR is waiting for a developer to review and merge.
@@ -21,6 +23,8 @@ public enum SnagRequestStatus: String, Codable, Sendable {
     case merged
     /// Execute mode: a developer rejected the plan; nothing was changed.
     case rejected
+    /// The requester closed the request. Snag stops following it.
+    case closedByRequester = "closed_by_requester"
     /// A status this SDK version does not know yet; shown as in progress.
     case unknown
 
@@ -86,6 +90,8 @@ public struct SnagRequestRow: Decodable, Identifiable, Sendable {
     public let error: String?
     /// The developer's note when the plan was rejected.
     public let rejectionNote: String?
+    /// The requester's note when they closed the request.
+    public let closeNote: String?
     /// Why the request went to a developer while `awaitingReview`. Informational, not an error.
     public let handoffReason: String?
     /// Execute mode: `planning`, `implementing`, or `delivering`. Nil in plan-only mode.
@@ -107,6 +113,7 @@ public struct SnagRequestRow: Decodable, Identifiable, Sendable {
         case summary
         case error
         case rejectionNote = "rejection_note"
+        case closeNote = "close_note"
         case handoffReason = "handoff_reason"
         case phase
         case stageLabel = "stage_label"
