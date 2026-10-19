@@ -3,20 +3,35 @@
  * Size limits match supabase/functions/_shared/attachments.ts.
  */
 
+import { extractDocumentText } from "./extract-document";
 import type { SnagReferenceFile, SnagReferenceImage } from "./protocol";
 
 export const MAX_REFERENCE_IMAGES = 3;
 export const MAX_REFERENCE_FILES = 3;
 export const MAX_REFERENCE_IMAGE_BASE64 = 400_000;
-export const MAX_REFERENCE_FILE_CHARS = 20_000;
+export const MAX_REFERENCE_FILE_CHARS = 100_000;
 export const MAX_REFERENCE_NAME = 120;
 export const MAX_TOTAL_IMAGE_BASE64 = 4_000_000;
 const MAX_RAW_BYTES = 8 * 1024 * 1024;
 
 export const ATTACHMENT_ONLY_MESSAGE = "See the attached reference.";
 
-export const ATTACHMENT_ACCEPT =
-  "image/png,image/jpeg,image/jpg,image/webp,image/gif,.png,.jpg,.jpeg,.webp,.gif,.txt,.md,.markdown,.csv,.json,.svg,.log,.yml,.yaml,.xml";
+export const ATTACHMENT_ACCEPT = [
+  "image/png,image/jpeg,image/jpg,image/webp,image/gif",
+  ".png,.jpg,.jpeg,.webp,.gif",
+  "application/pdf,.pdf",
+  "application/msword,.doc",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,.docm",
+  "application/rtf,text/rtf,.rtf",
+  "application/vnd.oasis.opendocument.text,.odt",
+  "application/vnd.ms-excel,.xls",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx,.xlsm",
+  "application/vnd.oasis.opendocument.spreadsheet,.ods",
+  "application/vnd.ms-powerpoint,.ppt",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation,.pptx,.pptm",
+  "application/vnd.oasis.opendocument.presentation,.odp",
+  ".txt,.md,.markdown,.csv,.json,.svg,.log,.yml,.yaml,.xml,.html,.htm",
+].join(",");
 
 const IMAGE_TYPES = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"]);
 const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "webp", "gif"]);
@@ -31,7 +46,39 @@ const TEXT_EXTENSIONS = new Set([
   "yml",
   "yaml",
   "xml",
+  "html",
+  "htm",
 ]);
+const DOCUMENT_EXTENSIONS = new Set([
+  "pdf",
+  "doc",
+  "docx",
+  "docm",
+  "rtf",
+  "odt",
+  "xls",
+  "xlsx",
+  "xlsm",
+  "ods",
+  "ppt",
+  "pptx",
+  "pptm",
+  "odp",
+]);
+const DOCUMENT_MIME_EXTENSIONS: Record<string, string> = {
+  "application/pdf": "pdf",
+  "application/msword": "doc",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+  "application/rtf": "rtf",
+  "text/rtf": "rtf",
+  "application/vnd.ms-excel": "xls",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+  "application/vnd.ms-powerpoint": "ppt",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
+  "application/vnd.oasis.opendocument.text": "odt",
+  "application/vnd.oasis.opendocument.spreadsheet": "ods",
+  "application/vnd.oasis.opendocument.presentation": "odp",
+};
 
 export interface LocalAttachment {
   id: string;
@@ -85,17 +132,32 @@ function extensionOf(name: string): string {
   return ext === name.toLowerCase() ? "" : ext;
 }
 
+function documentExtension(file: File): string | null {
+  const ext = extensionOf(file.name);
+  if (DOCUMENT_EXTENSIONS.has(ext)) return ext;
+  return DOCUMENT_MIME_EXTENSIONS[file.type] ?? null;
+}
+
 function kindFor(file: File): "image" | "file" | null {
   const ext = extensionOf(file.name);
   if (IMAGE_TYPES.has(file.type) || IMAGE_EXTENSIONS.has(ext)) return "image";
+  if (documentExtension(file)) return "file";
   if (
     file.type.startsWith("text/") ||
     file.type === "application/json" ||
+    file.type === "application/pdf" ||
     TEXT_EXTENSIONS.has(ext)
   ) {
     return "file";
   }
   return null;
+}
+
+function capReferenceText(text: string): string {
+  const cleaned = text.replace(/\u0000/g, "").replace(/\r\n/g, "\n").trim();
+  if (cleaned.length <= MAX_REFERENCE_FILE_CHARS) return cleaned;
+  const note = "\n\n[Truncated. The rest of this file was not attached.]";
+  return cleaned.slice(0, MAX_REFERENCE_FILE_CHARS - note.length).trimEnd() + note;
 }
 
 async function encodeImage(file: File): Promise<{ base64: string; width: number; height: number }> {
@@ -151,7 +213,8 @@ export async function readAttachments(
     }
     const kind = kindFor(file);
     if (!kind) {
-      error ??= `${name} isn't supported. Use a PNG, JPEG, WebP, GIF, or a text file.`;
+      error ??=
+        `${name} isn't supported. Use an image, PDF, Word, Excel, PowerPoint, or a text file.`;
       continue;
     }
     if (kind === "image") {
@@ -179,16 +242,30 @@ export async function readAttachments(
       continue;
     }
     if (fileCount >= MAX_REFERENCE_FILES) {
-      error ??= `You can attach up to ${MAX_REFERENCE_FILES} text files.`;
+      error ??= `You can attach up to ${MAX_REFERENCE_FILES} files.`;
       continue;
     }
-    const text = (await file.text()).replace(/\u0000/g, "");
+    let text: string;
+    const documentExt = documentExtension(file);
+    if (documentExt) {
+      try {
+        text = await extractDocumentText(new Uint8Array(await file.arrayBuffer()), documentExt);
+      } catch (failure) {
+        const reason = failure instanceof Error ? failure.message : "";
+        error ??=
+          reason === "password"
+            ? `${name} is password-protected.`
+            : reason === "empty"
+              ? `${name} has no text we can read. If it is a scan, attach a picture of it instead.`
+              : `Couldn't read ${name}.`;
+        continue;
+      }
+    } else {
+      text = await file.text();
+    }
+    text = capReferenceText(text);
     if (!text.trim()) {
       error ??= `${name} is empty.`;
-      continue;
-    }
-    if (text.length > MAX_REFERENCE_FILE_CHARS) {
-      error ??= `${name} is too long. Keep text files under ${MAX_REFERENCE_FILE_CHARS.toLocaleString()} characters.`;
       continue;
     }
     added.push({
