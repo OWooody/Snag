@@ -53,6 +53,13 @@ function zip(entries: { name: string; data: Uint8Array; method?: number; raw?: U
   return concat([...locals, directory, eocd]);
 }
 
+async function deflateZlib(data: Uint8Array): Promise<Uint8Array> {
+  const copy = new Uint8Array(data.byteLength);
+  copy.set(data);
+  const stream = new Blob([copy]).stream().pipeThrough(new CompressionStream("deflate"));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
 async function deflateRaw(data: Uint8Array): Promise<Uint8Array> {
   const copy = new Uint8Array(data.byteLength);
   copy.set(data);
@@ -105,10 +112,24 @@ Deno.test("pdf text is extracted from a page content stream", async () => {
 
 Deno.test("pdf flate streams and unicode maps are decoded", async () => {
   const content = new TextEncoder().encode("BT /F1 12 Tf 72 80 Td <4869> Tj ET");
-  const compressed = await deflateRaw(content);
+  const compressed = await deflateZlib(content);
   const cmap = new TextEncoder().encode("1 beginbfchar\n<48> <0048>\n<69> <0069>\nendbfchar");
   const bytes = pdfWithCmap(compressed, cmap);
   assertEquals(await extractDocumentText(bytes, "pdf"), "Hi");
+});
+
+Deno.test("pdfs that point at an earlier xref still yield their text", async () => {
+  const content = new TextEncoder().encode("BT /F1 12 Tf 72 100 Td (Hello from PDF) Tj ET");
+  const original = pdf(content);
+  const latin = new TextDecoder("latin1").decode(original);
+  const start = Number(/startxref\s+(\d+)/.exec(latin)?.[1]);
+  const extra = new TextEncoder().encode(
+    `xref\n0 0\ntrailer\n<< /Size 6 /Root 1 0 R /Prev ${start} >>\nstartxref\n${original.length}\n%%EOF\n`,
+  );
+  const wrapped = new Uint8Array(original.length + extra.length);
+  wrapped.set(original, 0);
+  wrapped.set(extra, original.length);
+  assertEquals(await extractDocumentText(wrapped, "pdf"), "Hello from PDF");
 });
 
 Deno.test("password protected pdfs are rejected", async () => {

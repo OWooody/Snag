@@ -105,13 +105,13 @@ function winAnsi(code: number): string {
   return WIN_1252[code] ?? (code >= 32 && code !== 127 ? String.fromCharCode(code) : "");
 }
 
-async function inflateRaw(data: Uint8Array): Promise<Uint8Array> {
+async function inflate(data: Uint8Array, format: "deflate" | "deflate-raw"): Promise<Uint8Array> {
   if (typeof DecompressionStream === "undefined") {
     throw new Error("unreadable");
   }
   const copy = new Uint8Array(data.byteLength);
   copy.set(data);
-  const stream = new Blob([copy]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+  const stream = new Blob([copy]).stream().pipeThrough(new DecompressionStream(format));
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
@@ -166,7 +166,7 @@ async function unzip(bytes: Uint8Array): Promise<Map<string, Uint8Array>> {
     const dataStart = localOffset + 30 + localNameLength + localExtraLength;
     const compressed = bytes.subarray(dataStart, dataStart + compressedSize);
     if (method === 0) files.set(name, compressed);
-    else if (method === 8) files.set(name, await inflateRaw(compressed));
+    else if (method === 8) files.set(name, await inflate(compressed, "deflate-raw"));
   }
   return files;
 }
@@ -706,10 +706,7 @@ async function extractPdf(bytes: Uint8Array): Promise<string> {
   if (!latin.includes("%PDF")) throw new Error("unreadable");
   const start = lastStartXref(latin);
   if (start < 0) throw new Error("unreadable");
-  const head = latin.slice(start, start + 16).trimStart();
-  const loaded = head.startsWith("xref")
-    ? await loadClassicXref(bytes, latin, start)
-    : await loadStreamXref(bytes, latin, start);
+  const loaded = await loadPdfXrefs(bytes, latin, start);
   if (/\/Encrypt\b/.test(loaded.trailer)) throw new Error("password");
   const pages: { dict: string; resources: string }[] = [];
   const root = objectDict(loaded.objects, firstRef(loaded.trailer, "Root"));
@@ -822,13 +819,18 @@ async function materialize(
 }
 
 async function decodePdfStream(dict: string, raw: Uint8Array): Promise<Uint8Array> {
-  let data = /FlateDecode/.test(dict) ? await inflateRaw(raw) : raw;
-  const predictor = Number(/\/Predictor\s+(\d+)/.exec(dict)?.[1] ?? 1);
-  if (predictor >= 10) {
-    const columns = Number(/\/Columns\s+(\d+)/.exec(dict)?.[1] ?? 1);
-    data = pngUnpredict(data, columns);
+  try {
+    // FlateDecode is zlib (a header plus raw deflate), not a zip entry.
+    let data = /FlateDecode/.test(dict) ? await inflate(raw, "deflate") : raw;
+    const predictor = Number(/\/Predictor\s+(\d+)/.exec(dict)?.[1] ?? 1);
+    if (predictor >= 10) {
+      const columns = Number(/\/Columns\s+(\d+)/.exec(dict)?.[1] ?? 1);
+      data = pngUnpredict(data, columns);
+    }
+    return data;
+  } catch {
+    return new Uint8Array();
   }
-  return data;
 }
 
 function pngUnpredict(data: Uint8Array, columns: number): Uint8Array {
@@ -865,6 +867,46 @@ function paeth(left: number, up: number, upLeft: number): number {
   if (leftDistance <= upDistance && leftDistance <= upLeftDistance) return left;
   if (upDistance <= upLeftDistance) return up;
   return upLeft;
+}
+
+/**
+ * Word and other writers put an empty xref at `startxref` and point at the
+ * real table with `/Prev` or `/XRefStm`. Follow both, and let the newest
+ * section win when an object appears more than once.
+ */
+async function loadPdfXrefs(
+  bytes: Uint8Array,
+  latin: string,
+  start: number,
+  seen = new Set<number>(),
+): Promise<{ objects: Map<number, PdfObject>; trailer: string }> {
+  if (seen.has(start)) return { objects: new Map(), trailer: "" };
+  seen.add(start);
+  const head = latin.slice(start, start + 16).trimStart();
+  const loaded = head.startsWith("xref")
+    ? await loadClassicXref(bytes, latin, start)
+    : await loadStreamXref(bytes, latin, start);
+  const prev = Number(/\/Prev\s+(\d+)/.exec(loaded.trailer)?.[1] ?? 0);
+  const xrefStream = Number(/\/XRefStm\s+(\d+)/.exec(loaded.trailer)?.[1] ?? 0);
+  let objects = loaded.objects;
+  if (prev > 0) {
+    const older = await loadPdfXrefs(bytes, latin, prev, seen);
+    objects = mergePdfObjects(older.objects, objects);
+  }
+  if (xrefStream > 0) {
+    const extra = await loadPdfXrefs(bytes, latin, xrefStream, seen);
+    objects = mergePdfObjects(objects, extra.objects);
+  }
+  return { objects, trailer: loaded.trailer };
+}
+
+function mergePdfObjects(
+  base: Map<number, PdfObject>,
+  extra: Map<number, PdfObject>,
+): Map<number, PdfObject> {
+  const merged = new Map(base);
+  for (const [id, object] of extra) merged.set(id, object);
+  return merged;
 }
 
 async function loadClassicXref(
@@ -1068,30 +1110,49 @@ function parseCMap(source: string): CMap {
   const map = new Map<number, string>();
   let width = 1;
   const add = (sourceHex: string, destHex: string) => {
-    width = Math.max(width, sourceHex.length / 2);
-    map.set(parseInt(sourceHex, 16), hexToText(destHex));
+    width = Math.max(width, Math.ceil(sourceHex.length / 2));
+    map.set(parseInt(sourceHex, 16), utf16be(destHex));
   };
+  for (const block of source.matchAll(/begincodespacerange([\s\S]*?)endcodespacerange/g)) {
+    const range = /<([0-9A-Fa-f]+)>/.exec(block[1]);
+    if (range) width = Math.max(width, Math.ceil(range[1].length / 2));
+  }
   for (const block of source.matchAll(/beginbfchar([\s\S]*?)endbfchar/g)) {
     for (const pair of block[1].matchAll(/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/g)) add(pair[1], pair[2]);
   }
   for (const block of source.matchAll(/beginbfrange([\s\S]*?)endbfrange/g)) {
-    for (const range of block[1].matchAll(/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/g)) {
+    const ranges = /<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*(?:<([0-9A-Fa-f]+)>|\[([^\]]*)\])/g;
+    for (const range of block[1].matchAll(ranges)) {
       const from = parseInt(range[1], 16);
       const to = parseInt(range[2], 16);
-      let dest = parseInt(range[3], 16);
-      for (let code = from; code <= to; code += 1) {
-        add(code.toString(16).padStart(range[1].length, "0"), dest.toString(16).padStart(range[3].length, "0"));
-        dest += 1;
+      if (range[3]) {
+        let dest = parseInt(range[3], 16);
+        for (let code = from; code <= to; code += 1) {
+          add(
+            code.toString(16).padStart(range[1].length, "0"),
+            dest.toString(16).padStart(range[3].length, "0"),
+          );
+          dest += 1;
+        }
+        continue;
       }
+      const dests = [...(range[4] ?? "").matchAll(/<([0-9A-Fa-f]+)>/g)].map((match) => match[1]);
+      dests.forEach((dest, index) => {
+        if (from + index <= to) {
+          add((from + index).toString(16).padStart(range[1].length, "0"), dest);
+        }
+      });
     }
   }
   return { width, map };
 }
 
-function hexToText(hex: string): string {
+/** ToUnicode destinations are UTF-16BE, so a quote is `<201C>`, not two bytes. */
+function utf16be(hex: string): string {
+  const padded = hex.length % 4 === 0 ? hex : hex.padStart(Math.ceil(hex.length / 4) * 4, "0");
   let text = "";
-  for (let index = 0; index + 1 < hex.length; index += 2) {
-    text += String.fromCharCode(parseInt(hex.slice(index, index + 2), 16));
+  for (let index = 0; index < padded.length; index += 4) {
+    text += String.fromCharCode(parseInt(padded.slice(index, index + 4), 16));
   }
   return text;
 }
@@ -1099,27 +1160,40 @@ function hexToText(hex: string): string {
 function showPdfText(source: string, fonts: Map<string, CMap | null>): string {
   let font = "";
   let output = "";
-  const tokens = tokenizePdf(source);
-  for (let index = 0; index < tokens.length; index += 1) {
-    const token = tokens[index];
-    if (token.kind !== "op") continue;
+  let x = 0;
+  let y = 0;
+  let positioned = false;
+  const operands: PdfToken[] = [];
+  const place = (nextX: number, nextY: number) => {
+    if (positioned && Math.abs(nextY - y) > 1.5 && !output.endsWith("\n")) output += "\n";
+    x = nextX;
+    y = nextY;
+    positioned = true;
+  };
+  for (const token of tokenizePdf(source)) {
+    if (token.kind !== "op") {
+      operands.push(token);
+      continue;
+    }
+    const numbers = operands.filter((item) => item.kind === "number");
     if (token.value === "Tf") {
-      const name = [...tokens.slice(0, index)].reverse().find((item) => item.kind === "name");
+      const name = [...operands].reverse().find((item) => item.kind === "name");
       font = name?.value ?? font;
+    } else if (token.value === "Tm" && numbers.length >= 2) {
+      place(Number(numbers[numbers.length - 2].value), Number(numbers[numbers.length - 1].value));
+    } else if ((token.value === "Td" || token.value === "TD") && numbers.length >= 2) {
+      place(x + Number(numbers[numbers.length - 2].value), y + Number(numbers[numbers.length - 1].value));
+    } else if (token.value === "T*") {
+      place(x, y - 14);
     } else if (token.value === "Tj" || token.value === "'" || token.value === '"') {
-      const text = [...tokens.slice(0, index)].reverse().find((item) => item.kind === "string");
-      if (token.value !== "Tj") output += "\n";
+      if (token.value === "'") place(x, y - 14);
+      const text = [...operands].reverse().find((item) => item.kind === "string");
       if (text) output += decodePdfString(text.value, fonts.get(font) ?? null);
     } else if (token.value === "TJ") {
-      const array = [...tokens.slice(0, index)].reverse().find((item) => item.kind === "array");
+      const array = [...operands].reverse().find((item) => item.kind === "array");
       if (array) output += decodePdfArray(array.value, fonts.get(font) ?? null);
-    } else if (token.value === "T*" || token.value === "ET") {
-      output += "\n";
-    } else if (token.value === "Td" || token.value === "TD") {
-      const numbers = tokens.slice(0, index).filter((item) => item.kind === "number");
-      const ty = Number(numbers[numbers.length - 1]?.value ?? 0);
-      if (ty !== 0) output += "\n";
     }
+    operands.length = 0;
   }
   return output;
 }
