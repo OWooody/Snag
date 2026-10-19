@@ -106,10 +106,18 @@ function RequestsTable({ projectSlug }: { projectSlug: string }) {
             <tbody>
               {rows.map((req) => (
                 <tr key={req.id} className="border-b border-zinc-100 last:border-0">
-                  <td className="max-w-xs truncate px-4 py-3" title={req.prompt}>
-                    <Link href={`/requests/${req.id}`} className="hover:underline">
+                  <td className="max-w-xs px-4 py-3" title={req.prompt}>
+                    <Link href={`/requests/${req.id}`} className="block truncate hover:underline">
                       {req.prompt}
                     </Link>
+                    {req.continues_request_id ? (
+                      <Link
+                        href={`/requests/${req.continues_request_id}`}
+                        className="mt-0.5 block text-xs text-zinc-500 hover:underline"
+                      >
+                        Follow-up to an earlier request
+                      </Link>
+                    ) : null}
                   </td>
                   <td className="px-4 py-3">
                     <StatusBadge status={req.status} />
