@@ -47,7 +47,7 @@ export interface SnagReferenceImage {
   height: number;
 }
 
-/** A text file the requester attached. Contents are inlined into the agent prompt. */
+/** A file the requester attached. Text, PDF, and Office documents are inlined as text. */
 export interface SnagReferenceFile {
   name: string;
   text: string;
