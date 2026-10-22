@@ -5,7 +5,7 @@
  * Security boundary = project key resolution + per-project rate limits + origin allowlist.
  *
  * GET  → { enabled, requester_followups_enabled, agent_mode, requests? }
- * POST create  → { prompt, context, images?, files?, continues_request_id?, … } — insert + launch agent
+ * POST create  → { prompt, context, steps?, images?, files?, continues_request_id?, … } — insert + launch agent
  * POST reply   → { request_id, reply, images?, files? } — follow-up on existing agent, or plan changes at awaiting_requester
  * POST confirm → { request_id, decision, feedback?, images?, files? } — requester verdict on a plan (approve_plan) or a preview
  * POST close   → { request_id, action: "close", note? } — requester closes a request that is still open
@@ -35,6 +35,12 @@ import {
   type ReferenceImage,
 } from "../_shared/attachments.ts";
 import { formatContinuationSection } from "../_shared/continuation.ts";
+import {
+  formatFlowSteps,
+  readFlowSteps,
+  STEPS_CONTEXT_KEY,
+  type FlowStep,
+} from "../_shared/flow_steps.ts";
 import { decryptSecret, getEncryptionSecret } from "../_shared/crypto.ts";
 import {
   implementingReplyWrapper,
@@ -136,6 +142,11 @@ const createSchema = z.object({
   elements: selectedElementsSchema.optional(),
   marker: requestMarkerSchema.optional(),
   locale: z.string().max(10).optional(),
+  /**
+   * Recent route and click trail. Parsed separately so a bad step is dropped
+   * instead of rejecting the whole request.
+   */
+  steps: z.unknown().optional(),
   /** Earlier request this one continues. Any status is allowed; the new row has its own lifecycle. */
   continues_request_id: z.string().uuid().optional(),
 });
@@ -363,6 +374,7 @@ async function handleCreate(
   const { requester, verified } = await resolveRequesterIdentity(req, project);
   const followupsEnabled = projectFollowupsEnabled(project);
   const agentMode = resolveEffectiveAgentMode(project);
+  const steps = readFlowSteps(body.steps);
 
   let continuation: string | null = null;
   if (body.continues_request_id) {
@@ -397,6 +409,7 @@ async function handleCreate(
         ...body.context,
         ...(body.elements?.length ? { snag_elements: body.elements } : {}),
         ...(body.marker ? { [MARKER_CONTEXT_KEY]: body.marker } : {}),
+        ...(steps.length ? { [STEPS_CONTEXT_KEY]: steps } : {}),
       },
       screenshot_included: !!body.screenshot,
       status: "queued",
@@ -414,7 +427,7 @@ async function handleCreate(
   try {
     const images = toAgentImages(body.screenshot, body.images);
     console.info(
-      `snag-relay create screenshot=${body.screenshot ? 1 : 0} uploads=${body.images?.length ?? 0} files=${body.files?.length ?? 0} agent_images=${images.length}`,
+      `snag-relay create screenshot=${body.screenshot ? 1 : 0} uploads=${body.images?.length ?? 0} files=${body.files?.length ?? 0} agent_images=${images.length} steps=${steps.length}`,
     );
 
     const task = await provider.createTask({
@@ -433,6 +446,7 @@ async function handleCreate(
           files: body.files,
         },
         continuation,
+        steps,
       ),
       images: images.length > 0 ? images : undefined,
       repository: project.repo_url,
@@ -957,8 +971,10 @@ function buildAgentPrompt(
     files?: ReferenceFile[];
   },
   continuation?: string | null,
+  steps?: FlowStep[] | null,
 ): string {
   const elementSections = formatSelectedElements(elements);
+  const stepSections = formatFlowSteps(steps);
   const referenceText = reference ? formatReferenceContext(reference) : null;
   const hasReferenceImages = (reference?.images?.length ?? 0) > 0;
   const sections = [
@@ -971,6 +987,7 @@ function buildAgentPrompt(
     prompt,
     ...(referenceText ? ["", referenceText] : []),
     "",
+    ...(stepSections.length > 0 ? [...stepSections, ""] : []),
     ...(elementSections.length > 0 ? [...elementSections, ""] : []),
     "## Screen context (captured automatically)",
     "```json",

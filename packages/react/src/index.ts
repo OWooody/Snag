@@ -12,6 +12,7 @@ export type {
   ReplySnagRequestResponse,
   SnagRequestRow,
   SnagElement,
+  SnagFlowStep,
   SnagRequestPhase,
   SnagRequestMarker,
   SnagRequestPlan,

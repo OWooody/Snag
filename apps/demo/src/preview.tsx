@@ -4,13 +4,18 @@ import { initSnag } from "../../../packages/react/src/config";
 import { PageMarkers } from "../../../packages/react/src/components/page-markers";
 import { RequestPanel } from "../../../packages/react/src/components/request-panel";
 import { StatusToasts, type Toast } from "../../../packages/react/src/components/status-toasts";
-import type { RelayStateResponse, SnagRequestRow } from "../../../packages/react/src/protocol";
+import type { RelayStateResponse, SnagFlowStep, SnagRequestRow } from "../../../packages/react/src/protocol";
 import { SnagStyles } from "../../../packages/react/src/styles";
 import { defaultTheme } from "../../../packages/react/src/theme";
 
 const PREVIEW_ENDPOINT = "https://preview.snag.invalid/state";
 const PREVIEW_REQUESTER = "preview@snag.dev";
 const PREVIEW_LATENCY_MS = 1100;
+const PREVIEW_STEPS: SnagFlowStep[] = [
+  { type: "navigate", path: "/cart" },
+  { type: "click", path: "/cart", label: "Apply" },
+  { type: "navigate", path: "/checkout" },
+];
 
 const ROWS: SnagRequestRow[] = [
   {
@@ -384,6 +389,7 @@ export function Preview() {
             theme={defaultTheme}
             initialTab="list"
             initialFocusRequestId={focusId}
+            initialSteps={PREVIEW_STEPS}
             followupsEnabled
             agentMode="execute"
             badgeCount={1}

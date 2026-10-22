@@ -111,6 +111,12 @@ Production builds strip React's debug info and minify component names, so there 
 
 When a request points at an element, a numbered pin stays next to that element on the same page until the request is done, so others see it's already asked for. Clicking the pin opens the request. If the element is no longer on the page, the pin sits where it was when the request was filed. Pins follow client-side navigation and only show on the page the request was filed from (matched by `location.pathname`).
 
+### Recent steps
+
+While the tab is on screen, Snag keeps a short trail of route changes and clicks on buttons, links, and similar controls. Opening the sheet shows that trail as **How you got here**. It is sent with the request. A tester can remove a step first. A trail that is only the current page is left off.
+
+The trail is pathnames and short control labels: a button's text, or an `aria-label` / `data-testid`. The visible text of a link is left off, because it is often a name or a title. The trail does not include what was typed, query strings, or link targets. Segments that look like emails, tokens, or secrets are replaced with `[redacted]` before the request leaves the browser, and the relay checks again.
+
 ### Answering questions and staying in the loop
 
 When the agent has questions, the request card shows them with tappable answers (plus a free-text **Other** where it makes sense). **Reply in your own words** switches back to a single text box. While a request is queued or running, the SDK checks for updates every few seconds and the card shows its progress steps (Planning, Building, Delivering).
@@ -172,4 +178,4 @@ When the token verifies, its `sub` replaces `getRequester` as the stored request
 
 ## Security note
 
-`projectKey` is visible in your JS bundle (like an analytics write key). Only use Snag on **non-production** builds with **non-sensitive** data — screenshots capture the real screen. Do not put secrets or PII in `getContext` or `getRequester`.
+`projectKey` is visible in your JS bundle (like an analytics write key). Only use Snag on **non-production** builds with **non-sensitive** data — screenshots capture the real screen. The recent-steps trail records route paths and short control labels only. Do not put secrets or PII in `getContext` or `getRequester`.

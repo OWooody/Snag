@@ -17,6 +17,7 @@ import {
   type PickedElement,
 } from "../element-highlights";
 import { describeElement, elementLabel } from "../element-info";
+import { sanitizeFlowSteps } from "../flow-steps";
 import {
   dismissNotificationOffer,
   rememberOwnRequest,
@@ -24,7 +25,7 @@ import {
   shouldOfferNotifications,
 } from "../notifications";
 import type { PreviewOp } from "../dom-preview";
-import type { SnagRequestRow, SnagScreenshot } from "../protocol";
+import type { SnagFlowStep, SnagRequestRow, SnagScreenshot } from "../protocol";
 import {
   GLASS_BLUR_SATURATE,
   GLASS_FILL,
@@ -82,6 +83,8 @@ interface RequestPanelProps {
   initialTab?: Tab;
   /** Request to expand and scroll to when the sheet opens on the list. */
   initialFocusRequestId?: string | null;
+  /** Route and click trail captured before the sheet opened. The tester can remove steps. */
+  initialSteps?: SnagFlowStep[];
   followupsEnabled?: boolean;
   agentMode?: "plan_only" | "execute" | null;
   /** Pending needs_input count for the Requests tab badge. */
@@ -100,6 +103,7 @@ export function RequestPanel({
   onClose,
   initialTab = "new",
   initialFocusRequestId = null,
+  initialSteps = [],
   followupsEnabled = false,
   agentMode = null,
   badgeCount = 0,
@@ -108,6 +112,7 @@ export function RequestPanel({
   const [phase, setPhase] = useState<Phase>("editing");
   const [statusIndex, setStatusIndex] = useState(0);
   const [prompt, setPrompt] = useState("");
+  const [steps, setSteps] = useState<SnagFlowStep[]>(() => sanitizeFlowSteps(initialSteps));
   const [attachments, setAttachments] = useState<LocalAttachment[]>([]);
   const [includeScreenshot, setIncludeScreenshot] = useState(true);
   const [workingScreenshot, setWorkingScreenshot] = useState<SnagScreenshot | null>(
@@ -213,10 +218,12 @@ export function RequestPanel({
     setErrorMessage(null);
     try {
       const context = await resolveContext();
+      const safeSteps = sanitizeFlowSteps(steps);
       const response = await createSnagRequest({
         prompt: trimmed,
         context,
         ...attachmentFields(attachments),
+        ...(safeSteps.length > 0 ? { steps: safeSteps } : {}),
         screenshot:
           includeScreenshot && workingScreenshot
             ? await withHighlights(workingScreenshot)
@@ -240,6 +247,7 @@ export function RequestPanel({
   const startAnother = () => {
     setPhase("editing");
     setPrompt("");
+    setSteps(sanitizeFlowSteps(initialSteps));
     setAttachments([]);
     setAgentUrl(null);
     setSubmittedId(null);
@@ -571,6 +579,14 @@ export function RequestPanel({
                 </div>
               ) : (
                 <>
+                  <FlowStepList
+                    steps={steps}
+                    theme={theme}
+                    disabled={phase === "submitting"}
+                    onRemove={(index) =>
+                      setSteps((current) => current.filter((_, stepIndex) => stepIndex !== index))
+                    }
+                  />
                   <label
                     htmlFor="snag-prompt"
                     style={{
@@ -967,6 +983,113 @@ function NotifyOffer({ theme, onDone }: { theme: SnagTheme; onDone: () => void }
           No thanks
         </button>
       </div>
+    </div>
+  );
+}
+
+function FlowStepList({
+  steps,
+  theme,
+  disabled,
+  onRemove,
+}: {
+  steps: SnagFlowStep[];
+  theme: SnagTheme;
+  disabled: boolean;
+  onRemove: (index: number) => void;
+}) {
+  if (steps.length === 0) return null;
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div
+        style={{
+          fontSize: 11,
+          fontWeight: 700,
+          letterSpacing: 0.5,
+          color: theme.textMuted,
+          marginBottom: 8,
+        }}
+      >
+        HOW YOU GOT HERE
+      </div>
+      <ul
+        aria-label="Recent steps"
+        style={{
+          listStyle: "none",
+          margin: 0,
+          padding: 0,
+          display: "flex",
+          flexDirection: "column",
+          gap: 6,
+        }}
+      >
+        {steps.map((step, index) => (
+          <li
+            key={`${step.type}:${step.path}:${step.label ?? ""}:${index}`}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "6px 6px 6px 8px",
+              borderRadius: 8,
+              border: "1px solid rgba(255,255,255,0.55)",
+              background: GLASS_SURFACE,
+            }}
+          >
+            <span
+              aria-hidden="true"
+              style={{
+                flexShrink: 0,
+                width: 20,
+                height: 20,
+                borderRadius: 10,
+                background: theme.accent,
+                color: "#fff",
+                fontSize: 11,
+                fontWeight: 800,
+                lineHeight: "20px",
+                textAlign: "center",
+              }}
+            >
+              {index + 1}
+            </span>
+            <span
+              style={{
+                flex: 1,
+                minWidth: 0,
+                fontSize: 12,
+                color: theme.text,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
+              {step.type === "click" ? step.label : "Opened"}
+              <span style={{ color: theme.textMuted }}> · {step.path}</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => onRemove(index)}
+              disabled={disabled}
+              aria-label={`Remove step ${index + 1}`}
+              style={{
+                flexShrink: 0,
+                width: 24,
+                height: 24,
+                borderRadius: 12,
+                border: "none",
+                background: "transparent",
+                color: theme.textMuted,
+                cursor: disabled ? "not-allowed" : "pointer",
+                fontSize: 16,
+                lineHeight: 1,
+              }}
+            >
+              ×
+            </button>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

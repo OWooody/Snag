@@ -11,6 +11,7 @@ import {
   resolveTheme,
   startConsoleErrorBuffer,
 } from "../config";
+import { setFlowTrailPaused, snapshotFlowTrail, startFlowTrail } from "../flow-trail";
 import {
   notificationsGranted,
   setTitleCount,
@@ -18,7 +19,7 @@ import {
   subscribeStatusEvents,
 } from "../notifications";
 import { ACTIVE_POLL_MS, isActiveRequest, startVisiblePolling } from "../polling";
-import type { SnagRequestRow, SnagScreenshot } from "../protocol";
+import type { SnagFlowStep, SnagRequestRow, SnagScreenshot } from "../protocol";
 import { captureScreenshot } from "../screenshot";
 import { countUnseenDone, markDoneSeen } from "../seen-done";
 import { TAB_REST_SHAPE, type TabShape } from "../sheet";
@@ -59,6 +60,7 @@ export function SnagOverlay() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [markerRows, setMarkerRows] = useState<SnagRequestRow[]>([]);
   const [screenshot, setScreenshot] = useState<SnagScreenshot | null>(null);
+  const [flowSteps, setFlowSteps] = useState<SnagFlowStep[]>([]);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -164,6 +166,15 @@ export function SnagOverlay() {
     return startConsoleErrorBuffer();
   }, [enabled]);
 
+  useEffect(() => {
+    if (!enabled) return;
+    return startFlowTrail();
+  }, [enabled]);
+
+  useEffect(() => {
+    setFlowTrailPaused(opening || panelVisible);
+  }, [opening, panelVisible]);
+
   const openPanelRef = useRef<(tab: "new" | "list", from: TabShape, focusId?: string) => void>(
     () => {},
   );
@@ -210,6 +221,8 @@ export function SnagOverlay() {
   const openPanel = async (tab: "new" | "list", from: TabShape, focusId?: string) => {
     if (opening || panelVisible) return;
     setOpening(true);
+    setFlowTrailPaused(true);
+    setFlowSteps(snapshotFlowTrail());
     setInitialTab(tab);
     setInitialFocusId(focusId ?? null);
     setToasts([]);
@@ -259,6 +272,7 @@ export function SnagOverlay() {
           morphFrom={morphFrom}
           initialTab={initialTab}
           initialFocusRequestId={initialFocusId}
+          initialSteps={flowSteps}
           followupsEnabled={followupsEnabled}
           agentMode={agentMode}
           badgeCount={badgeCount}

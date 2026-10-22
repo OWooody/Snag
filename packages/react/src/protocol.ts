@@ -84,12 +84,27 @@ export interface SnagRequestMarker {
   y: number;
 }
 
+/**
+ * One earlier route or control activation, recorded before the sheet opened.
+ * Paths are pathnames only. Labels are short control names, never field values.
+ */
+export interface SnagFlowStep {
+  type: "navigate" | "click";
+  path: string;
+  label?: string;
+}
+
 /** POST <endpoint> — create */
 export interface CreateSnagRequestBody {
   /** The user's change request, free text. */
   prompt: string;
   /** Host-provided context: route, locale, app version, environment, ... */
   context: Record<string, unknown>;
+  /**
+   * Recent route changes and control activations that led to this screen.
+   * Omitted when the tester removed them, or when nothing but the current page was seen.
+   */
+  steps?: SnagFlowStep[];
   screenshot?: SnagScreenshot;
   /** Extra images, sent to the agent after the page screenshot as visual reference. */
   images?: SnagReferenceImage[];
