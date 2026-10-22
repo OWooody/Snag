@@ -11,7 +11,7 @@ import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 export const MAX_REFERENCE_IMAGES = 3;
 export const MAX_REFERENCE_FILES = 3;
 export const MAX_REFERENCE_IMAGE_BASE64 = 400_000;
-export const MAX_REFERENCE_FILE_CHARS = 20_000;
+export const MAX_REFERENCE_FILE_CHARS = 100_000;
 export const MAX_REFERENCE_NAME = 120;
 /** Full page screenshot plus the maximum set of uploaded reference images. */
 export const MAX_TOTAL_IMAGE_BASE64 = 4_000_000;
@@ -134,7 +134,9 @@ export function formatReferenceContext(input: ReferenceContextInput): string | n
   }
   if (files.length > 0) {
     lines.push("## Reference files");
-    lines.push("The requester attached these files. Use their contents as reference for the change.");
+    lines.push(
+      "The requester attached these files. PDF, Word, Excel, PowerPoint, and text files are included here as their text. Use that text as the reference the request is talking about. Do not ask them to upload the file again.",
+    );
     lines.push("");
     for (const file of files) {
       lines.push(`### ${safeAttachmentName(file.name)}`);
