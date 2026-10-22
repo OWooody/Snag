@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  body { font-family: -apple-system, "SF Pro Display", system-ui, sans-serif; width: 1600px; background: #F4F3F8; }
+  .band { display: flex; justify-content: center; gap: 36px; padding: 44px 40px 28px; }
+  .band.dark { background: #0D1117; }
+  .cell { text-align: center; }
+  .cell img { width: 170px; height: 170px; display: block; border-radius: 40px; }
+  .light .cell img { box-shadow: 0 10px 30px rgba(17,17,40,0.12); }
+  .cell div { margin-top: 14px; font-size: 22px; font-weight: 800; color: #5B4CF5; }
+  .dark .cell div { color: #A99BFF; }
+</style>
+</head>
+<body>
+  <div class="band light" id="light"></div>
+  <div class="band dark" id="dark"></div>
+  <script>
+    const items = [
+      ["D1", "d1-dark-spark.svg"], ["D2", "d2-dark-gradient-spark.svg"], ["D3", "d3-dark-rising.svg"],
+      ["D4", "d4-dark-purple-tab.svg"], ["P1", "p1-purple-cluster.svg"], ["P2", "p2-purple-offset.svg"], ["P3", "p3-twilight.svg"],
+    ];
+    const html = items.map(([l, s]) => `<div class="cell"><img src="${s}"><div>${l}</div></div>`).join("");
+    document.getElementById("light").innerHTML = html;
+    document.getElementById("dark").innerHTML = html;
+  </script>
+</body>
+</html>

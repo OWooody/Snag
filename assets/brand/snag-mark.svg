@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="snag-bg" x1="0" y1="0" x2="0.6" y2="1">
+      <stop offset="0" stop-color="#5B4CF5"/>
+      <stop offset="1" stop-color="#0F0D24"/>
+    </linearGradient>
+    <radialGradient id="snag-halo" cx="0.5" cy="1" r="0.6">
+      <stop offset="0" stop-color="#7C6CFF" stop-opacity=".75"/>
+      <stop offset="1" stop-color="#7C6CFF" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="snag-line-glow" x="-60%" y="-400%" width="220%" height="900%"><feGaussianBlur stdDeviation="3"/></filter>
+    <filter id="snag-spark-glow" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="4"/></filter>
+    <clipPath id="snag-square"><rect width="128" height="128" rx="30"/></clipPath>
+  </defs>
+  <g clip-path="url(#snag-square)">
+    <rect width="128" height="128" fill="url(#snag-bg)"/>
+    <rect y="40" width="128" height="88" fill="url(#snag-halo)"/>
+    <path d="M24 128C30.05 128 35 123.05 35 117V102C35 94.3 41.3 88 49 88H79C86.7 88 93 94.3 93 102V117C93 123.05 97.95 128 104 128Z" fill="#fff" fill-opacity=".95"/>
+    <rect x="52" y="104" width="24" height="5" rx="2.5" fill="#8B7DFF" filter="url(#snag-line-glow)"/>
+    <rect x="52" y="104" width="24" height="5" rx="2.5" fill="#6D5EF8"/>
+    <path d="M64 31C66.28 47.72 66.28 47.72 83 50C66.28 52.28 66.28 52.28 64 69C61.72 52.28 61.72 52.28 45 50C61.72 47.72 61.72 47.72 64 31Z" fill="#C4B5FD" opacity=".8" filter="url(#snag-spark-glow)"/>
+    <path d="M64 31C66.28 47.72 66.28 47.72 83 50C66.28 52.28 66.28 52.28 64 69C61.72 52.28 61.72 52.28 45 50C61.72 47.72 61.72 47.72 64 31Z" fill="#fff"/>
+  </g>
+</svg>

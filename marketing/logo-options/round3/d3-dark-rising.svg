@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0.6" y2="1">
+      <stop offset="0" stop-color="#1C1B2E"/>
+      <stop offset="1" stop-color="#0B0B14"/>
+    </linearGradient>
+    <linearGradient id="sparkgrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#D6CCFF"/>
+      <stop offset=".5" stop-color="#8B7DFF"/>
+      <stop offset="1" stop-color="#5EEAD4"/>
+    </linearGradient>
+    <linearGradient id="tabgrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8576FF"/>
+      <stop offset="1" stop-color="#4E3FE6"/>
+    </linearGradient>
+    <radialGradient id="halo" cx="0.5" cy="1" r="0.6">
+      <stop offset="0" stop-color="#7C6CFF" stop-opacity=".75"/>
+      <stop offset="1" stop-color="#7C6CFF" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="column" cx="0.5" cy="0.62" r="0.32">
+      <stop offset="0" stop-color="#8B7DFF" stop-opacity=".55"/>
+      <stop offset="1" stop-color="#8B7DFF" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="glow" x="-60%" y="-400%" width="220%" height="900%"><feGaussianBlur stdDeviation="3"/></filter>
+    <filter id="sglow" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="4"/></filter>
+    <clipPath id="sq"><rect width="128" height="128" rx="30"/></clipPath>
+  </defs>
+  <g clip-path="url(#sq)">
+  <rect width="128" height="128" fill="url(#bg)"/>
+  <rect width="128" height="128" fill="url(#column)"/>
+  <rect x="0" y="40" width="128" height="88" fill="url(#halo)"/>
+  <path d="M24 128 C30.05 128 35 123.05 35 117 L35 102 C35 94.3 41.3 88 49 88 L79 88 C86.7 88 93 94.3 93 102 L93 117 C93 123.05 97.95 128 104 128 Z" fill="#fff" fill-opacity=".94"/>
+  <rect x="52" y="104" width="24" height="5" rx="2.5" fill="#8B7DFF" filter="url(#glow)"/>
+  <rect x="52" y="104" width="24" height="5" rx="2.5" fill="#6D5EF8"/>
+  <path filter="url(#sglow)" opacity=".8" d="M64 52 C65.44 62.56 65.44 62.56 76 64 C65.44 65.44 65.44 65.44 64 76 C62.56 65.44 62.56 65.44 52 64 C62.56 62.56 62.56 62.56 64 52 Z" fill="#A99BFF"/><path  d="M64 52 C65.44 62.56 65.44 62.56 76 64 C65.44 65.44 65.44 65.44 64 76 C62.56 65.44 62.56 65.44 52 64 C62.56 62.56 62.56 62.56 64 52 Z" fill="#fff"/>
+  <path opacity=".7" d="M84 35 C84.6 39.4 84.6 39.4 89 40 C84.6 40.6 84.6 40.6 84 45 C83.4 40.6 83.4 40.6 79 40 C83.4 39.4 83.4 39.4 84 35 Z" fill="#fff"/>
+  <path opacity=".5" d="M46 30.5 C46.42 33.58 46.42 33.58 49.5 34 C46.42 34.42 46.42 34.42 46 37.5 C45.58 34.42 45.58 34.42 42.5 34 C45.58 33.58 45.58 33.58 46 30.5 Z" fill="#fff"/>
+  </g>
+</svg>

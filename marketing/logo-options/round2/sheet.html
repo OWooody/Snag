@@ -1,0 +1,45 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  body { font-family: -apple-system, "SF Pro Display", system-ui, sans-serif; background: #F4F3F8; color: #1B1B24; padding: 48px; width: 1600px; }
+  h1 { font-size: 28px; font-weight: 700; margin-bottom: 32px; letter-spacing: -0.02em; }
+  .row { display: grid; grid-template-columns: 120px 180px 150px 1fr 1fr; gap: 28px; align-items: center; background: #fff; border-radius: 24px; padding: 24px 28px; margin-bottom: 20px; }
+  .label { font-size: 40px; font-weight: 800; color: #5B4CF5; }
+  .name { font-size: 15px; color: #71717A; margin-top: 6px; }
+  .big img { width: 160px; height: 160px; display: block; border-radius: 37px; box-shadow: 0 0 0 1px #E7E5EF; }
+  .sizes { display: flex; gap: 14px; align-items: flex-end; }
+  .sizes img { display: block; }
+  .lockup { display: flex; align-items: center; gap: 18px; border-radius: 18px; padding: 24px 32px; height: 130px; }
+  .lockup img { width: 72px; height: 72px; }
+  .word { display: block; font-size: 64px; line-height: 1; font-weight: 800; letter-spacing: -0.045em; }
+  .light { background: #fff; border: 1px solid #E7E5EF; }
+  .dark { background: #0D1117; color: #fff; }
+  .tag { display: block; font-size: 15px; font-weight: 500; color: #71717A; margin-top: 4px; }
+  .dark .tag { color: #8B949E; }
+</style>
+</head>
+<body>
+  <h1>Snag logo: Tab direction, round 2</h1>
+  <div id="rows"></div>
+  <script>
+    const options = [
+      ["A", "Round 1", "../a-tab.svg"],
+      ["T1", "Flush tab", "t1-flush.svg"],
+      ["T2", "Dark glass", "t2-dark-glass.svg"],
+      ["T3", "Tab + spark", "t3-spark.svg"],
+      ["T4", "Light", "t4-light.svg"],
+    ];
+    document.getElementById("rows").innerHTML = options.map(([label, name, src]) => `
+      <div class="row">
+        <div class="label">${label}<div class="name">${name}</div></div>
+        <div class="big"><img src="${src}"></div>
+        <div class="sizes"><img src="${src}" width="64"><img src="${src}" width="32"><img src="${src}" width="16"></div>
+        <div class="lockup light"><img src="${src}"><div><span class="word">snag</span><span class="tag">Tap the screen, it gets fixed.</span></div></div>
+        <div class="lockup dark"><img src="${src}"><div><span class="word">snag</span><span class="tag">Tap the screen, it gets fixed.</span></div></div>
+      </div>`).join("");
+  </script>
+</body>
+</html>

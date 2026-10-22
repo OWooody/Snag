@@ -1,0 +1,32 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    width: 1280px; height: 640px; overflow: hidden; color: #fff;
+    font-family: -apple-system, "SF Pro Display", system-ui, sans-serif;
+    background:
+      radial-gradient(700px 480px at 22% 18%, rgba(91,76,245,0.45), transparent 62%),
+      radial-gradient(640px 420px at 88% 92%, rgba(56,189,248,0.16), transparent 60%),
+      #0A0A12;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+  }
+  .lockup { display: flex; align-items: center; gap: 30px; }
+  .lockup img { width: 150px; height: 150px; filter: drop-shadow(0 18px 50px rgba(91,76,245,0.6)); }
+  .word { font-size: 150px; font-weight: 850; letter-spacing: -0.055em; line-height: 1; }
+  .tag {
+    margin-top: 28px; font-size: 44px; font-weight: 700; letter-spacing: -0.02em;
+    background: linear-gradient(90deg, #A99BFF, #7C6CFF 45%, #5EEAD4);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .sub { margin-top: 18px; font-size: 26px; color: #A1A1AA; font-weight: 500; }
+</style>
+</head>
+<body>
+  <div class="lockup"><img src="../assets/brand/snag-mark.svg"><div class="word">snag</div></div>
+  <div class="tag">Tap the screen, it gets fixed.</div>
+  <div class="sub">Anyone at your company can build in your app. An AI agent ships the PR.</div>
+</body>
+</html>
