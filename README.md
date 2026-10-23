@@ -40,18 +40,26 @@ Snag lets anyone at your company build in your product. A slim tab at the bottom
 
 ## What people build with Snag
 
-Snag started as a way to report bugs. Now people across the company use it to build features and whole modules.
+Snag started as a way to report bugs. Now operations, finance and admin teams use it to build features and whole modules. In its first three months, **13 people filed 202 requests, and 93 were merged.**
 
-| Team | Asked for |
+Real requests, lightly anonymized:
+
+| Area | Asked for |
 |------|-----------|
-| Sales | A CSV export on the leads table |
-| Ops | A refund approvals queue |
-| Support | The customer's plan shown on every ticket |
-| Marketing | A landing page for a spring launch |
-| Product | An onboarding checklist module for new teams |
-| QA | A fix for the date picker on Safari |
+| Finance | A vendor messaging module: admins start a chat with any vendor, send attachments, keep a full message history, and vendors get email notifications |
+| Finance | A VAT registration module: a new field on the vendor sign-up form plus an admin review table |
+| Finance | A Payment Calendar that groups every scheduled installment by date |
+| Finance | A spreadsheet-style payment sheet where edits update the real payment schedules |
+| Operations | An ops page: after a customer pays, book a visit over WhatsApp and show a shared calendar of who goes where |
+| Operations | Predictive procurement that estimates what the business will need to buy |
+| Operations | Change a job's status, asking for a completion date when it's marked completed |
+| Admin | Export the jobs list to Excel, with the reason for every cancelled job |
+| Admin | Search, filters, sorting and pagination across every list table |
+| Support | A fix for notification links that opened a 404 page |
 
-Everyone uses the same tab, and every change lands as a reviewable PR.
+People also use it to understand the product without opening the code: "Why wasn't this job assigned automatically?" or "What happens if I click this?" And they ask for documents, like a bilingual PDF explaining how jobs are assigned, written for management.
+
+Everyone uses the same tab, in English, Arabic or whatever they write in, and every change lands as a reviewable PR.
 
 ## Why not just file a ticket?
 
