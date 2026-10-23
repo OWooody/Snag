@@ -54,6 +54,8 @@ Migrations `00007`–`00010` → `rejected` status and `rejection_note`, `handof
 
 Migration `00015_impact_metrics.sql` → `snag_impact_metrics` and the service-role-only `snag_platform_impact_metrics`, behind the admin panel's Insights pages.
 
+Migration `00018_org_slack_webhook.sql` → per-organization encrypted Slack incoming webhook.
+
 If policies already exist from a partial run:
 
 ```sh
@@ -74,7 +76,8 @@ openssl rand -base64 32   # SNAG_WORKER_SECRET — only for execute-mode deliver
 supabase secrets set \
   SNAG_KEY_ENCRYPTION_SECRET="<32+ char secret>" \
   SNAG_WEBHOOK_SECRET="<webhook secret>" \
-  SNAG_WORKER_SECRET="<32+ char secret>"
+  SNAG_WORKER_SECRET="<32+ char secret>" \
+  SNAG_ADMIN_URL="https://<your-admin-host>"
 ```
 
 Keep `SNAG_KEY_ENCRYPTION_SECRET` — you need the **same value** when provisioning tenants.

@@ -41,6 +41,7 @@ import {
   summaryHasRequesterQuestions,
 } from "./requester_questions.ts";
 import { isTrustedRequester } from "./requester_token.ts";
+import { notifyAutoMergeDeveloperWait } from "./slack_notify.ts";
 
 export const REQUEST_LIFECYCLE_COLUMNS =
   "id, project_id, prompt, status, phase, phase_started_at, lifecycle_version, agent_id, agent_url, branch_name, pr_url, preview_url, handoff_reason, summary, plan, plan_summary, policy_decision, requester, requester_verified, requester_ip, approved_at, confirmed_at, merged_at, updated_at";
@@ -116,6 +117,21 @@ export async function claimTransition(
   return true;
 }
 
+/**
+ * claimTransition plus a Slack post when auto-merge just started waiting on a
+ * developer. The post never changes the outcome of the transition.
+ */
+async function transition(
+  ctx: { service: SupabaseClient; project: ProjectRow },
+  row: LifecycleRow,
+  update: Record<string, unknown>,
+): Promise<boolean> {
+  const previousStatus = row.status;
+  const claimed = await claimTransition(ctx.service, row, update);
+  if (claimed) await notifyAutoMergeDeveloperWait(ctx.project, row, previousStatus);
+  return claimed;
+}
+
 function requesterContext(row: LifecycleRow, project: ProjectRow) {
   return {
     id: row.requester,
@@ -142,7 +158,7 @@ export async function handleAgentTerminal(
   if (result.summary) base.summary = result.summary;
 
   if (result.status === "error") {
-    await claimTransition(ctx.service, row, {
+    await transition(ctx, row, {
       ...base,
       status: "error",
       error: "Agent run failed",
@@ -154,7 +170,7 @@ export async function handleAgentTerminal(
   const summary = result.summary ?? row.summary;
 
   if (!row.phase) {
-    await claimTransition(ctx.service, row, {
+    await transition(ctx, row, {
       ...base,
       status: mapTerminalRequestStatus("finished", summary, settings.followupsEnabled),
     });
@@ -164,7 +180,7 @@ export async function handleAgentTerminal(
   if (isStaleHandoff(row, summary)) return;
 
   if (settings.followupsEnabled && summaryHasRequesterQuestions(summary)) {
-    await claimTransition(ctx.service, row, { ...base, status: "needs_input" });
+    await transition(ctx, row, { ...base, status: "needs_input" });
     return;
   }
 
@@ -173,7 +189,7 @@ export async function handleAgentTerminal(
   } else if (row.phase === "implementing") {
     await finishImplementation(ctx, row, base, summary);
   } else {
-    await claimTransition(ctx.service, row, base);
+    await transition(ctx, row, base);
   }
 }
 
@@ -192,7 +208,7 @@ async function finishPlanning(
   const plan = parseSnagPlan(summary);
   // Without a parsed plan there is nothing to show; policy hands it to a developer.
   if (plan && projectSettings(ctx.project).planReviewEnabled) {
-    await claimTransition(ctx.service, row, {
+    await transition(ctx, row, {
       ...base,
       plan,
       plan_summary: summary,
@@ -269,7 +285,7 @@ async function evaluatePlan(
   };
 
   if (decision.outcome === "review_before_execution") {
-    await claimTransition(ctx.service, row, {
+    await transition(ctx, row, {
       ...base,
       ...planFields,
       status: "awaiting_approval",
@@ -277,7 +293,7 @@ async function evaluatePlan(
     return;
   }
 
-  const claimed = await claimTransition(ctx.service, row, {
+  const claimed = await transition(ctx, row, {
     ...base,
     ...planFields,
     status: "running",
@@ -293,7 +309,7 @@ async function evaluatePlan(
     );
   } catch (error) {
     console.error(`snag implementation follow-up failed request=${row.id}:`, error);
-    await claimTransition(ctx.service, row, {
+    await transition(ctx, row, {
       status: "error",
       error: userFacingLaunchError(error),
     });
@@ -316,7 +332,7 @@ async function finishImplementation(
   } catch (error) {
     console.error(`snag forge auth failed request=${row.id}:`, error);
     const label = error instanceof ForgeError ? hostLabel(error.host) : "the repository host";
-    await claimTransition(ctx.service, row, {
+    await transition(ctx, row, {
       ...base,
       status: "awaiting_review",
       handoff_reason: `Snag could not authenticate to ${label}.`,
@@ -327,7 +343,7 @@ async function finishImplementation(
   if (!forge) {
     const final = planStageOutcome(row);
     const host = forgeHostFromRepoUrl(project.repo_url);
-    await claimTransition(ctx.service, row, {
+    await transition(ctx, row, {
       ...base,
       status: final === "execute" && settings.delivery === "pr_only"
         ? "finished"
@@ -346,7 +362,7 @@ async function finishImplementation(
   try {
     const prNumber = await resolvePullRequest(forge, project, row, base, summary);
     if (prNumber === null) {
-      await claimTransition(ctx.service, row, {
+      await transition(ctx, row, {
         ...base,
         status: "awaiting_review",
         handoff_reason: "The agent finished without opening a pull request.",
@@ -371,19 +387,19 @@ async function finishImplementation(
     };
 
     if (final !== "execute") {
-      await claimTransition(ctx.service, row, {
+      await transition(ctx, row, {
         ...base,
         status: "awaiting_review",
         policy_decision: nextRecord,
       });
     } else if (diffDecision.delivery === "pr_only") {
-      await claimTransition(ctx.service, row, {
+      await transition(ctx, row, {
         ...base,
         status: "finished",
         policy_decision: nextRecord,
       });
     } else {
-      await claimTransition(ctx.service, row, {
+      await transition(ctx, row, {
         ...base,
         status: "running",
         phase: "delivering",
@@ -393,7 +409,7 @@ async function finishImplementation(
     }
   } catch (error) {
     console.error(`snag diff check failed request=${row.id}:`, error);
-    await claimTransition(ctx.service, row, {
+    await transition(ctx, row, {
       ...base,
       status: "awaiting_review",
       handoff_reason: error instanceof ForgeError

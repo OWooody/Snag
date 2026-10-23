@@ -21,6 +21,7 @@ interface OrganizationSettings {
   execute_delivery: ExecuteDelivery;
   default_outcome: PolicyOutcome;
   policy_shadow_mode: boolean;
+  slack_webhook_encrypted: string | null;
 }
 
 export interface ProjectRow {
@@ -57,7 +58,7 @@ export interface ProjectRow {
 }
 
 export const PROJECT_SELECT =
-  "id, name, slug, organization_id, publishable_key, repo_url, repo_ref, model, cursor_api_key_encrypted, prompt_instructions, enabled, per_ip_hourly_limit, hourly_limit, daily_limit, allowed_origins, agent_mode, requester_followups_enabled, requester_plan_review_enabled, execute_delivery, default_outcome, policy_shadow_mode, github_token_encrypted, origin_app_id, origin_installation_id, origin_app_key_encrypted, requester_signing_secret_encrypted, trusted_requesters, auto_merge_daily_limit, auto_merge_acknowledged_at, snag_organizations(agent_mode, requester_followups_enabled, requester_plan_review_enabled, execute_delivery, default_outcome, policy_shadow_mode)";
+  "id, name, slug, organization_id, publishable_key, repo_url, repo_ref, model, cursor_api_key_encrypted, prompt_instructions, enabled, per_ip_hourly_limit, hourly_limit, daily_limit, allowed_origins, agent_mode, requester_followups_enabled, requester_plan_review_enabled, execute_delivery, default_outcome, policy_shadow_mode, github_token_encrypted, origin_app_id, origin_installation_id, origin_app_key_encrypted, requester_signing_secret_encrypted, trusted_requesters, auto_merge_daily_limit, auto_merge_acknowledged_at, snag_organizations(agent_mode, requester_followups_enabled, requester_plan_review_enabled, execute_delivery, default_outcome, policy_shadow_mode, slack_webhook_encrypted)";
 
 export interface ProjectSettings {
   agentMode: AgentMode;

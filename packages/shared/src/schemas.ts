@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { AGENT_MODES } from "./agent-mode";
+import { isSlackIncomingWebhook } from "./slack";
 import {
   EXECUTE_DELIVERIES,
   PLAN_FLAGS,
@@ -126,6 +127,16 @@ export const projectExecutionUpdateSchema = z.object({
 
 export const githubTokenUpdateSchema = z.object({
   github_token: z.string().trim().min(1).max(512),
+});
+
+export const slackWebhookUpdateSchema = z.object({
+  webhook_url: z
+    .string()
+    .trim()
+    .max(512)
+    .refine(isSlackIncomingWebhook, {
+      message: "Paste a Slack incoming webhook URL from hooks.slack.com.",
+    }),
 });
 
 const globListSchema = z.array(z.string().trim().min(1).max(256)).min(1).max(50);

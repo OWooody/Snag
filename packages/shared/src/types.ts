@@ -283,6 +283,8 @@ export interface SnagOrganization {
   execute_delivery: ExecuteDelivery;
   default_outcome: PolicyOutcome;
   policy_shadow_mode: boolean;
+  /** When the Slack webhook was saved. Null means this organization is not connected. */
+  slack_webhook_updated_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -324,7 +326,7 @@ export const SAFE_PROJECT_COLUMNS =
   "id, name, slug, publishable_key, repo_url, repo_ref, model, prompt_instructions, enabled, per_ip_hourly_limit, hourly_limit, daily_limit, allowed_origins, organization_id, agent_mode, requester_followups_enabled, requester_plan_review_enabled, execute_delivery, default_outcome, policy_shadow_mode, trusted_requesters, auto_merge_daily_limit, auto_merge_acknowledged_at, github_token_updated_at, origin_app_id, origin_installation_id, origin_credentials_updated_at, requester_secret_updated_at, cursor_key_updated_at, host_runtime, auth_provider, created_at, updated_at" as const;
 
 export const ORGANIZATION_COLUMNS =
-  "id, name, slug, agent_mode, requester_followups_enabled, requester_plan_review_enabled, execute_delivery, default_outcome, policy_shadow_mode, created_at, updated_at" as const;
+  "id, name, slug, agent_mode, requester_followups_enabled, requester_plan_review_enabled, execute_delivery, default_outcome, policy_shadow_mode, slack_webhook_updated_at, created_at, updated_at" as const;
 
 export const POLICY_RULE_COLUMNS =
   "id, organization_id, project_id, name, enabled, shadow, kind, condition, outcome, created_at, updated_at" as const;

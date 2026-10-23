@@ -27,9 +27,22 @@ import {
   type PolicyDecisionRecord,
 } from "./lifecycle.ts";
 import { type ForgeConnection, type ProjectRow, projectForge } from "./projects.ts";
+import { notifyAutoMergeDeveloperWait } from "./slack_notify.ts";
 
 export const PREVIEW_TIMEOUT_MS = 30 * 60 * 1000;
 export const CI_TIMEOUT_MS = 60 * 60 * 1000;
+
+async function transition(
+  service: SupabaseClient,
+  project: ProjectRow,
+  row: LifecycleRow,
+  update: Record<string, unknown>,
+): Promise<boolean> {
+  const previousStatus = row.status;
+  const claimed = await claimTransition(service, row, update);
+  if (claimed) await notifyAutoMergeDeveloperWait(project, row, previousStatus);
+  return claimed;
+}
 
 export interface DeliveryRunState {
   /** Projects that already merged a PR in this run; merges are serialized per project. */
@@ -61,7 +74,7 @@ export async function advanceDelivery(
       const label = forge
         ? hostLabel(forge.host)
         : hostLabel(forgeHostFromRepoUrl(project.repo_url) ?? "github");
-      await handOff(service, row, `Snag cannot reach the pull request on ${label}.`);
+      await handOff(service, project, row, `Snag cannot reach the pull request on ${label}.`);
     }
     return;
   }
@@ -75,7 +88,7 @@ export async function advanceDelivery(
   }
 
   if (pr.merged) {
-    await claimTransition(service, row, {
+    await transition(service, project, row, {
       status: "merged",
       merged_at: new Date(now).toISOString(),
       merge_commit_sha: pr.mergeCommitSha,
@@ -83,7 +96,7 @@ export async function advanceDelivery(
     return;
   }
   if (pr.state === "closed") {
-    await claimTransition(service, row, {
+    await transition(service, project, row, {
       status: "error",
       error: "The pull request was closed without merging.",
     });
@@ -95,7 +108,7 @@ export async function advanceDelivery(
   const record: PolicyDecisionRecord = row.policy_decision ?? {};
   const delivery = record.diff?.delivery;
   if (delivery !== "preview_confirm" && delivery !== "auto_merge") {
-    await handOff(service, row, "Delivery setting changed; a developer needs to merge this PR.");
+    await handOff(service, project, row, "Delivery setting changed; a developer needs to merge this PR.");
     return;
   }
 
@@ -112,12 +125,12 @@ export async function advanceDelivery(
         return null;
       });
     if (previewUrl) {
-      await claimTransition(service, row, {
+      await transition(service, project, row, {
         status: "awaiting_confirmation",
         preview_url: previewUrl,
       });
     } else if (elapsedSince(row.phase_started_at, now) > PREVIEW_TIMEOUT_MS) {
-      await handOff(service, row, "No preview deployment was found for this pull request.");
+      await handOff(service, project, row, "No preview deployment was found for this pull request.");
     }
     return;
   }
@@ -144,14 +157,14 @@ async function recheckNewCommits(
   );
   const nextRecord: PolicyDecisionRecord = { ...record, diff: decision, final_outcome: final };
   if (final !== "execute") {
-    await claimTransition(service, row, {
+    await transition(service, project, row, {
       status: "awaiting_review",
       policy_decision: nextRecord,
       handoff_reason: "New commits on the pull request no longer pass the rules.",
     });
     return false;
   }
-  return await claimTransition(service, row, {
+  return await transition(service, project, row, {
     status: "running",
     policy_decision: nextRecord,
     preview_url: null,
@@ -175,17 +188,18 @@ async function tryMerge(
   const checks = await forge.client.getChecksState(forge.repo, pr.headSha);
   if (checks === "pending") {
     if (elapsedSince(waitingSince, now) > CI_TIMEOUT_MS) {
-      await handOff(service, row, "CI did not finish within 60 minutes.");
+      await handOff(service, project, row, "CI did not finish within 60 minutes.");
     }
     return;
   }
   if (checks === "failure") {
-    await handOff(service, row, "CI failed on the pull request.");
+    await handOff(service, project, row, "CI failed on the pull request.");
     return;
   }
   if (checks === "none") {
     await handOff(
       service,
+      project,
       row,
       "The repository reports no CI checks for this pull request, so Snag will not merge it automatically.",
     );
@@ -193,7 +207,7 @@ async function tryMerge(
   }
   if (pr.mergeable === null) return;
   if (pr.mergeable === false) {
-    await handOff(service, row, "The pull request has merge conflicts.");
+    await handOff(service, project, row, "The pull request has merge conflicts.");
     return;
   }
 
@@ -209,12 +223,12 @@ async function tryMerge(
     return;
   }
   if ((count ?? 0) >= project.auto_merge_daily_limit) {
-    await handOff(service, row, "Daily automatic merge limit reached.");
+    await handOff(service, project, row, "Daily automatic merge limit reached.");
     return;
   }
 
   // Claim before merging so a concurrent worker run cannot merge twice.
-  if (!(await claimTransition(service, row, { status: "running" }))) return;
+  if (!(await transition(service, project, row, { status: "running" }))) return;
   state.mergedProjects.add(project.id);
 
   try {
@@ -224,10 +238,10 @@ async function tryMerge(
       title: `${pr.title} (#${pr.number})`,
     });
     if (!result.merged) {
-      await handOff(service, row, `${hostLabel(forge.host)} did not merge the pull request.`);
+      await handOff(service, project, row, `${hostLabel(forge.host)} did not merge the pull request.`);
       return;
     }
-    await claimTransition(service, row, {
+    await transition(service, project, row, {
       status: "merged",
       merged_at: new Date(now).toISOString(),
       merge_commit_sha: result.sha,
@@ -240,6 +254,7 @@ async function tryMerge(
     const label = hostLabel(forge.host);
     await handOff(
       service,
+      project,
       row,
       refused
         ? `${label} refused the merge (branch protection, conflicts, or token permissions).`
@@ -250,10 +265,11 @@ async function tryMerge(
 
 async function handOff(
   service: SupabaseClient,
+  project: ProjectRow,
   row: LifecycleRow,
   reason: string,
 ): Promise<void> {
-  await claimTransition(service, row, { status: "awaiting_review", handoff_reason: reason });
+  await transition(service, project, row, { status: "awaiting_review", handoff_reason: reason });
 }
 
 function elapsedSince(iso: string | null, now: number): number {

@@ -28,6 +28,7 @@ import {
 } from "@/components/execution-selects";
 import { AdvancedDisclosure, ExecutionPosturePicker } from "@/components/execution-posture-picker";
 import { ExecutionSettingsCard } from "@/components/execution-settings-card";
+import { SlackNotificationsCard } from "@/components/slack-notifications-card";
 import {
   ProjectRequesterFollowupsOverrideSelect,
   RequesterFollowupsSwitch,
@@ -255,6 +256,7 @@ export function SettingsForm({
   return (
     <div className="space-y-6">
       {organization ? (
+        <>
         <Card>
           <CardHeader>
             <CardTitle>Organization defaults</CardTitle>
@@ -326,6 +328,11 @@ export function SettingsForm({
             </AlertDialog>
           </CardContent>
         </Card>
+        <SlackNotificationsCard
+          organizationId={organization.id}
+          connectedAt={organization.slack_webhook_updated_at}
+        />
+        </>
       ) : null}
 
       <Card>

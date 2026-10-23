@@ -68,6 +68,7 @@ Deno.test("plan review: project override wins, otherwise the organization, other
     execute_delivery: "pr_only" as const,
     default_outcome: "review_before_execution" as const,
     policy_shadow_mode: false,
+    slack_webhook_encrypted: null,
   };
   assertEquals(projectSettings(project()).planReviewEnabled, false);
   assertEquals(projectSettings(project({ snag_organizations: org })).planReviewEnabled, true);

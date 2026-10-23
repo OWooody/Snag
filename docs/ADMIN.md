@@ -29,7 +29,7 @@ Open http://localhost:3000
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes | Server-only mutations |
 | `SNAG_KEY_ENCRYPTION_SECRET` | Yes | Must match Edge Function secret (32+ chars) |
 | `NEXT_PUBLIC_SNAG_RELAY_URL` | No | Defaults to `{SUPABASE_URL}/functions/v1/relay` |
-| `NEXT_PUBLIC_ADMIN_URL` | No | Used in invite emails (default `http://localhost:3000`) |
+| `NEXT_PUBLIC_ADMIN_URL` | No | Used in invite emails (default `http://localhost:3000`). Edge functions use `SNAG_ADMIN_URL` for the same host in Slack links. |
 
 ## Bootstrap platform admin
 
@@ -85,6 +85,7 @@ Two simple choices. Each one sets agent mode, delivery, the outcome when no allo
 - **Execute to production if within rules** — when a request matches an allow rule and no escalation, Snag merges it once CI passes. Anything else waits for a developer. Delivery is Merge directly to production; the other three settings match Review required. Switching to this asks for the existing auto-merge acknowledgement.
 - **Custom** — Plan only, preview-then-merge, other outcomes, and shadow mode. Shown when the saved combination is not one of the two choices.
 - **Requester follow-ups** stays outside this choice.
+- **Slack notifications** — an owner or admin pastes an incoming webhook from that organization's own Slack workspace. Snag stores it encrypted and does not show it again. When a project's effective delivery is **Merge directly to production** and a request starts waiting for a developer (plan approval or PR review, including a delivery handoff), Snag posts the project, a short excerpt of the request, who asked, the rules or handoff that blocked auto-merge, plan risk, and links to the request and pull request. Shadow mode does not post. No webhook means no message. Set the `SNAG_ADMIN_URL` edge secret so the "Open in Snag" link resolves.
 
 ### Settings → Request handling (per project)
 

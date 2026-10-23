@@ -1,4 +1,9 @@
-import { SAFE_PROJECT_COLUMNS, type SnagOrganization, type SnagProjectSafe } from "@snag/shared";
+import {
+  ORGANIZATION_COLUMNS,
+  SAFE_PROJECT_COLUMNS,
+  type SnagOrganization,
+  type SnagProjectSafe,
+} from "@snag/shared";
 import { redirect } from "next/navigation";
 import { getEffectiveImpersonationOrgId, getImpersonatedProjectSlug } from "@/lib/impersonation";
 import { createServiceClient } from "@/lib/service";
@@ -33,7 +38,7 @@ export async function getUserContext(): Promise<UserContext> {
 
   const { data: orgMembers } = await supabase
     .from("snag_org_members")
-    .select("organization_id, role, snag_organizations(*)")
+    .select(`organization_id, role, snag_organizations(${ORGANIZATION_COLUMNS})`)
     .eq("user_id", user.id);
 
   const orgRoles: Record<string, string> = {};
@@ -55,7 +60,11 @@ export async function getUserContext(): Promise<UserContext> {
     activeProjectSlug = await getImpersonatedProjectSlug();
     const service = createServiceClient();
     const [{ data: impersonatedOrg }, { data: impersonatedProjects }] = await Promise.all([
-      service.from("snag_organizations").select("*").eq("id", impersonatingOrgId).single(),
+      service
+        .from("snag_organizations")
+        .select(ORGANIZATION_COLUMNS)
+        .eq("id", impersonatingOrgId)
+        .single(),
       service
         .from("snag_projects")
         .select(SAFE_PROJECT_COLUMNS)

@@ -8,6 +8,7 @@ import {
 } from "@/components/execution-settings-card";
 import { MembersCard } from "@/components/members-card";
 import { PlatformTenantForm } from "@/components/platform-tenant-form";
+import { SlackNotificationsCard } from "@/components/slack-notifications-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { loadActivationFacts } from "@/lib/activation-facts";
 import { requirePlatformAdmin } from "@/lib/auth";
@@ -31,6 +32,7 @@ export default async function PlatformTenantDetailPage({
 
   if (!project) notFound();
 
+  let slackWebhookUpdatedAt: string | null = null;
   let orgFollowupsEnabled = true;
   const orgExecution: OrganizationExecutionDefaults = {
     agent_mode: "plan_only",
@@ -42,7 +44,7 @@ export default async function PlatformTenantDetailPage({
     const { data: org } = await service
       .from("snag_organizations")
       .select(
-        "agent_mode, requester_followups_enabled, execute_delivery, default_outcome, policy_shadow_mode",
+        "agent_mode, requester_followups_enabled, execute_delivery, default_outcome, policy_shadow_mode, slack_webhook_updated_at",
       )
       .eq("id", project.organization_id)
       .single();
@@ -53,6 +55,7 @@ export default async function PlatformTenantDetailPage({
       orgFollowupsEnabled = org.requester_followups_enabled;
     }
     if (org) {
+      slackWebhookUpdatedAt = org.slack_webhook_updated_at ?? null;
       orgExecution.execute_delivery = org.execute_delivery ?? orgExecution.execute_delivery;
       orgExecution.default_outcome = org.default_outcome ?? orgExecution.default_outcome;
       orgExecution.policy_shadow_mode = org.policy_shadow_mode ?? false;
@@ -90,6 +93,13 @@ export default async function PlatformTenantDetailPage({
       <PlatformTenantForm project={project} orgFollowupsEnabled={orgFollowupsEnabled} />
 
       <ExecutionSettingsCard project={project} orgDefaults={orgExecution} />
+
+      {project.organization_id ? (
+        <SlackNotificationsCard
+          organizationId={project.organization_id}
+          connectedAt={slackWebhookUpdatedAt}
+        />
+      ) : null}
 
       {project.organization_id && (
         <MembersCard
