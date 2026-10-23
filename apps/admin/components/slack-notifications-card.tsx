@@ -20,6 +20,7 @@ export function SlackNotificationsCard({
   const [connected, setConnected] = useState(connectedAt);
   const [saving, setSaving] = useState(false);
   const [removing, setRemoving] = useState(false);
+  const [testing, setTesting] = useState(false);
 
   useEffect(() => {
     setConnected(connectedAt);
@@ -53,6 +54,18 @@ export function SlackNotificationsCard({
     setConnected(body.slack_webhook_updated_at ?? new Date().toISOString());
     toast.success("Slack webhook saved");
     router.refresh();
+  }
+
+  async function sendTest() {
+    setTesting(true);
+    const res = await fetch(`/api/organizations/${organizationId}/slack/test`, { method: "POST" });
+    setTesting(false);
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      toast.error(typeof body.error === "string" ? body.error : "Could not send the test message");
+      return;
+    }
+    toast.success("Test message sent");
   }
 
   async function disconnect() {
@@ -105,9 +118,24 @@ export function SlackNotificationsCard({
           </div>
         </form>
         {connected ? (
-          <Button type="button" variant="outline" onClick={() => void disconnect()} disabled={removing}>
-            {removing ? "Disconnecting…" : "Disconnect Slack"}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void sendTest()}
+              disabled={testing || removing || saving}
+            >
+              {testing ? "Sending…" : "Send test message"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void disconnect()}
+              disabled={removing || testing || saving}
+            >
+              {removing ? "Disconnecting…" : "Disconnect Slack"}
+            </Button>
+          </div>
         ) : null}
       </CardContent>
     </Card>
