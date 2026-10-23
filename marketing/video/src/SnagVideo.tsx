@@ -54,7 +54,7 @@ export function SnagVideo() {
   );
 }
 
-function Backdrop() {
+export function Backdrop() {
   const f = useCurrentFrame();
   const x = 30 + 10 * Math.sin(f / 90);
   const y = 20 + 8 * Math.cos(f / 110);
@@ -100,7 +100,7 @@ function TitleScene({ dur }: { dur: number }) {
   );
 }
 
-const TYPED = "Add a Monthly / Yearly toggle here. Yearly saves 20%.";
+export const TYPED = "Add a Monthly / Yearly toggle here. Yearly saves 20%.";
 
 type Key = { t: number; x: number; y: number };
 const CURSOR_PATH: Key[] = [

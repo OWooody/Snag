@@ -8,7 +8,9 @@
 
 <p align="center">
   <a href="https://www.npmjs.com/package/@snag-tech/react"><img src="https://img.shields.io/npm/v/@snag-tech/react?color=5B4CF5&label=%40snag-tech%2Freact" alt="npm version"></a>
-  <img src="https://img.shields.io/badge/iOS-SnagKit-5B4CF5?logo=swift&logoColor=white" alt="iOS SnagKit">
+  <a href="https://www.npmjs.com/package/@snag-tech/react"><img src="https://img.shields.io/npm/dm/@snag-tech/react?color=5B4CF5" alt="npm downloads"></a>
+  <img src="https://img.shields.io/badge/React-18%2B-1B1B24?logo=react" alt="React 18+">
+  <img src="https://img.shields.io/badge/iOS-15%2B-1B1B24?logo=swift&logoColor=white" alt="iOS 15+">
   <img src="https://img.shields.io/badge/agents-Cursor%20Cloud%20Agents-1B1B24" alt="Cursor Cloud Agents">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-1B1B24" alt="MIT license"></a>
 </p>
@@ -19,15 +21,47 @@
 
 Snag lets anyone at your company build in your product. A slim tab at the bottom of every development and staging screen, on web and iOS, lets people ask for what they want right where they want it: a new feature, a whole module, a copy change, or a bug fix. Snag captures the request together with a screenshot and app context, and a multi-tenant relay backend launches an AI coding agent (currently Cursor Cloud Agents) against the project's repository. Status, branch, and PR links show up back inside the app.
 
-## Not just bug reports
-
-Sales adds a CSV export to the leads table. Ops builds a refund approvals queue. Support puts the customer's plan on every ticket. Product ships an onboarding checklist module. QA still files the Safari date picker bug. Everyone uses the same tab, and every change lands as a reviewable PR.
+<table>
+  <tr>
+    <th width="50%">You point and ask</th>
+    <th width="50%">The agent ships it</th>
+  </tr>
+  <tr>
+    <td><img src="assets/before.png" alt="The pricing page with the Snag request panel open, asking for a Monthly / Yearly toggle"></td>
+    <td><img src="assets/after.png" alt="The same pricing page with the new Monthly / Yearly toggle, yearly prices 20% lower, and the request marked merged and live"></td>
+  </tr>
+</table>
 
 ## Tap. Describe. Shipped.
 
 | 1. Tap | 2. Describe | 3. Shipped |
 |---|---|---|
 | A slim tab sits on every internal and staging screen. Hover and it rises to **What's on your mind?** | Ask for a feature, a module, or a fix. Point at where it goes, mark up the screenshot, and say what you want. The route, recent steps and app context ride along. | A cloud agent plans the change and opens a PR. Check the preview from the request card and tap **Looks right**. |
+
+## What people build with Snag
+
+Snag started as a way to report bugs. Now people across the company use it to build features and whole modules.
+
+| Team | Asked for |
+|------|-----------|
+| Sales | A CSV export on the leads table |
+| Ops | A refund approvals queue |
+| Support | The customer's plan shown on every ticket |
+| Marketing | A landing page for a spring launch |
+| Product | An onboarding checklist module for new teams |
+| QA | A fix for the date picker on Safari |
+
+Everyone uses the same tab, and every change lands as a reviewable PR.
+
+## Why not just file a ticket?
+
+| | Ticket in Jira or Linear | Snag |
+|---|---|---|
+| Who can make a change | Engineers | Anyone with access to a staging build |
+| Context | Whatever the reporter writes | Screenshot, picked elements, route, recent steps and app context, captured automatically |
+| Time to a first version | Waits for a sprint | An agent starts right away |
+| Result | A ticket | A branch and a PR, with a preview to check |
+| Engineering control | Full | Full: PR-only by default, plus rules, plan review and branch protection |
 
 ## Quickstart
 
@@ -52,17 +86,25 @@ export function App() {
 }
 ```
 
-Leave the env vars unset in production and nothing renders. iOS apps use `Snag.start(...)` from SnagKit via Swift Package Manager. Full guides: [React](packages/react/README.md) and [iOS](packages/ios/README.md).
+> [!NOTE]
+> Leave the env vars unset in production and nothing renders, so it's safe to ship the code in every build. Admins can also turn a project off remotely.
+
+iOS apps use `Snag.start(...)` from SnagKit via Swift Package Manager. Full guides: [React](packages/react/README.md) and [iOS](packages/ios/README.md).
 
 ## What people get
 
 - **Select elements**: click the exact things you mean. Each pick carries a selector, text, attributes and, in React dev builds, the component and source file.
+- **Attachments**: add images, PDFs, Word and Excel files to a request.
 - **Pins**: numbered pins mark open requests on the page, so others see it's already asked for.
 - **How you got here**: a short, redacted trail of routes and clicks is attached to every request.
 - **Agent questions**: when the agent needs more, the card shows tappable answers.
 - **Plan review**: optionally approve the agent's plan in plain language, and preview an approximate version of a visual change on the live page first.
 - **Preview, then merge**: open the preview deployment, tap **Looks right**, and Snag merges once CI passes.
+- **Follow-ups**: continue any request as a new one, or close it yourself while it's still open.
 - **Live status**: the tab glows red when a request needs you, sweeps purple while one is running, and turns green when one is done.
+
+> [!TIP]
+> Add `data-testid` to key elements. Production builds strip React's debug info, and test IDs make element picks easy to trace back to code.
 
 ## How it works
 
@@ -79,6 +121,55 @@ flowchart LR
 2. On startup the SDK probes the relay once. The relay reports `{ enabled: true }` only when the project exists and is enabled — the server is the single visibility gate.
 3. On button press the SDK captures a screenshot (before the panel opens), the user types the request, and the SDK POSTs it to the relay.
 4. The relay stores the request, launches a cloud agent with the prompt, screenshot, and context, and receives status webhooks. The in-app request list shows status, branch, and PR links.
+
+## FAQ
+
+<details>
+<summary><b>Does Snag run in production?</b></summary>
+
+No. It is built for development, staging and internal builds. Leave the env vars unset in production and nothing renders. The relay is also the visibility gate: a disabled or deleted project hides the tab everywhere, with no deploy needed.
+</details>
+
+<details>
+<summary><b>Who reviews the code?</b></summary>
+
+Your engineers, by default. Every request becomes a PR. In execute mode, admins can set rules for what goes straight to implementation, what needs a developer to approve the plan first, and what needs a review before merge. Auto-merge only applies to verified, trusted requesters after CI passes, and branch protection on your repo still has the final say. See [docs/ADMIN.md](docs/ADMIN.md#execute-mode-rules-and-delivery).
+</details>
+
+<details>
+<summary><b>Which coding agents are supported?</b></summary>
+
+Cursor Cloud Agents today, on GitHub or Cursor Origin repositories. The agent layer sits behind a provider interface, so more agents can be added.
+</details>
+
+<details>
+<summary><b>Where does my data go?</b></summary>
+
+The request, screenshot and context go to your Snag relay, which passes them to the coding agent working on your repository. The relay stores only whether a screenshot was included, and its logs contain entity IDs, never prompts or screenshots. Keys and tokens are encrypted at rest. Details are in [SECURITY.md](SECURITY.md).
+</details>
+
+<details>
+<summary><b>Can I self-host it?</b></summary>
+
+Yes. The relay is a set of Supabase Edge Functions and the admin panel is a Next.js app. [docs/OPERATIONS.md](docs/OPERATIONS.md) covers setup, tenants and deployment.
+</details>
+
+<details>
+<summary><b>Do people need to know how to code?</b></summary>
+
+No. They describe what they want in plain language on the screen where it should happen. When the agent needs more detail, it asks them questions with tappable answers.
+</details>
+
+## Roadmap
+
+- [x] React SDK
+- [x] iOS SDK (SnagKit)
+- [x] Element picking, screenshot markup and attachments
+- [x] Execute mode: rules, plan review, preview then merge
+- [x] Insights: request volume, funnel, time to ship and hotspots
+- [ ] Slack notifications
+- [ ] Android SDK
+- [ ] More coding agent providers
 
 ## Documentation
 
@@ -117,9 +208,17 @@ Overlay UI review, with no relay: `npm run dev`, then open [http://localhost:517
 
 ## Security
 
-- The **publishable key** (`snag_pk_...`) is visible in the JS bundle / app binary — treat it like a Segment write key, not a secret.
-- **Origin allowlist** — per-project `allowed_origins`; empty denies all. Web clients are matched by `Origin`/`Referer`; native apps send their bundle ID as `x-snag-app-id` and are matched against `app://<bundle-id>` entries (managed in the admin panel).
-- **Rate limits** — per-IP, hourly, and daily caps enforced server-side before launching an agent.
-- **Visibility gating** is server-side: disable a project (`enabled = false`) or delete it and the button disappears everywhere.
-- **Cursor API keys** are encrypted at rest (AES-256-GCM) with `SNAG_KEY_ENCRYPTION_SECRET`.
-- **Screenshots** show real screen content — only enable Snag in environments with non-sensitive/seeded data.
+> [!WARNING]
+> Screenshots capture real screen content. Only enable Snag in environments with non-sensitive or seeded data.
+
+The publishable key (`snag_pk_...`) is public by design, like an analytics write key. Access is limited by a per-project origin allowlist, server-side rate limits and a remote kill switch, and secrets are encrypted at rest. Read [SECURITY.md](SECURITY.md) for the full picture and how to report a vulnerability.
+
+## Contributing
+
+Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup and checks, and the [Code of Conduct](CODE_OF_CONDUCT.md).
+
+## Star history
+
+<a href="https://star-history.com/#OWooody/Snag&Date">
+  <img src="https://api.star-history.com/svg?repos=OWooody/Snag&type=Date" alt="Star history chart" width="600">
+</a>
