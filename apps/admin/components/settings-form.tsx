@@ -123,14 +123,7 @@ export function SettingsForm({
       setOrgOutcome(organization.default_outcome ?? "review_before_execution");
       setOrgShadow(organization.policy_shadow_mode ?? false);
     }
-  }, [
-    organization?.agent_mode,
-    organization?.requester_followups_enabled,
-    organization?.requester_plan_review_enabled,
-    organization?.execute_delivery,
-    organization?.default_outcome,
-    organization?.policy_shadow_mode,
-  ]);
+  }, [organization]);
 
   useEffect(() => {
     setAllowedOriginsText(originsToTextarea(project.allowed_origins));

@@ -74,9 +74,9 @@ export function SlackNotificationsCard({
       <CardHeader>
         <CardTitle>Slack notifications</CardTitle>
         <CardDescription>
-          When auto-merge is on and a request needs a developer, Snag posts to a channel in this
-          organization's Slack workspace. Paste an incoming webhook. It is stored encrypted and
-          not shown again.
+          When auto-merge is on and a request needs a developer, Snag posts to a channel in the
+          Slack workspace for this organization. Paste an incoming webhook. It is stored encrypted
+          and not shown again.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
