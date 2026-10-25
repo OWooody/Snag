@@ -1,4 +1,5 @@
 import type { AgentMode } from "./agent-mode";
+import type { SlackNotificationAttempt } from "./slack";
 import type {
   ExecuteDelivery,
   PolicyOutcome,
@@ -133,6 +134,8 @@ export interface SnagRequestRow {
 
 /** Extra columns the admin request detail page loads for debugging. */
 export interface SnagRequestDetailRow extends SnagRequestRow {
+  /** Slack send decisions. Null on requests from before this was recorded. */
+  slack_notifications: SlackNotificationAttempt[] | null;
   agent_id: string | null;
   context: Record<string, unknown> | null;
   screenshot_included: boolean;

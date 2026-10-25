@@ -56,6 +56,8 @@ Migration `00015_impact_metrics.sql` → `snag_impact_metrics` and the service-r
 
 Migration `00018_org_slack_webhook.sql` → per-organization encrypted Slack incoming webhook.
 
+Migration `00019_request_slack_notifications.sql` → per-request Slack send outcome, shown on the request page.
+
 If policies already exist from a partial run:
 
 ```sh

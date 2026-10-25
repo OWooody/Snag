@@ -7,6 +7,8 @@ import {
   formatDeveloperWaitMessage,
   isSlackIncomingWebhook,
   shouldNotifyAutoMergeWait,
+  slackNotificationDecision,
+  slackNotificationSummary,
 } from "../dist/index.js";
 
 const WEBHOOK = "https://hooks.slack.com/services/T1/B2/abc";
@@ -111,6 +113,59 @@ test("PR review message includes the handoff and the pull request", () => {
   assert.match(text, /CI failed on the pull request\./);
   assert.match(text, /<https:\/\/github\.com\/acme\/web\/pull\/12\|Pull request>/);
   assert.match(text, /<https:\/\/preview\.example\/pr-12\|Preview>/);
+});
+
+test("records a skip when a developer wait is not an auto-merge send", () => {
+  assert.deepEqual(
+    slackNotificationDecision({
+      previousStatus: "running",
+      nextStatus: "awaiting_approval",
+      delivery: "pr_only",
+      shadow: false,
+      webhookConfigured: true,
+    }),
+    { action: "skip", reason: "not_auto_merge" },
+  );
+  assert.deepEqual(
+    slackNotificationDecision({
+      previousStatus: "running",
+      nextStatus: "awaiting_review",
+      delivery: "auto_merge",
+      shadow: true,
+      webhookConfigured: true,
+    }),
+    { action: "skip", reason: "shadow" },
+  );
+  assert.deepEqual(
+    slackNotificationDecision({
+      previousStatus: "running",
+      nextStatus: "awaiting_review",
+      delivery: "auto_merge",
+      shadow: false,
+      webhookConfigured: false,
+    }),
+    { action: "skip", reason: "no_webhook" },
+  );
+  assert.deepEqual(
+    slackNotificationDecision({
+      previousStatus: "awaiting_review",
+      nextStatus: "awaiting_review",
+      delivery: "auto_merge",
+      shadow: false,
+      webhookConfigured: true,
+    }),
+    { action: "ignore" },
+  );
+  assert.equal(
+    slackNotificationSummary({
+      at: "2026-10-24T16:00:00Z",
+      wait: "awaiting_review",
+      outcome: "failed",
+      reason: "slack_rejected",
+      http_status: 404,
+    }),
+    "Triggered for PR review. Slack rejected the message (HTTP 404).",
+  );
 });
 
 test("a missing allow rule is the reason when nothing else matched", () => {

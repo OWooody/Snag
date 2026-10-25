@@ -41,10 +41,11 @@ import {
   summaryHasRequesterQuestions,
 } from "./requester_questions.ts";
 import { isTrustedRequester } from "./requester_token.ts";
+import type { SlackNotificationAttempt } from "../../../packages/shared/src/slack.ts";
 import { notifyAutoMergeDeveloperWait } from "./slack_notify.ts";
 
 export const REQUEST_LIFECYCLE_COLUMNS =
-  "id, project_id, prompt, status, phase, phase_started_at, lifecycle_version, agent_id, agent_url, branch_name, pr_url, preview_url, handoff_reason, summary, plan, plan_summary, policy_decision, requester, requester_verified, requester_ip, approved_at, confirmed_at, merged_at, updated_at";
+  "id, project_id, prompt, status, phase, phase_started_at, lifecycle_version, agent_id, agent_url, branch_name, pr_url, preview_url, handoff_reason, summary, plan, plan_summary, policy_decision, requester, requester_verified, requester_ip, approved_at, confirmed_at, merged_at, updated_at, slack_notifications";
 
 export interface PolicyDecisionRecord {
   plan?: PolicyStageDecision;
@@ -78,6 +79,7 @@ export interface LifecycleRow {
   confirmed_at: string | null;
   merged_at: string | null;
   updated_at: string;
+  slack_notifications: SlackNotificationAttempt[] | null;
 }
 
 export interface AgentTerminalResult {
@@ -128,7 +130,7 @@ async function transition(
 ): Promise<boolean> {
   const previousStatus = row.status;
   const claimed = await claimTransition(ctx.service, row, update);
-  if (claimed) await notifyAutoMergeDeveloperWait(ctx.project, row, previousStatus);
+  if (claimed) await notifyAutoMergeDeveloperWait(ctx.service, ctx.project, row, previousStatus);
   return claimed;
 }
 

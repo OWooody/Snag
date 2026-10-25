@@ -133,6 +133,7 @@ function row(overrides: Partial<LifecycleRow> = {}): LifecycleRow {
     confirmed_at: null,
     merged_at: null,
     updated_at: "2026-10-01T11:50:00Z",
+    slack_notifications: null,
     ...overrides,
   };
 }

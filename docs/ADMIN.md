@@ -137,7 +137,7 @@ Rules marked **Check these paths** use common path guesses; adjust them to the r
 
 ### Review queue
 
-**Requests** has filters for **Plan approval** (`awaiting_approval`) and **PR review** (`awaiting_review`); the dashboard shows a banner when anything is waiting. Open a request to see the plan (files, risk, flags), each rule decision with the matched rules and reasons, and the agent summary.
+**Requests** has filters for **Plan approval** (`awaiting_approval`) and **PR review** (`awaiting_review`); the dashboard shows a banner when anything is waiting. Open a request to see the plan (files, risk, flags), each rule decision with the matched rules and reasons, the agent summary, and whether a Slack notification was triggered. The Slack card lists each plan-approval or PR-review attempt as not triggered, sent, or failed. Requests from before this was recorded say that nothing was recorded.
 
 - **Approve and implement** sends the agent back to implement the plan, with an optional note. Approved plans always end in **Review before merge**.
 - **Send back to plan** (note required) asks the agent to revise the plan without implementing anything. The revised plan goes through the rules again, so it may come back for approval or proceed on its own.

@@ -40,7 +40,7 @@ async function transition(
 ): Promise<boolean> {
   const previousStatus = row.status;
   const claimed = await claimTransition(service, row, update);
-  if (claimed) await notifyAutoMergeDeveloperWait(project, row, previousStatus);
+  if (claimed) await notifyAutoMergeDeveloperWait(service, project, row, previousStatus);
   return claimed;
 }
 

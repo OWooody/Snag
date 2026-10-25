@@ -164,3 +164,107 @@ export function formatDeveloperWaitMessage(input: {
 
   return lines.join("\n");
 }
+
+export type SlackNotificationWait = "awaiting_approval" | "awaiting_review";
+export type SlackNotificationOutcome = "sent" | "failed" | "skipped";
+export type SlackNotificationReason =
+  | "not_auto_merge"
+  | "shadow"
+  | "no_webhook"
+  | "decrypt_failed"
+  | "invalid_webhook"
+  | "slack_rejected"
+  | "unreachable";
+
+/** One Slack decision stored on a request. Never includes the webhook or the message. */
+export interface SlackNotificationAttempt {
+  at: string;
+  wait: SlackNotificationWait;
+  outcome: SlackNotificationOutcome;
+  reason?: SlackNotificationReason;
+  http_status?: number;
+}
+
+const SLACK_WAITS = new Set<SlackNotificationWait>(["awaiting_approval", "awaiting_review"]);
+const SLACK_OUTCOMES = new Set<SlackNotificationOutcome>(["sent", "failed", "skipped"]);
+const SLACK_REASONS = new Set<SlackNotificationReason>([
+  "not_auto_merge",
+  "shadow",
+  "no_webhook",
+  "decrypt_failed",
+  "invalid_webhook",
+  "slack_rejected",
+  "unreachable",
+]);
+
+/**
+ * Whether this status change should post, be recorded as skipped, or be ignored.
+ * Same-status updates are ignored so a retry does not add another row.
+ */
+export function slackNotificationDecision(input: {
+  previousStatus: string;
+  nextStatus: string;
+  delivery: ExecuteDelivery;
+  shadow: boolean;
+  webhookConfigured: boolean;
+}):
+  | { action: "ignore" }
+  | { action: "skip"; reason: SlackNotificationReason }
+  | { action: "send" } {
+  if (!SLACK_WAITS.has(input.nextStatus as SlackNotificationWait)) return { action: "ignore" };
+  if (input.previousStatus === input.nextStatus) return { action: "ignore" };
+  if (input.delivery !== "auto_merge") return { action: "skip", reason: "not_auto_merge" };
+  if (input.shadow) return { action: "skip", reason: "shadow" };
+  if (!input.webhookConfigured) return { action: "skip", reason: "no_webhook" };
+  return { action: "send" };
+}
+
+export function parseSlackNotifications(value: unknown): SlackNotificationAttempt[] {
+  if (!Array.isArray(value)) return [];
+  const attempts: SlackNotificationAttempt[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as Record<string, unknown>;
+    if (!SLACK_WAITS.has(row.wait as SlackNotificationWait)) continue;
+    if (!SLACK_OUTCOMES.has(row.outcome as SlackNotificationOutcome)) continue;
+    if (typeof row.at !== "string") continue;
+    const attempt: SlackNotificationAttempt = {
+      at: row.at,
+      wait: row.wait as SlackNotificationWait,
+      outcome: row.outcome as SlackNotificationOutcome,
+    };
+    if (SLACK_REASONS.has(row.reason as SlackNotificationReason)) {
+      attempt.reason = row.reason as SlackNotificationReason;
+    }
+    if (typeof row.http_status === "number" && Number.isFinite(row.http_status)) {
+      attempt.http_status = row.http_status;
+    }
+    attempts.push(attempt);
+  }
+  return attempts;
+}
+
+export function slackNotificationSummary(attempt: SlackNotificationAttempt): string {
+  const wait = attempt.wait === "awaiting_approval" ? "plan approval" : "PR review";
+  if (attempt.outcome === "sent") return `Triggered for ${wait}. Sent.`;
+  if (attempt.outcome === "skipped") {
+    if (attempt.reason === "shadow") {
+      return `Not triggered for ${wait}. Shadow mode is on.`;
+    }
+    if (attempt.reason === "no_webhook") {
+      return `Not triggered for ${wait}. No Slack webhook is connected.`;
+    }
+    return `Not triggered for ${wait}. Auto-merge is not on for this project.`;
+  }
+  if (attempt.reason === "decrypt_failed") {
+    return `Triggered for ${wait}. The saved webhook could not be read.`;
+  }
+  if (attempt.reason === "invalid_webhook") {
+    return `Triggered for ${wait}. The saved webhook is not a Slack incoming webhook.`;
+  }
+  if (attempt.reason === "unreachable") {
+    return `Triggered for ${wait}. Slack could not be reached.`;
+  }
+  const status = attempt.http_status ? ` (HTTP ${attempt.http_status})` : "";
+  return `Triggered for ${wait}. Slack rejected the message${status}.`;
+}

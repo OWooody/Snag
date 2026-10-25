@@ -1,8 +1,10 @@
 "use client";
 
 import {
+  parseSlackNotifications,
   PLAN_FLAG_LABELS,
   POLICY_OUTCOME_LABELS,
+  slackNotificationSummary,
   stripRequesterQuestionsJson,
   stripSnagPlanSection,
   type PolicyStageDecision,
@@ -37,6 +39,37 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+
+function SlackNotificationCard({
+  attempts,
+}: {
+  attempts: ReturnType<typeof parseSlackNotifications>;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Slack notification</CardTitle>
+        <CardDescription>
+          Whether Snag posted to Slack for this organization when the request needed a developer.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {attempts.length === 0 ? (
+          <p className="text-sm text-zinc-500">No Slack notification was recorded for this request.</p>
+        ) : (
+          <ul className="space-y-2 text-sm text-zinc-800">
+            {attempts.map((attempt, index) => (
+              <li key={`${attempt.at}-${index}`}>
+                <span className="text-zinc-500">{new Date(attempt.at).toLocaleString()}. </span>
+                {slackNotificationSummary(attempt)}
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 const ACTIVE_STATUSES: SnagRequestStatus[] = [
   "queued",
@@ -396,6 +429,8 @@ export function RequestDetail({
       ) : null}
 
       <PlanPreviewCard request={request} />
+
+      <SlackNotificationCard attempts={parseSlackNotifications(request.slack_notifications)} />
 
       {decision?.plan || decision?.diff ? (
         <Card>
