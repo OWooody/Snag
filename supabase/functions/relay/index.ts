@@ -213,30 +213,35 @@ function json(
 }
 
 Deno.serve(async (req) => {
+  // Echo the caller's origin until the project allowlist is known. Error
+  // responses must carry it too: without Access-Control-Allow-Origin the
+  // browser hides the body and fetch() rejects with "Failed to fetch".
+  let corsHeaders = buildPreflightCorsHeaders(req);
+
   if (req.method === "OPTIONS") {
     return new Response(null, {
       status: 204,
-      headers: buildPreflightCorsHeaders(req),
+      headers: corsHeaders,
     });
   }
 
   if (req.method !== "GET" && req.method !== "POST") {
-    return json({ error: "Method not allowed" }, 405);
+    return json({ error: "Method not allowed" }, 405, corsHeaders);
   }
 
   const publishableKey = req.headers.get("x-snag-key");
   if (!publishableKey) {
-    return json({ enabled: false }, 403);
+    return json({ enabled: false }, 403, corsHeaders);
   }
 
   try {
     const serviceClient = createServiceClient();
     const project = await resolveProject(serviceClient, publishableKey);
     if (!project) {
-      return json({ enabled: false }, 403);
+      return json({ enabled: false }, 403, corsHeaders);
     }
 
-    const corsHeaders = buildCorsHeaders(req, project.allowed_origins ?? []);
+    corsHeaders = buildCorsHeaders(req, project.allowed_origins ?? []);
     const originRejected = checkOriginAllowlist(
       req.headers.get("origin"),
       req.headers.get("referer"),
@@ -320,10 +325,10 @@ Deno.serve(async (req) => {
   } catch (error) {
     if (error instanceof z.ZodError) {
       console.warn("snag-relay rejected: validation");
-      return json({ error: "Invalid request" }, 422);
+      return json({ error: "Invalid request" }, 422, corsHeaders);
     }
     console.error("snag-relay error:", error);
-    return json({ error: "Internal server error" }, 500);
+    return json({ error: "Internal server error" }, 500, corsHeaders);
   }
 });
 
