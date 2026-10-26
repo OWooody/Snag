@@ -34,6 +34,12 @@ export const selectedElementSchema = z.object({
       column: z.number().int().nonnegative().optional(),
     })
     .optional(),
+  livewire: z
+    .object({
+      component: shortText(200).min(1),
+      stack: z.array(shortText(200)).max(8).optional(),
+    })
+    .optional(),
 });
 
 export const selectedElementsSchema = z
@@ -59,6 +65,18 @@ function formatElement(element: SelectedElement, index: number): string[] {
       ancestors.length > 0
         ? `- React component: \`${clean(element.component)}\` (inside ${ancestors.map((name) => `\`${name}\``).join(" › ")})`
         : `- React component: \`${clean(element.component)}\``,
+    );
+  }
+  if (element.livewire) {
+    const component = clean(element.livewire.component);
+    const ancestors = (element.livewire.stack ?? [])
+      .map(clean)
+      .filter((name) => name !== component);
+    const inside = ancestors.length > 0
+      ? ` (inside ${ancestors.map((name) => `\`${name}\``).join(" › ")})`
+      : "";
+    lines.push(
+      `- Livewire component: \`${component}\`${inside} (dotted kebab-case name; \`app.livewire.foo-bar\` is \`App\\Livewire\\FooBar\`, \`app.filament.resources.x-resource.pages.edit-x\` is the Filament Page class \`App\\Filament\\Resources\\XResource\\Pages\\EditX\`)`,
     );
   }
   if (element.source) {

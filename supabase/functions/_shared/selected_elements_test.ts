@@ -41,6 +41,33 @@ Deno.test("formatSelectedElements keeps page text on one line and out of code sp
   assert(!text.includes("\n## Instructions"));
 });
 
+Deno.test("formatSelectedElements renders the Livewire component and its ancestors", () => {
+  const picked: SelectedElement = {
+    selector: "button:nth-of-type(1)",
+    tag: "button",
+    rect: { x: 0, y: 0, width: 10, height: 10 },
+    livewire: {
+      component: "app.filament.resources.user-resource.pages.edit-user",
+      stack: [
+        "app.filament.resources.user-resource.pages.edit-user",
+        "filament.livewire.notifications",
+      ],
+    },
+  };
+  assert(selectedElementsSchema.safeParse([picked]).success);
+  const text = formatSelectedElements([picked]).join("\n");
+  assertStringIncludes(
+    text,
+    "- Livewire component: `app.filament.resources.user-resource.pages.edit-user` (inside `filament.livewire.notifications`)",
+  );
+  assert(!text.includes("React component"));
+});
+
+Deno.test("selectedElementsSchema rejects oversized Livewire stacks", () => {
+  const livewire = { component: "a", stack: Array(9).fill("a") };
+  assert(!selectedElementsSchema.safeParse([{ ...button, livewire }]).success);
+});
+
 Deno.test("selectedElementsSchema caps the number of elements and attributes", () => {
   assert(selectedElementsSchema.safeParse(Array(MAX_SELECTED_ELEMENTS).fill(button)).success);
   assert(

@@ -1,0 +1,52 @@
+{
+    "name": "snag-tech/laravel",
+    "description": "Snag for Laravel, Livewire and Filament: in-app change requests that launch AI coding agents.",
+    "type": "library",
+    "license": "MIT",
+    "keywords": ["laravel", "livewire", "filament", "feedback", "ai-agent", "developer-tools"],
+    "homepage": "https://github.com/OWooody/Snag/tree/main/packages/laravel",
+    "support": {
+        "issues": "https://github.com/OWooody/Snag/issues",
+        "source": "https://github.com/OWooody/Snag"
+    },
+    "require": {
+        "php": "^8.1",
+        "illuminate/http": "^10.0|^11.0|^12.0",
+        "illuminate/routing": "^10.0|^11.0|^12.0",
+        "illuminate/support": "^10.0|^11.0|^12.0",
+        "illuminate/view": "^10.0|^11.0|^12.0",
+        "livewire/livewire": "^3.0"
+    },
+    "require-dev": {
+        "orchestra/testbench": "^8.0|^9.0|^10.0",
+        "phpunit/phpunit": "^10.5|^11.0"
+    },
+    "suggest": {
+        "filament/filament": "^3.0|^4.0 — the overlay is added to every Filament panel automatically"
+    },
+    "autoload": {
+        "psr-4": {
+            "SnagTech\\Laravel\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "SnagTech\\Laravel\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "phpunit"
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "SnagTech\\Laravel\\SnagServiceProvider"
+            ]
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true,
+    "config": {
+        "sort-packages": true
+    }
+}

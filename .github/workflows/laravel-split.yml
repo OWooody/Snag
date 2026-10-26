@@ -1,0 +1,38 @@
+name: Split Laravel package
+
+# Mirrors packages/laravel to a read-only repository that Packagist tracks.
+# Tag the monorepo with laravel-vX.Y.Z to release snag-tech/laravel vX.Y.Z.
+# Requires a SPLIT_TOKEN secret with push access to the target repository.
+
+on:
+  push:
+    branches: [main]
+    paths: ["packages/laravel/**"]
+    tags: ["laravel-v*"]
+
+jobs:
+  split:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Release tag
+        id: tag
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/laravel-v* ]]; then
+            echo "tag=${GITHUB_REF#refs/tags/laravel-}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: symplify/monorepo-split-github-action@v2.3.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.SPLIT_TOKEN }}
+        with:
+          package_directory: packages/laravel
+          repository_organization: OWooody
+          repository_name: snag-laravel
+          branch: main
+          tag: ${{ steps.tag.outputs.tag }}
+          user_name: github-actions[bot]
+          user_email: 41898282+github-actions[bot]@users.noreply.github.com

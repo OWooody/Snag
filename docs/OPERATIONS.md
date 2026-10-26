@@ -465,3 +465,12 @@ WHERE slug = 'acme-web';
 ```
 
 **Existing tenants** with an empty `allowed_origins` array will stop working after relay deploy until origins are set (admin Settings or SQL above).
+
+### Laravel, Filament and Livewire hosts
+
+The [Laravel package](../packages/laravel/README.md) runs the same web overlay as the React SDK, so a Laravel project is set up like any web project:
+
+- Add each host the app runs on to `allowed_origins`, for example `http://localhost:8000` for `php artisan serve`, `https://myapp.test` for Herd or Valet, and the staging URL. A Filament panel shares its app's origin, so `https://staging.example.com/admin` needs only `https://staging.example.com`.
+- Give the host team the relay URL and `snag_pk_...` key for `SNAG_ENDPOINT` and `SNAG_PROJECT_KEY`.
+- Requests from Laravel carry `"framework": "laravel"` in their screen context, plus the route, controller action, and Filament panel, Resource and Page classes. Picked elements carry their Livewire component. Both reach the agent prompt with no relay configuration.
+- Signed requester tokens are not issued by the package yet, so requests from Laravel apps are unverified and never auto-merge in execute mode.

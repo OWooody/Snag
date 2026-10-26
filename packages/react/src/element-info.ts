@@ -270,6 +270,56 @@ function readReactInfo(
   }
 }
 
+const MAX_LIVEWIRE_STACK = 8;
+const MAX_LIVEWIRE_NAME_LENGTH = 200;
+
+interface LivewireGlobal {
+  find?: (id: string) => { name?: unknown } | undefined;
+}
+
+function livewireName(component: Element): string | null {
+  const snapshot = component.getAttribute("wire:snapshot");
+  if (snapshot) {
+    try {
+      const name = (JSON.parse(snapshot) as { memo?: { name?: unknown } }).memo?.name;
+      if (typeof name === "string" && name) return name;
+    } catch {
+      // Malformed snapshot; try the runtime below.
+    }
+  }
+  const id = component.getAttribute("wire:id");
+  const livewire = (globalThis as { Livewire?: LivewireGlobal }).Livewire;
+  if (id && typeof livewire?.find === "function") {
+    try {
+      const name = livewire.find(id)?.name;
+      if (typeof name === "string" && name) return name;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/** Livewire components containing `element`, nearest first. */
+export function readLivewireInfo(element: Element): Pick<SnagElement, "livewire"> {
+  const stack: string[] = [];
+  let node: Element | null = element.closest("[wire\\:id]");
+  while (node && stack.length < MAX_LIVEWIRE_STACK) {
+    const name = livewireName(node);
+    if (name && stack[stack.length - 1] !== name) {
+      stack.push(truncate(name, MAX_LIVEWIRE_NAME_LENGTH));
+    }
+    node = node.parentElement?.closest("[wire\\:id]") ?? null;
+  }
+  if (stack.length === 0) return {};
+  return {
+    livewire: {
+      component: stack[0],
+      stack: stack.length > 1 ? stack : undefined,
+    },
+  };
+}
+
 /** Snapshot everything an agent needs to find `element` in the codebase. */
 export function describeElement(element: Element): SnagElement {
   const rect = element.getBoundingClientRect();
@@ -285,13 +335,20 @@ export function describeElement(element: Element): SnagElement {
       height: Math.round(rect.height),
     },
     ...readReactInfo(element),
+    ...readLivewireInfo(element),
   };
 }
 
 /** One-line label for chips and the picker tooltip. */
-export function elementLabel(element: Pick<SnagElement, "tag" | "text" | "component">): string {
+export function elementLabel(
+  element: Pick<SnagElement, "tag" | "text" | "component" | "livewire">,
+): string {
   const parts = [`<${element.tag}>`];
   if (element.text) parts.push(`"${truncate(element.text, 32)}"`);
-  if (element.component) parts.push(`· ${element.component}`);
+  if (element.component) {
+    parts.push(`· ${element.component}`);
+  } else if (element.livewire) {
+    parts.push(`· ${element.livewire.component.split(".").pop()}`);
+  }
   return parts.join(" ");
 }

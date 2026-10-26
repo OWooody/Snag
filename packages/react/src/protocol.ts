@@ -71,6 +71,11 @@ export interface SnagElement {
   componentStack?: string[];
   /** Where the element's JSX was written. Dev builds only; line may be approximate. */
   source?: { file: string; line?: number; column?: number };
+  /**
+   * Nearest Livewire component (dotted name, e.g. `app.filament.resources.user-resource.pages.edit-user`)
+   * and its Livewire ancestors, nearest first.
+   */
+  livewire?: { component: string; stack?: string[] };
 }
 
 /** Where on the page a request was filed, for the SDK's page markers. */

@@ -1,0 +1,68 @@
+name: Laravel package
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/laravel/**"
+      - "packages/react/src/**"
+      - "packages/react/tsup.config.ts"
+      - "scripts/sync-laravel-bundle.mjs"
+      - ".github/workflows/laravel.yml"
+  pull_request:
+    paths:
+      - "packages/laravel/**"
+      - "packages/react/src/**"
+      - "packages/react/tsup.config.ts"
+      - "scripts/sync-laravel-bundle.mjs"
+      - ".github/workflows/laravel.yml"
+
+jobs:
+  bundle:
+    name: Bundled script is up to date
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build -w @snag/shared && npm run build -w @snag-tech/react
+      - run: node scripts/sync-laravel-bundle.mjs --check
+
+  test:
+    name: PHP ${{ matrix.php }} / Laravel ${{ matrix.laravel }} / ${{ matrix.filament || 'no Filament' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/laravel
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { php: "8.2", laravel: "10.*", testbench: "8.*", phpunit: "10.5.*", filament: "" }
+          - { php: "8.2", laravel: "10.*", testbench: "8.*", phpunit: "10.5.*", filament: "3.*" }
+          - { php: "8.3", laravel: "11.*", testbench: "9.*", phpunit: "11.*", filament: "3.*" }
+          - { php: "8.3", laravel: "11.*", testbench: "9.*", phpunit: "11.*", filament: "4.*" }
+          - { php: "8.4", laravel: "12.*", testbench: "10.*", phpunit: "11.*", filament: "4.*" }
+          - { php: "8.4", laravel: "12.*", testbench: "10.*", phpunit: "11.*", filament: "" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: intl, mbstring, sqlite3, pdo_sqlite
+          coverage: none
+      # Every Laravel 10 release carries a security advisory now that it is end of life.
+      - if: matrix.laravel == '10.*'
+        run: composer config policy.advisories.block false
+      - name: Install dependencies
+        run: |
+          composer require --no-update --dev \
+            "laravel/framework:${{ matrix.laravel }}" \
+            "orchestra/testbench:${{ matrix.testbench }}" \
+            "phpunit/phpunit:${{ matrix.phpunit }}" \
+            ${{ matrix.filament && format('"filament/filament:{0}"', matrix.filament) || '' }}
+          composer update --prefer-dist --no-interaction --no-progress -W
+      - run: vendor/bin/phpunit

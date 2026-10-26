@@ -7,6 +7,7 @@
   ],
   "scripts": {
     "build": "npm run build -w @snag/shared && npm run build -w @snag-tech/react",
+    "build:laravel": "npm run build -w @snag-tech/react && node scripts/sync-laravel-bundle.mjs",
     "dev": "npm run dev -w @snag/demo",
     "dev:admin": "npm run dev -w @snag/admin",
     "typecheck": "npm run typecheck -w @snag/shared && npm run typecheck -w @snag-tech/react && npm run typecheck -w @snag/demo && npm run typecheck -w @snag/admin"

@@ -131,6 +131,7 @@ export function startFlowTrail(): () => void {
     if (active) recordNavigate(window.location.pathname);
   };
   window.addEventListener("popstate", onPop);
+  document.addEventListener("livewire:navigated", onPop);
   document.addEventListener("click", onClick, true);
   recordNavigate(window.location.pathname);
 
@@ -145,6 +146,7 @@ export function startFlowTrail(): () => void {
       window.history.replaceState = originalReplace;
     }
     window.removeEventListener("popstate", onPop);
+    document.removeEventListener("livewire:navigated", onPop);
     document.removeEventListener("click", onClick, true);
     steps = [];
     paused = false;

@@ -37,12 +37,17 @@ function doneRequestIds(rows: SnagRequestRow[]): string[] {
     .map((row) => row.id);
 }
 
+export interface SnagOverlayProps {
+  /** Element the overlay portals into. Defaults to `document.body`. */
+  container?: Element;
+}
+
 /**
  * Mount once at the app root. Renders nothing until `initSnag` has run AND
  * the relay probe confirms the backend is enabled — the server is the single
  * visibility gate, so this is safe to mount unconditionally in every build.
  */
-export function SnagOverlay() {
+export function SnagOverlay({ container }: SnagOverlayProps) {
   const [initialized, setInitialized] = useState(() => getSnagConfig() != null);
   const [enabled, setEnabled] = useState(false);
   const [followupsEnabled, setFollowupsEnabled] = useState(false);
@@ -284,6 +289,6 @@ export function SnagOverlay() {
         />
       ) : null}
     </div>,
-    document.body,
+    container ?? document.body,
   );
 }

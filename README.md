@@ -97,7 +97,11 @@ export function App() {
 > [!NOTE]
 > Leave the env vars unset in production and nothing renders, so it's safe to ship the code in every build. Admins can also turn a project off remotely.
 
-iOS apps use `Snag.start(...)` from SnagKit via Swift Package Manager. Full guides: [React](packages/react/README.md) and [iOS](packages/ios/README.md).
+iOS apps use `Snag.start(...)` from SnagKit via Swift Package Manager.
+
+Laravel apps run `composer require snag-tech/laravel` and set `SNAG_ENDPOINT` and `SNAG_PROJECT_KEY`. Filament 3 and 4 panels get the tab automatically; other Livewire or Blade layouts add `@snag` before `</body>`.
+
+Full guides: [React](packages/react/README.md), [iOS](packages/ios/README.md) and [Laravel](packages/laravel/README.md).
 
 ## What people get
 
@@ -172,6 +176,7 @@ No. They describe what they want in plain language on the screen where it should
 
 - [x] React SDK
 - [x] iOS SDK (SnagKit)
+- [x] Laravel package (Filament and Livewire)
 - [x] Element picking, screenshot markup and attachments
 - [x] Execute mode: rules, plan review, preview then merge
 - [x] Insights: request volume, funnel, time to ship and hotspots
@@ -185,6 +190,7 @@ No. They describe what they want in plain language on the screen where it should
 |-----|-----------|
 | **Host app team** (integrating Snag into their React app) | [packages/react/README.md](packages/react/README.md) |
 | **Host app team** (integrating Snag into their iOS app) | [packages/ios/README.md](packages/ios/README.md) |
+| **Host app team** (integrating Snag into a Laravel, Filament or Livewire app) | [packages/laravel/README.md](packages/laravel/README.md) |
 | **Snag admin** (backend, tenants, deploy) | [docs/OPERATIONS.md](docs/OPERATIONS.md) |
 | **Admin panel** (web UI for operators and companies) | [docs/ADMIN.md](docs/ADMIN.md) |
 
@@ -194,6 +200,7 @@ No. They describe what they want in plain language on the screen where it should
 snag/
   packages/react/     # @snag-tech/react — web SDK
   packages/ios/       # SnagKit — native iOS SDK (manifest at root Package.swift)
+  packages/laravel/   # snag-tech/laravel — Composer package for Laravel, Filament and Livewire
   packages/shared/    # @snag/shared — types, schemas, crypto
   apps/demo/          # Vite playground
   apps/admin/         # Next.js admin panel
