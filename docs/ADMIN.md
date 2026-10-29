@@ -107,8 +107,8 @@ The same card appears on **Platform → Tenants → (tenant)** for platform admi
 
 **Rules** in the sidebar lists custom rules for the active project (project-scoped and organization-wide) and the locked built-in rules.
 
-- **Allow** rules lift a matching request to **Execute now**. **Escalate** rules force **Review before merge** or **Review before execution**.
-- A rule matches when **all** of its conditions match: changed paths (any/all match globs), file or line counts, the agent's reported risk or flags, and requester verification/trust.
+- **Allow** rules lift a matching request to **Execute now**. **Escalate** rules force **Review before merge** or **Review before execution**. **Block** rules reject the request: the agent does not implement the plan, and a pull request that touches the matching files is not merged.
+- A rule matches when **all** of its conditions match: changed paths (any/all match globs), file or line counts, the agent's reported risk or flags, and requester verification/trust. For a block rule, use **Any changed file matches** and list the paths that must stay unchanged. A block rule with a malformed condition matches, so it fails closed.
 - When several rules match, the strictest outcome wins. Built-in escalations always apply.
 - **Shadow** on a rule records what it would have done without enforcing it — the request detail page shows shadow matches separately.
 - Rules are checked against the agent's plan and again against the PR diff before merge; file and line conditions use the real diff at the second check.

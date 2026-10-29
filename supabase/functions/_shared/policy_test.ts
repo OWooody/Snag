@@ -1,5 +1,6 @@
 import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
+  blockRejectionNote,
   type ChangedFile,
   evaluatePolicy,
   matchGlob,
@@ -71,6 +72,10 @@ Deno.test("strictestOutcome picks the most restrictive", () => {
     strictestOutcome("execute", "review_before_execution", "review_before_merge"),
     "review_before_execution",
   );
+  assertEquals(
+    strictestOutcome("review_before_execution", "blocked"),
+    "blocked",
+  );
 });
 
 Deno.test("no rules falls back to the default outcome", () => {
@@ -134,6 +139,74 @@ Deno.test("missing plan always waits for a developer", () => {
   );
   assertEquals(decision.outcome, "review_before_execution");
   assert(decision.matched.some((rule) => rule.id === "builtin:plan_missing"));
+});
+
+const blockAdmin: PolicyRule = {
+  id: "r-block",
+  name: "Block admin user changes",
+  enabled: true,
+  shadow: false,
+  kind: "block",
+  outcome: "blocked",
+  condition: { all: [{ type: "path_glob_any", globs: ["**/Admin/**", "app/Models/User.php"] }] },
+};
+
+Deno.test("block rule rejects when any protected file changes", () => {
+  const decision = evaluatePolicy(
+    input({
+      files: files("app/Models/User.php", "src/copy/home.json"),
+      rules: [allowCopy, blockAdmin],
+      defaultOutcome: "execute",
+    }),
+  );
+  assertEquals(decision.outcome, "blocked");
+  assertEquals(
+    blockRejectionNote(decision.matched),
+    "Blocked by Block admin user changes. These files must not be modified.",
+  );
+});
+
+Deno.test("block rule does not match unrelated files", () => {
+  const decision = evaluatePolicy(
+    input({ rules: [blockAdmin], defaultOutcome: "execute" }),
+  );
+  assertEquals(decision.outcome, "execute");
+});
+
+Deno.test("shadow block is recorded but not enforced", () => {
+  const decision = evaluatePolicy(
+    input({
+      files: files("app/Filament/Admin/UserResource.php"),
+      rules: [{ ...blockAdmin, shadow: true }],
+      defaultOutcome: "execute",
+    }),
+  );
+  assertEquals(decision.outcome, "execute");
+  assertEquals(decision.shadow_outcome, "blocked");
+});
+
+Deno.test("malformed block condition fails closed", () => {
+  const decision = evaluatePolicy(
+    input({
+      rules: [{ ...blockAdmin, condition: { all: [{ type: "nope" }] } }],
+      defaultOutcome: "execute",
+    }),
+  );
+  assertEquals(decision.outcome, "blocked");
+});
+
+Deno.test("block stays blocked at the diff stage", () => {
+  const decision = evaluatePolicy(
+    input({
+      stage: "diff",
+      files: files("app/Models/User.php"),
+      linesChanged: 4,
+      rules: [blockAdmin],
+      defaultOutcome: "execute",
+      delivery: "auto_merge",
+    }),
+  );
+  assertEquals(decision.outcome, "blocked");
 });
 
 Deno.test("malformed escalate condition fails closed, malformed allow does not match", () => {

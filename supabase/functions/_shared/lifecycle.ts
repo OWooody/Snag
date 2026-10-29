@@ -2,9 +2,9 @@
  * Execute-mode request lifecycle. Called when an agent run reaches a terminal
  * state (from the Cursor webhook or the relay's polling fallback).
  *
- *   planning      → needs_input | awaiting_requester | awaiting_approval | implementing
+ *   planning      → needs_input | awaiting_requester | awaiting_approval | rejected | implementing
  *   awaiting_requester → (requester approves) awaiting_approval | implementing
- *   implementing  → needs_input | awaiting_review | finished | delivering
+ *   implementing  → needs_input | awaiting_review | finished | delivering | rejected
  *   delivering    → handled by the delivery worker
  *
  * Every transition goes through claimTransition(), an optimistic lock on
@@ -24,6 +24,7 @@ import {
 } from "./forge.ts";
 import { parseSnagPlan, type SnagPlan } from "./plan_block.ts";
 import {
+  blockRejectionNote,
   evaluatePolicy,
   type PolicyOutcome,
   type PolicyStageDecision,
@@ -286,6 +287,17 @@ async function evaluatePlan(
     policy_decision: record,
   };
 
+  if (decision.outcome === "blocked") {
+    await transition(ctx, row, {
+      ...base,
+      ...planFields,
+      status: "rejected",
+      error: null,
+      rejection_note: blockRejectionNote(decision.matched),
+    });
+    return;
+  }
+
   if (decision.outcome === "review_before_execution") {
     await transition(ctx, row, {
       ...base,
@@ -388,7 +400,15 @@ async function finishImplementation(
       final_outcome: final,
     };
 
-    if (final !== "execute") {
+    if (final === "blocked") {
+      await transition(ctx, row, {
+        ...base,
+        status: "rejected",
+        error: null,
+        rejection_note: blockRejectionNote(diffDecision.matched),
+        policy_decision: nextRecord,
+      });
+    } else if (final !== "execute") {
       await transition(ctx, row, {
         ...base,
         status: "awaiting_review",

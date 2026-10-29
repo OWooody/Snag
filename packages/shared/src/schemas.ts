@@ -178,6 +178,10 @@ export const policyRuleInputSchema = z.discriminatedUnion("kind", [
     kind: z.literal("escalate"),
     outcome: z.enum(["review_before_merge", "review_before_execution"]),
   }),
+  policyRuleBaseSchema.extend({
+    kind: z.literal("block"),
+    outcome: z.literal("blocked"),
+  }),
 ]);
 
 export const policyRuleCreateSchema = z.intersection(
