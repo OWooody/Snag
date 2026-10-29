@@ -4,13 +4,18 @@
  * POLICY_OUTCOME_LABELS and PLAN_FLAG_LABELS in execute-policy.ts.
  */
 
-type PolicyOutcome = "execute" | "review_before_merge" | "review_before_execution";
+type PolicyOutcome =
+  | "execute"
+  | "review_before_merge"
+  | "review_before_execution"
+  | "blocked";
 type ExecuteDelivery = "pr_only" | "preview_confirm" | "auto_merge";
 
 const OUTCOME_LABELS: Record<PolicyOutcome, string> = {
   execute: "Execute now",
   review_before_merge: "Review before merge",
   review_before_execution: "Review before execution",
+  blocked: "Do not modify these files",
 };
 
 const FLAG_LABELS: Record<string, string> = {
@@ -46,7 +51,7 @@ export function isSlackIncomingWebhook(value: string): boolean {
 
 export interface SlackRuleMatch {
   name: string;
-  kind: "allow" | "escalate" | "builtin";
+  kind: "allow" | "escalate" | "block" | "builtin";
   outcome: PolicyOutcome;
   shadow: boolean;
 }

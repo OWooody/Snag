@@ -14,13 +14,15 @@ export type ExecuteDelivery = "pr_only" | "preview_confirm" | "auto_merge";
 export type PolicyOutcome =
   | "execute"
   | "review_before_merge"
-  | "review_before_execution";
+  | "review_before_execution"
+  | "blocked";
 export type PolicyStage = "plan" | "diff";
 
 const OUTCOME_ORDER: PolicyOutcome[] = [
   "execute",
   "review_before_merge",
   "review_before_execution",
+  "blocked",
 ];
 
 const RISK_ORDER: PlanRisk[] = ["low", "medium", "high"];
@@ -40,7 +42,7 @@ export interface PolicyRule {
   name: string;
   enabled: boolean;
   shadow: boolean;
-  kind: "allow" | "escalate";
+  kind: "allow" | "escalate" | "block";
   outcome: PolicyOutcome;
   condition: unknown;
 }
@@ -82,7 +84,7 @@ export interface PolicyInput {
 export interface PolicyMatchedRule {
   id: string;
   name: string;
-  kind: "allow" | "escalate" | "builtin";
+  kind: "allow" | "escalate" | "block" | "builtin";
   outcome: PolicyOutcome;
   shadow: boolean;
 }
@@ -338,20 +340,29 @@ function evaluateCondition(
 
 /**
  * A rule matches when every condition matches. Malformed conditions fail
- * closed: an escalate rule with an unreadable condition matches, an allow rule
- * does not.
+ * closed: an escalate or block rule with an unreadable condition matches, an
+ * allow rule does not.
  */
 export function ruleMatches(rule: PolicyRule, input: PolicyInput): boolean {
   const all = (rule.condition as { all?: unknown } | null)?.all;
   if (!Array.isArray(all) || all.length === 0) {
-    return rule.kind === "escalate";
+    return rule.kind !== "allow";
   }
   for (const condition of all) {
     const result = evaluateCondition(condition, input);
-    if (result === "invalid") return rule.kind === "escalate";
+    if (result === "invalid") return rule.kind !== "allow";
     if (!result) return false;
   }
   return true;
+}
+
+/** Shown to the requester when a block rule rejects the request. */
+export function blockRejectionNote(matched: PolicyMatchedRule[]): string {
+  const names = matched
+    .filter((rule) => !rule.shadow && rule.kind === "block")
+    .map((rule) => rule.name);
+  const who = names.length > 0 ? names.join(", ") : "a block rule";
+  return `Blocked by ${who}. These files must not be modified.`.slice(0, 2000);
 }
 
 function builtinMatches(input: PolicyInput): PolicyMatchedRule[] {

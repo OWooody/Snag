@@ -86,6 +86,10 @@ test("strictestOutcome orders outcomes", () => {
     strictestOutcome("review_before_execution", "review_before_merge"),
     "review_before_execution",
   );
+  assert.equal(
+    strictestOutcome("review_before_execution", "blocked"),
+    "blocked",
+  );
 });
 
 test("delivery and default outcome inherit project, then org, then default", () => {
@@ -121,6 +125,22 @@ test("policy rule schema ties kind to outcome", () => {
     condition: { all: [{ type: "requester_unverified" }] },
   });
   assert.equal(escalateExecute.success, false);
+
+  const block = policyRuleCreateSchema.safeParse({
+    name: "Block admin user changes",
+    kind: "block",
+    outcome: "blocked",
+    condition: { all: [{ type: "path_glob_any", globs: ["**/Admin/**"] }] },
+  });
+  assert.equal(block.success, true);
+
+  const badBlock = policyRuleCreateSchema.safeParse({
+    name: "Bad",
+    kind: "block",
+    outcome: "execute",
+    condition: { all: [{ type: "path_glob_any", globs: ["**"] }] },
+  });
+  assert.equal(badBlock.success, false);
 });
 
 test("simple postures are the two agreed combinations", () => {

@@ -26,6 +26,7 @@ import {
   type LifecycleRow,
   type PolicyDecisionRecord,
 } from "./lifecycle.ts";
+import { blockRejectionNote } from "./policy.ts";
 import { type ForgeConnection, type ProjectRow, projectForge } from "./projects.ts";
 import { notifyAutoMergeDeveloperWait } from "./slack_notify.ts";
 
@@ -156,6 +157,16 @@ async function recheckNewCommits(
     pr.headSha,
   );
   const nextRecord: PolicyDecisionRecord = { ...record, diff: decision, final_outcome: final };
+  if (final === "blocked") {
+    await transition(service, project, row, {
+      status: "rejected",
+      error: null,
+      rejection_note: blockRejectionNote(decision.matched),
+      policy_decision: nextRecord,
+      handoff_reason: null,
+    });
+    return false;
+  }
   if (final !== "execute") {
     await transition(service, project, row, {
       status: "awaiting_review",

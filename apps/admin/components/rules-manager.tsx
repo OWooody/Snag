@@ -40,7 +40,20 @@ import { Switch } from "@/components/ui/switch";
 
 const CONDITION_TYPES = Object.keys(POLICY_CONDITION_LABELS) as PolicyConditionType[];
 
-type EscalationOutcome = Exclude<PolicyOutcome, "execute">;
+type EscalationOutcome = Exclude<PolicyOutcome, "execute" | "blocked">;
+
+function ruleKindLabel(kind: PolicyRuleKind | "builtin"): string {
+  if (kind === "allow") return "Allow";
+  if (kind === "block") return "Block";
+  if (kind === "builtin") return "Built-in";
+  return "Escalate";
+}
+
+function outcomeBadgeVariant(outcome: PolicyOutcome): "success" | "warning" | "destructive" {
+  if (outcome === "execute") return "success";
+  if (outcome === "blocked") return "destructive";
+  return "warning";
+}
 
 export function describeCondition(condition: PolicyCondition): string {
   const label = POLICY_CONDITION_LABELS[condition.type];
@@ -98,11 +111,13 @@ export function ConditionEditor({
   onChange,
   onRemove,
   canRemove,
+  pathPlaceholder = "src/components/**, *.css",
 }: {
   condition: PolicyCondition;
   onChange: (condition: PolicyCondition) => void;
   onRemove: () => void;
   canRemove: boolean;
+  pathPlaceholder?: string;
 }) {
   const [globText, setGlobText] = useState(
     "globs" in condition ? condition.globs.join(", ") : "",
@@ -128,7 +143,7 @@ export function ConditionEditor({
       <div className="flex-1">
         {condition.type === "path_glob_any" || condition.type === "path_glob_all" ? (
           <Input
-            placeholder="src/components/**, *.css"
+            placeholder={pathPlaceholder}
             value={globText}
             onChange={(e) => {
               setGlobText(e.target.value);
@@ -251,7 +266,7 @@ function NewRuleForm({ projectSlug, onCreated }: { projectSlug: string; onCreate
       body: JSON.stringify({
         name,
         kind,
-        outcome: kind === "allow" ? "execute" : escalation,
+        outcome: kind === "allow" ? "execute" : kind === "block" ? "blocked" : escalation,
         scope,
         enabled: true,
         shadow,
@@ -302,10 +317,19 @@ function NewRuleForm({ projectSlug, onCreated }: { projectSlug: string; onCreate
           <select
             id="rule_kind"
             className={selectClassName}
-            value={kind === "allow" ? "allow" : escalation}
+            value={kind === "allow" ? "allow" : kind === "block" ? "blocked" : escalation}
             onChange={(e) => {
               if (e.target.value === "allow") {
                 setKind("allow");
+              } else if (e.target.value === "blocked") {
+                setKind("block");
+                setConditions((current) =>
+                  current.length === 1 &&
+                  current[0].type === "path_glob_all" &&
+                  current[0].globs.length === 0
+                    ? [defaultCondition("path_glob_any")]
+                    : current,
+                );
               } else {
                 setKind("escalate");
                 setEscalation(e.target.value as EscalationOutcome);
@@ -319,6 +343,7 @@ function NewRuleForm({ projectSlug, onCreated }: { projectSlug: string; onCreate
             <option value="review_before_execution">
               Escalate: {POLICY_OUTCOME_LABELS.review_before_execution}
             </option>
+            <option value="blocked">Block: {POLICY_OUTCOME_LABELS.blocked}</option>
           </select>
         </div>
         <div className="flex items-center justify-between rounded-lg border border-zinc-200 p-3">
@@ -331,11 +356,20 @@ function NewRuleForm({ projectSlug, onCreated }: { projectSlug: string; onCreate
       </div>
       <div className="space-y-2">
         <Label>Conditions (all must match)</Label>
+        {kind === "block" ? (
+          <p className="text-xs text-zinc-500">
+            If every condition matches, Snag rejects the request and does not modify those files.
+            List the protected paths with “Any changed file matches”.
+          </p>
+        ) : null}
         {conditions.map((condition, index) => (
           <ConditionEditor
             key={conditionKeys[index]}
             condition={condition}
             canRemove={conditions.length > 1}
+            pathPlaceholder={
+              kind === "block" ? "app/Models/User.php, **/Admin/**" : undefined
+            }
             onChange={(next) =>
               setConditions(conditions.map((c, i) => (i === index ? next : c)))
             }
@@ -407,8 +441,8 @@ function RuleRow({
     <li className="space-y-2 border-b border-zinc-100 py-4 last:border-0">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-medium">{rule.name}</span>
-        <Badge variant={rule.kind === "allow" ? "success" : "warning"}>
-          {rule.kind === "allow" ? "Allow" : "Escalate"} → {POLICY_OUTCOME_LABELS[rule.outcome]}
+        <Badge variant={outcomeBadgeVariant(rule.outcome)}>
+          {ruleKindLabel(rule.kind)} → {POLICY_OUTCOME_LABELS[rule.outcome]}
         </Badge>
         <Badge variant="secondary">{rule.project_id ? "Project" : "Organization"}</Badge>
         {rule.shadow ? <Badge variant="outline">Shadow</Badge> : null}
@@ -496,7 +530,8 @@ export function RulesManager({
           <CardTitle>Custom rules</CardTitle>
           <CardDescription>
             Allow rules let matching requests execute without a developer. Escalation rules force
-            a review. When several rules match, the strictest outcome wins.
+            a review. Block rules reject the request so the matching files are not modified. When
+            several rules match, the strictest outcome wins.
           </CardDescription>
         </CardHeader>
         <CardContent>

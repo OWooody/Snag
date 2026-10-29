@@ -95,7 +95,15 @@ function StageDecision({ title, decision }: { title: string; decision: PolicySta
     <div className="space-y-2 rounded-lg border border-zinc-200 p-4">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-medium">{title}</span>
-        <Badge variant={decision.outcome === "execute" ? "success" : "warning"}>
+        <Badge
+          variant={
+            decision.outcome === "execute"
+              ? "success"
+              : decision.outcome === "blocked"
+                ? "destructive"
+                : "warning"
+          }
+        >
           {POLICY_OUTCOME_LABELS[decision.outcome]}
         </Badge>
         {decision.project_shadow ? <Badge variant="outline">Project shadow mode</Badge> : null}
@@ -125,7 +133,13 @@ function StageDecision({ title, decision }: { title: string; decision: PolicySta
               <li key={rule.id} className="flex flex-wrap items-center gap-2">
                 <span>{rule.name}</span>
                 <Badge variant="secondary">
-                  {rule.kind === "builtin" ? "Built-in" : rule.kind === "allow" ? "Allow" : "Escalate"}
+                  {rule.kind === "builtin"
+                    ? "Built-in"
+                    : rule.kind === "allow"
+                      ? "Allow"
+                      : rule.kind === "block"
+                        ? "Block"
+                        : "Escalate"}
                 </Badge>
                 <span className="text-xs text-zinc-500">{POLICY_OUTCOME_LABELS[rule.outcome]}</span>
               </li>

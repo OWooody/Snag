@@ -24,13 +24,23 @@ export const EXECUTE_DELIVERY_DESCRIPTIONS: Record<ExecuteDelivery, string> = {
     "Snag merges the PR as soon as CI passes. Changes reach production without anyone reviewing the code.",
 };
 
-/** Ordered from least to most strict. */
-export type PolicyOutcome = "execute" | "review_before_merge" | "review_before_execution";
+/** Ordered from least to most strict. `blocked` is a rule outcome, not a project default. */
+export type PolicyOutcome =
+  | "execute"
+  | "review_before_merge"
+  | "review_before_execution"
+  | "blocked";
 
+/** Outcomes an admin can set as the project or organization default. */
 export const POLICY_OUTCOMES = [
   "execute",
   "review_before_merge",
   "review_before_execution",
+] as const satisfies readonly PolicyOutcome[];
+
+const POLICY_OUTCOME_ORDER = [
+  ...POLICY_OUTCOMES,
+  "blocked",
 ] as const satisfies readonly PolicyOutcome[];
 
 export const DEFAULT_POLICY_OUTCOME: PolicyOutcome = "review_before_execution";
@@ -39,16 +49,18 @@ export const POLICY_OUTCOME_LABELS: Record<PolicyOutcome, string> = {
   execute: "Execute now",
   review_before_merge: "Review before merge",
   review_before_execution: "Review before execution",
+  blocked: "Do not modify these files",
 };
 
 export const POLICY_OUTCOME_DESCRIPTIONS: Record<PolicyOutcome, string> = {
   execute: "Implement immediately and deliver according to the delivery setting.",
   review_before_merge: "Implement immediately, but a developer must review and merge the PR.",
   review_before_execution: "A developer must approve the plan before the agent implements it.",
+  blocked: "Reject the request. The agent does not modify files that match every condition.",
 };
 
 export function policyOutcomeRank(outcome: PolicyOutcome): number {
-  return POLICY_OUTCOMES.indexOf(outcome);
+  return POLICY_OUTCOME_ORDER.indexOf(outcome);
 }
 
 export function strictestOutcome(...outcomes: PolicyOutcome[]): PolicyOutcome {
@@ -59,9 +71,13 @@ export function strictestOutcome(...outcomes: PolicyOutcome[]): PolicyOutcome {
   );
 }
 
-export type PolicyRuleKind = "allow" | "escalate";
+export type PolicyRuleKind = "allow" | "escalate" | "block";
 
-export const POLICY_RULE_KINDS = ["allow", "escalate"] as const satisfies readonly PolicyRuleKind[];
+export const POLICY_RULE_KINDS = [
+  "allow",
+  "escalate",
+  "block",
+] as const satisfies readonly PolicyRuleKind[];
 
 export type PlanRisk = "low" | "medium" | "high";
 
