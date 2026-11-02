@@ -4,6 +4,7 @@ import type { LocalAttachment } from "../attachments";
 import { formatRequesterAnswers, type RequesterQuestion } from "../requester-questions";
 import { GLASS_SURFACE, SNAG_EASE } from "../sheet";
 import { withAlpha } from "../styles";
+import { useSnagStrings } from "../locale-context";
 import type { SnagTheme } from "../theme";
 import { AttachmentPicker } from "./attachment-picker";
 
@@ -100,6 +101,7 @@ export function QuestionForm({
   onSubmit: (reply: string, attachments: LocalAttachment[]) => void;
   onWriteInstead: () => void;
 }) {
+  const { t } = useSnagStrings();
   const [choices, setChoices] = useState<Record<string, string>>({});
   const [others, setOthers] = useState<Record<string, string>>({});
   const [attachments, setAttachments] = useState<LocalAttachment[]>([]);
@@ -166,7 +168,7 @@ export function QuestionForm({
                 ))}
                 {question.allow_other ? (
                   <ChoiceButton
-                    label="Other"
+                    label={t("reply.other")}
                     active={choice === OTHER}
                     theme={theme}
                     onClick={() =>
@@ -190,7 +192,7 @@ export function QuestionForm({
                 }
                 disabled={sending}
                 aria-label={question.text}
-                placeholder="Your answer…"
+                placeholder={t("reply.yourAnswer")}
                 rows={2}
                 style={{ ...fieldStyle, marginTop: question.choices.length > 0 ? 8 : 0 }}
               />
@@ -224,10 +226,10 @@ export function QuestionForm({
           }}
         >
           {sending
-            ? "Sending…"
+            ? t("reply.sending")
             : questions.length > 1
-              ? `Send answers (${answered}/${questions.length})`
-              : "Send answer"}
+              ? t("reply.sendAnswers", { answered, total: questions.length })
+              : t("reply.sendAnswer")}
         </button>
         <button
           type="button"
@@ -244,7 +246,7 @@ export function QuestionForm({
             cursor: "pointer",
           }}
         >
-          Reply in your own words
+          {t("reply.ownWords")}
         </button>
       </div>
     </div>

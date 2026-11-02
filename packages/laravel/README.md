@@ -89,6 +89,7 @@ php artisan vendor:publish --tag=snag-config
 | `context` | Invokable class name that receives `(array $context, Request $request)` and returns extra context |
 | `markers` | Set `false` to hide the numbered pins that mark open requests on the page |
 | `theme` | Override colors, for example `['accent' => '#5B4CF5']` |
+| `locale` | Overlay language. `SNAG_LOCALE=ar` shows Arabic and RTL. Leave unset to keep English. For a language that changes per user, call `Snag::resolveLocaleUsing(...)` |
 | `debug` | `SNAG_DEBUG=true` logs probe and request details to the browser console |
 | `enabled` | `SNAG_ENABLED=false` turns Snag off without removing the keys |
 
@@ -100,6 +101,8 @@ use SnagTech\Laravel\Snag;
 public function boot(): void
 {
     Snag::resolveRequesterUsing(fn ($user, $request) => $user?->name);
+
+    Snag::resolveLocaleUsing(fn ($request) => app()->getLocale());
 
     Snag::extendContextUsing(fn (array $context, $request) => $context + [
         'tenant' => tenant()?->slug,

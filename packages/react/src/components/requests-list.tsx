@@ -9,6 +9,13 @@ import {
 } from "../api";
 import { attachmentFields, messageWithAttachments, type LocalAttachment } from "../attachments";
 import { resolveContext, resolveRequester } from "../config";
+import {
+  handoffMessage,
+  stageMessage,
+  statusMessageKey,
+  type MessageKey,
+} from "../i18n";
+import { useSnagStrings } from "../locale-context";
 import { ACTIVE_POLL_MS, hasActiveRequest, isActiveRequest, startVisiblePolling } from "../polling";
 import type { SnagRequestPhase, SnagRequestRow, SnagRequestStatus } from "../protocol";
 import type { PreviewOp } from "../dom-preview";
@@ -64,6 +71,7 @@ export function RequestsList({
   onShowPreview,
   onContinued,
 }: RequestsListProps) {
+  const { t, locale } = useSnagStrings();
   const onLoadedRef = useRef(onLoaded);
   onLoadedRef.current = onLoaded;
   const [rows, setRows] = useState<SnagRequestRow[]>([]);
@@ -141,28 +149,28 @@ export function RequestsList({
   const emptyState = (): { title: string; message: string; caughtUp: boolean } => {
     if (filteringNeedsYou && mineOnly) {
       return {
-        title: "You're all caught up",
-        message: "Nothing needs you right now.",
+        title: t("list.emptyCaughtUpTitle"),
+        message: t("list.emptyCaughtUp"),
         caughtUp: true,
       };
     }
     if (filteringNeedsYou) {
       return {
-        title: "You're all caught up",
-        message: "Nothing needs a reply right now. Turn off Needs you to see every request.",
+        title: t("list.emptyNeedsYouTitle"),
+        message: t("list.emptyNeedsYou"),
         caughtUp: true,
       };
     }
     if (mineOnly && currentRequester) {
       return {
-        title: "No requests from you yet",
-        message: "Share what's on your mind and you can follow it here.",
+        title: t("list.emptyMineTitle"),
+        message: t("list.emptyMine"),
         caughtUp: false,
       };
     }
     return {
-      title: "No requests yet",
-      message: "Share what's on your mind from any screen and track it here.",
+      title: t("list.emptyTitle"),
+      message: t("list.empty"),
       caughtUp: false,
     };
   };
@@ -181,19 +189,19 @@ export function RequestsList({
       >
         {followupsEnabled ? (
           <FilterChip
-            label="Needs you"
+            label={t("list.needsYou")}
             active={needsAttentionOnly}
             theme={theme}
             onChange={setNeedsAttentionChoice}
           />
         ) : null}
         {currentRequester ? (
-          <FilterChip label="Mine" active={mineOnly} theme={theme} onChange={setMineOnly} />
+          <FilterChip label={t("list.mine")} active={mineOnly} theme={theme} onChange={setMineOnly} />
         ) : null}
         <RefreshButton theme={theme} onRefresh={load} />
       </div>
       {!loaded ? (
-        <div aria-busy="true" aria-label="Loading requests">
+        <div aria-busy="true" aria-label={t("list.loading")}>
           {[0, 1, 2].map((index) => (
             <SkeletonCard key={index} wide={index !== 1} />
           ))}
@@ -205,14 +213,14 @@ export function RequestsList({
           action={
             hiddenByFilters
               ? {
-                  label: "Show all requests",
+                  label: t("list.showAll"),
                   onClick: () => {
                     setNeedsAttentionChoice(false);
                     setMineOnly(false);
                   },
                 }
               : onNewRequest
-                ? { label: "New request", onClick: onNewRequest }
+                ? { label: t("nav.new"), onClick: onNewRequest }
                 : null
           }
         />
@@ -443,6 +451,7 @@ function RequestCard({
   onContinued?: (requestId: string) => void;
   onShowPreview?: (ops: PreviewOp[]) => void;
 }) {
+  const { t, locale } = useSnagStrings();
   const link = row.pr_url ?? row.agent_url;
   const [reply, setReply] = useState("");
   const [replyAttachments, setReplyAttachments] = useState<LocalAttachment[]>([]);
@@ -483,7 +492,7 @@ function RequestCard({
   const submitReply = async (text: string, attachments: LocalAttachment[]) => {
     const message = messageWithAttachments(text, attachments, MAX_REPLY_LENGTH);
     if (!message) {
-      setReplyError("Write a reply or attach an image or file.");
+      setReplyError(t("reply.empty"));
       return;
     }
     setSending(true);
@@ -494,7 +503,7 @@ function RequestCard({
       setReplyAttachments([]);
       onReplied();
     } catch (error) {
-      setReplyError(error instanceof Error ? error.message : "Reply failed");
+      setReplyError(error instanceof Error ? error.message : t("reply.failed"));
     } finally {
       setSending(false);
     }
@@ -503,7 +512,7 @@ function RequestCard({
   const confirm = async (decision: "looks_right" | "not_right") => {
     const message = messageWithAttachments(feedback, feedbackAttachments, MAX_REPLY_LENGTH);
     if (decision === "not_right" && !message) {
-      setConfirmError("Describe what is not right, or attach an image or file.");
+      setConfirmError(t("confirm.empty"));
       return;
     }
     setConfirming(true);
@@ -524,7 +533,7 @@ function RequestCard({
       setFeedbackOpen(false);
       onReplied();
     } catch (error) {
-      setConfirmError(error instanceof Error ? error.message : "Something went wrong");
+      setConfirmError(error instanceof Error ? error.message : t("confirm.failed"));
     } finally {
       setConfirming(false);
     }
@@ -581,22 +590,22 @@ function RequestCard({
         >
           {row.status === "closed_by_requester"
             ? owned
-              ? "CLOSED BY YOU"
-              : "CLOSED"
-            : (STATUS_LABELS[row.status] ?? row.status.toUpperCase())}
+              ? t("status.closedByYou")
+              : t("status.closed_by_requester")
+            : t(statusMessageKey(row.status, row.rejection_reason))}
           {row.stage_label && !showSteps ? (
             <span style={{ fontWeight: 600, letterSpacing: 0, color: theme.textMuted }}>
-              {` · ${row.stage_label}`}
+              {` · ${stageMessage(locale, row.stage, row.stage_label)}`}
             </span>
           ) : null}
         </span>
         <span style={{ fontSize: 11, color: theme.textMuted }}>
-          {new Date(row.created_at).toLocaleString()}
+          {new Date(row.created_at).toLocaleString(locale)}
         </span>
       </div>
       {continuedFrom ? (
         <p style={{ fontSize: 12, color: theme.textMuted, margin: "0 0 6px" }}>
-          Follow-up to{" "}
+          {t("list.followUpTo")}{" "}
           {continuedFrom.prompt && onOpenEarlier ? (
             <button
               type="button"
@@ -616,7 +625,7 @@ function RequestCard({
             </button>
           ) : (
             <span style={{ fontWeight: 600 }}>
-              {continuedFrom.prompt ? clipPrompt(continuedFrom.prompt) : "an earlier request"}
+              {continuedFrom.prompt ? clipPrompt(continuedFrom.prompt) : t("list.earlierRequest")}
             </span>
           )}
         </p>
@@ -625,7 +634,11 @@ function RequestCard({
         {row.prompt}
       </p>
       {showSteps && row.phase ? (
-        <PhaseSteps phase={row.phase} caption={row.stage_label ?? null} theme={theme} />
+        <PhaseSteps
+          phase={row.phase}
+          caption={stageMessage(locale, row.stage, row.stage_label)}
+          theme={theme}
+        />
       ) : null}
       {row.requester ? (
         <p style={{ fontSize: 12, color: theme.textMuted, marginTop: 4, marginBottom: 0 }}>
@@ -667,7 +680,7 @@ function RequestCard({
             cursor: "pointer",
           }}
         >
-          {expanded ? "Show less" : "Show more"}
+          {expanded ? t("list.showLess") : t("list.showMore")}
         </button>
       ) : null}
       {row.error ? (
@@ -677,7 +690,9 @@ function RequestCard({
       ) : null}
       {row.handoff_reason ? (
         <p style={{ fontSize: 12, color: theme.textMuted, marginTop: 6, marginBottom: 0 }}>
-          {`A developer will take it from here. ${row.handoff_reason}`}
+          {t("list.handoff", {
+            reason: handoffMessage(locale, row.handoff_code, row.handoff_reason),
+          })}
         </p>
       ) : null}
       {row.status === "rejected" ? (
@@ -690,9 +705,31 @@ function RequestCard({
             whiteSpace: "pre-wrap",
           }}
         >
-          {row.rejection_note
-            ? `A developer decided not to make this change: ${row.rejection_note}`
-            : "A developer decided not to make this change. File a new request if it is still needed."}
+          {row.rejection_reason === "policy_block" ? (
+            <>
+              {t("block.message")}
+              {row.blocked_rules && row.blocked_rules.length > 0 ? (
+                <>
+                  {" "}
+                  {t("block.rulePrefix")}{" "}
+                  {row.blocked_rules.map((name, index) => (
+                    <span key={name}>
+                      {index > 0 ? ", " : null}
+                      <bdi>{name}</bdi>
+                    </span>
+                  ))}
+                  .{" "}
+                </>
+              ) : (
+                " "
+              )}
+              {t("block.next")}
+            </>
+          ) : row.rejection_note ? (
+            t("reject.withNote", { note: row.rejection_note })
+          ) : (
+            t("reject.withoutNote")
+          )}
         </p>
       ) : null}
       {row.status === "closed_by_requester" ? (
@@ -705,7 +742,7 @@ function RequestCard({
             whiteSpace: "pre-wrap",
           }}
         >
-          {closedSummary(owned, row.close_note)}
+          {closedSummary(owned, row.close_note, t)}
         </p>
       ) : null}
       {canReply && showActions && structuredQuestions && !writeInstead ? (
@@ -731,7 +768,7 @@ function RequestCard({
               value={reply}
               onChange={(event) => setReply(event.target.value.slice(0, MAX_REPLY_LENGTH))}
               disabled={sending}
-              placeholder="Answer the questions above…"
+              placeholder={t("reply.placeholder")}
               rows={3}
               style={{ ...fieldStyle, padding: COMPOSER_PADDING }}
             />
@@ -758,7 +795,7 @@ function RequestCard({
               fontSize: 13,
             }}
           >
-            {sending ? "Sending…" : "Send reply"}
+            {sending ? t("reply.sending") : t("reply.send")}
           </button>
         </div>
       ) : null}
@@ -814,7 +851,7 @@ function RequestCard({
                     setFeedback(event.target.value.slice(0, MAX_REPLY_LENGTH))
                   }
                   disabled={confirming}
-                  placeholder="What should be different?"
+                  placeholder={t("confirm.placeholder")}
                   rows={3}
                   style={{ ...fieldStyle, padding: COMPOSER_PADDING }}
                 />
@@ -826,7 +863,7 @@ function RequestCard({
                   disabled={confirming}
                   style={buttonStyle(false, confirming)}
                 >
-                  Cancel
+                  {t("followup.cancel")}
                 </button>
                 <button
                   type="button"
@@ -834,7 +871,7 @@ function RequestCard({
                   disabled={confirming}
                   style={buttonStyle(true, confirming)}
                 >
-                  {confirming ? "Sending…" : "Send feedback"}
+                  {confirming ? t("confirm.sending") : t("confirm.send")}
                 </button>
               </div>
             </>
@@ -854,7 +891,7 @@ function RequestCard({
                 disabled={confirming}
                 style={buttonStyle(true, confirming)}
               >
-                {confirming ? "Confirming…" : "Looks right"}
+                {confirming ? t("confirm.confirming") : t("confirm.looksRight")}
               </button>
             </div>
           )}
@@ -872,10 +909,10 @@ function RequestCard({
             onClick={() => window.location.reload()}
             style={{ ...buttonStyle(false, false), width: "100%" }}
           >
-            Reload to see it
+            {t("list.reload")}
           </button>
           <p style={{ fontSize: 11, color: theme.textMuted, margin: "6px 0 0" }}>
-            It can take a minute or two to go live after merging.
+            {t("list.reloadHint")}
           </p>
         </div>
       ) : null}
@@ -893,11 +930,15 @@ function RequestCard({
             textDecoration: "none",
           }}
         >
-          {row.pr_url ? "Open pull request" : "Open agent"}
+          {row.pr_url ? t("list.openPr") : t("list.openAgent")}
         </a>
       ) : null}
       {row.branch_name ? (
-        <p style={{ fontSize: 11, color: theme.textMuted, marginTop: 4, marginBottom: 0 }}>
+        <p
+          className="snag-ltr"
+          dir="ltr"
+          style={{ fontSize: 11, color: theme.textMuted, marginTop: 4, marginBottom: 0 }}
+        >
           {row.branch_name}
         </p>
       ) : null}
@@ -916,6 +957,7 @@ function RequestCard({
         <ContinueRequest
           requestId={row.id}
           status={row.status}
+          rejectionReason={row.rejection_reason}
           theme={theme}
           fieldStyle={fieldStyle}
           buttonStyle={buttonStyle}
@@ -926,32 +968,38 @@ function RequestCard({
   );
 }
 
-function closedSummary(owned: boolean, note: string | null | undefined): string {
-  const who = owned ? "You closed this request." : "The requester closed this request.";
+function closedSummary(
+  owned: boolean,
+  note: string | null | undefined,
+  t: (key: MessageKey, vars?: Record<string, string | number>) => string,
+): string {
+  const who = owned ? t("close.you") : t("close.requester");
   const trimmed = note?.trim();
-  if (!trimmed) return `${who} Nothing further will be built from it.`;
+  if (!trimmed) return `${who}${t("close.nothingFurther")}`;
   return `${who} ${trimmed}`;
 }
 
-function closeExplanation(status: SnagRequestStatus, hasPullRequest: boolean): string {
-  const pullRequest = hasPullRequest
-    ? " An open pull request stays open until someone closes it on the repository."
-    : "";
+function closeExplanation(
+  status: SnagRequestStatus,
+  hasPullRequest: boolean,
+  t: (key: MessageKey, vars?: Record<string, string | number>) => string,
+): string {
+  const pullRequest = hasPullRequest ? t("close.prStays") : "";
   switch (status) {
     case "queued":
     case "running":
-      return "Snag will stop following this request. If an agent is already working, it may finish in the background, but the result will not be merged or sent on for review.";
+      return t("close.body.inProgress");
     case "needs_input":
     case "awaiting_requester":
-      return "You will not need to reply, and nothing further will be built from this request.";
+      return t("close.body.needsYou");
     case "awaiting_approval":
-      return "A developer will no longer be asked to approve this, and nothing further will be built from it.";
+      return t("close.body.waitingDeveloper");
     case "awaiting_review":
-      return `A developer will no longer be asked to review this.${pullRequest}`;
+      return `${t("close.body.awaitingReview")}${pullRequest}`;
     case "awaiting_confirmation":
-      return `Snag will not merge this change.${pullRequest}`;
+      return `${t("close.body.awaitingConfirmation")}${pullRequest}`;
     default:
-      return "Snag will stop following this request.";
+      return t("close.body.default");
   }
 }
 
@@ -982,6 +1030,7 @@ function CloseRequest({
   };
   onClosed: () => void;
 }) {
+  const { t } = useSnagStrings();
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState("");
   const [sending, setSending] = useState(false);
@@ -1002,7 +1051,7 @@ function CloseRequest({
       setOpen(false);
       onClosed();
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Could not close the request");
+      setError(submitError instanceof Error ? submitError.message : t("close.failed"));
     } finally {
       setSending(false);
     }
@@ -1028,7 +1077,7 @@ function CloseRequest({
           }}
         >
           <p style={{ fontSize: 13, fontWeight: 700, color: theme.text, margin: 0 }}>
-            Close this request?
+            {t("close.confirmTitle")}
           </p>
           <p
             style={{
@@ -1038,7 +1087,7 @@ function CloseRequest({
               margin: "4px 0 8px",
             }}
           >
-            {closeExplanation(status, hasPullRequest)}
+            {closeExplanation(status, hasPullRequest, t)}
           </p>
           <textarea
             value={note}
@@ -1048,9 +1097,9 @@ function CloseRequest({
               if (error) setError(null);
             }}
             disabled={sending}
-            placeholder="Add a note for the developer (optional)"
+            placeholder={t("close.notePlaceholder")}
             rows={2}
-            aria-label="Note for the developer"
+            aria-label={t("close.noteLabel")}
             style={fieldStyle}
           />
           {error ? (
@@ -1077,7 +1126,7 @@ function CloseRequest({
                 fontSize: 13,
               }}
             >
-              Keep it open
+              {t("close.keepOpen")}
             </button>
             <button
               type="button"
@@ -1096,7 +1145,7 @@ function CloseRequest({
                 fontSize: 13,
               }}
             >
-              {sending ? "Closing…" : "Close request"}
+              {sending ? t("close.closing") : t("close.submit")}
             </button>
           </div>
         </div>
@@ -1115,7 +1164,7 @@ function CloseRequest({
             cursor: "pointer",
           }}
         >
-          Close request
+          {t("close.submit")}
         </button>
       )}
     </div>
@@ -1128,29 +1177,35 @@ function clipPrompt(prompt: string, max = 72): string {
   return `${flat.slice(0, max - 1)}…`;
 }
 
-function continuationHint(status: SnagRequestStatus): string {
+function continuationHint(
+  status: SnagRequestStatus,
+  t: (key: MessageKey, vars?: Record<string, string | number>) => string,
+  rejectionReason?: string | null,
+): string {
+  if (status === "rejected" && rejectionReason === "policy_block") return t("block.followupHint");
   switch (status) {
     case "merged":
-      return "This change is already live. Your note starts a new request and brings this context with it.";
+      return t("followup.hint.merged");
     case "finished":
-      return "This request is finished. Your note starts a new request and brings this context with it.";
+      return t("followup.hint.finished");
     case "error":
-      return "Say what you still want. Your note starts a new request and brings this context with it.";
+      return t("followup.hint.error");
     case "rejected":
-      return "Say what should be different. Your note starts a new request and brings this context with it.";
+      return t("followup.hint.rejected");
     case "queued":
     case "running":
     case "awaiting_approval":
     case "awaiting_review":
-      return "This request is still in progress. A follow-up starts a separate request and leaves this one alone.";
+      return t("followup.hint.inProgress");
     default:
-      return "Your note starts a new request and brings this context with it.";
+      return t("followup.hint.default");
   }
 }
 
 function ContinueRequest({
   requestId,
   status,
+  rejectionReason,
   theme,
   fieldStyle,
   buttonStyle,
@@ -1158,6 +1213,7 @@ function ContinueRequest({
 }: {
   requestId: string;
   status: SnagRequestStatus;
+  rejectionReason?: string | null;
   theme: SnagTheme;
   fieldStyle: {
     width: string;
@@ -1173,6 +1229,7 @@ function ContinueRequest({
   buttonStyle: (primary: boolean, busy: boolean) => CSSProperties;
   onContinued?: (requestId: string) => void;
 }) {
+  const { t } = useSnagStrings();
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [attachments, setAttachments] = useState<LocalAttachment[]>([]);
@@ -1188,7 +1245,7 @@ function ContinueRequest({
   const submit = async () => {
     const message = messageWithAttachments(text, attachments, MAX_REPLY_LENGTH);
     if (!message) {
-      setError("Write what should change, or attach an image or file.");
+      setError(t("followup.empty"));
       return;
     }
     setSending(true);
@@ -1205,7 +1262,7 @@ function ContinueRequest({
       setOpen(false);
       onContinued?.(created.id);
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Could not start the follow-up");
+      setError(submitError instanceof Error ? submitError.message : t("followup.failed"));
     } finally {
       setSending(false);
     }
@@ -1223,7 +1280,7 @@ function ContinueRequest({
       {open ? (
         <>
           <p style={{ fontSize: 13, fontWeight: 700, color: theme.text, margin: 0 }}>
-            Continue this request
+            {t("followup.title")}
           </p>
           <p
             style={{
@@ -1233,7 +1290,7 @@ function ContinueRequest({
               margin: "4px 0 8px",
             }}
           >
-            {continuationHint(status)}
+            {continuationHint(status, t, rejectionReason)}
           </p>
           <AttachmentPicker
             attachments={attachments}
@@ -1249,7 +1306,7 @@ function ContinueRequest({
                 if (error) setError(null);
               }}
               disabled={sending}
-              placeholder="What should we change next?"
+              placeholder={t("followup.placeholder")}
               rows={3}
               style={{ ...fieldStyle, padding: COMPOSER_PADDING }}
             />
@@ -1268,7 +1325,7 @@ function ContinueRequest({
               className="snag-focus"
               style={buttonStyle(false, sending)}
             >
-              Cancel
+              {t("followup.cancel")}
             </button>
             <button
               type="button"
@@ -1277,7 +1334,7 @@ function ContinueRequest({
               className="snag-focus"
               style={buttonStyle(true, sending)}
             >
-              {sending ? "Starting…" : "Start follow-up"}
+              {sending ? t("followup.starting") : t("followup.submit")}
             </button>
           </div>
         </>
@@ -1291,7 +1348,7 @@ function ContinueRequest({
           className="snag-focus"
           style={{ ...buttonStyle(false, false), width: "100%" }}
         >
-          Continue this request
+          {t("followup.title")}
         </button>
       ) : (
         <button
@@ -1308,17 +1365,17 @@ function ContinueRequest({
             cursor: "pointer",
           }}
         >
-          Continue in a new request
+          {t("followup.continueNew")}
         </button>
       )}
     </div>
   );
 }
 
-const PHASE_STEPS: { phase: SnagRequestPhase; label: string }[] = [
-  { phase: "planning", label: "Planning" },
-  { phase: "implementing", label: "Building" },
-  { phase: "delivering", label: "Delivering" },
+const PHASE_STEPS: { phase: SnagRequestPhase; labelKey: MessageKey }[] = [
+  { phase: "planning", labelKey: "phase.planning" },
+  { phase: "implementing", labelKey: "phase.implementing" },
+  { phase: "delivering", labelKey: "phase.delivering" },
 ];
 
 function PhaseSteps({
@@ -1330,12 +1387,14 @@ function PhaseSteps({
   caption: string | null;
   theme: SnagTheme;
 }) {
+  const { t } = useSnagStrings();
   const current = PHASE_STEPS.findIndex((step) => step.phase === phase);
-  const detail = caption && caption !== PHASE_STEPS[current]?.label ? caption : null;
+  const currentLabel = current >= 0 ? t(PHASE_STEPS[current].labelKey) : null;
+  const detail = caption && caption !== currentLabel ? caption : null;
   return (
     <div style={{ marginTop: 10 }}>
       <ol
-        aria-label="Progress"
+        aria-label={t("list.progress")}
         style={{ display: "flex", gap: 6, listStyle: "none", margin: 0, padding: 0 }}
       >
         {PHASE_STEPS.map((step, index) => {
@@ -1364,7 +1423,7 @@ function PhaseSteps({
                   color: active ? theme.text : theme.textMuted,
                 }}
               >
-                {step.label}
+                {t(step.labelKey)}
               </span>
             </li>
           );
@@ -1376,21 +1435,6 @@ function PhaseSteps({
     </div>
   );
 }
-
-const STATUS_LABELS: Record<SnagRequestStatus, string> = {
-  queued: "QUEUED",
-  running: "IN PROGRESS",
-  needs_input: "NEEDS YOUR REPLY",
-  awaiting_requester: "REVIEW THE PLAN",
-  awaiting_approval: "WAITING FOR A DEVELOPER",
-  awaiting_review: "IN DEVELOPER REVIEW",
-  awaiting_confirmation: "READY FOR YOU TO CHECK",
-  finished: "FINISHED",
-  merged: "LIVE",
-  error: "ERROR",
-  rejected: "NOT APPROVED",
-  closed_by_requester: "CLOSED",
-};
 
 function statusColor(status: SnagRequestStatus, theme: SnagTheme): string {
   switch (status) {

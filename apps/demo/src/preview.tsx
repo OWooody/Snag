@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { initSnag } from "../../../packages/react/src/config";
+import { directionFor, resolveLocale } from "../../../packages/react/src/i18n";
 import { PageMarkers } from "../../../packages/react/src/components/page-markers";
 import { RequestPanel } from "../../../packages/react/src/components/request-panel";
 import { StatusToasts, type Toast } from "../../../packages/react/src/components/status-toasts";
@@ -200,6 +201,21 @@ const ROWS: SnagRequestRow[] = [
     requester: "teammate@example.com",
     created_at: "2026-10-02T08:00:00.000Z",
   },
+  {
+    id: "preview-blocked",
+    prompt: "Let testers edit admin users from this screen",
+    status: "rejected",
+    agent_url: null,
+    branch_name: null,
+    pr_url: null,
+    summary: null,
+    error: null,
+    rejection_reason: "policy_block",
+    rejection_note: "Blocked by Block admin user changes. These files must not be modified.",
+    blocked_rules: ["Block admin user changes"],
+    requester: PREVIEW_REQUESTER,
+    created_at: "2026-10-02T20:12:00.000Z",
+  },
 ];
 
 const STATE: RelayStateResponse = {
@@ -217,6 +233,7 @@ function installPreviewRelay(): void {
   initSnag({
     endpoint: PREVIEW_ENDPOINT,
     projectKey: "snag_pk_preview",
+    locale: new URLSearchParams(window.location.search).get("locale") ?? undefined,
     getRequester: () => PREVIEW_REQUESTER,
     getContext: () => ({
       route: "/preview",
@@ -284,6 +301,8 @@ function installPreviewRelay(): void {
  */
 export function Preview() {
   installPreviewRelay();
+  const locale = resolveLocale(new URLSearchParams(window.location.search).get("locale"));
+  const dir = directionFor(locale);
   const [open, setOpen] = useState(true);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [focusId, setFocusId] = useState<string | null>(null);
@@ -360,8 +379,8 @@ export function Preview() {
         )}
       </main>
       {open ? null : (
-        <div data-snag-overlay="true" dir="ltr">
-          <SnagStyles theme={defaultTheme} />
+        <div data-snag-overlay="true" dir={dir}>
+          <SnagStyles theme={defaultTheme} dir={dir} />
           <PageMarkers
             rows={ROWS}
             theme={defaultTheme}
@@ -382,8 +401,8 @@ export function Preview() {
         </div>
       )}
       {open ? (
-        <div data-snag-overlay="true" dir="ltr">
-          <SnagStyles theme={defaultTheme} />
+        <div data-snag-overlay="true" dir={dir}>
+          <SnagStyles theme={defaultTheme} dir={dir} />
           <RequestPanel
             screenshot={null}
             theme={defaultTheme}

@@ -23,6 +23,7 @@ import type { SnagFlowStep, SnagRequestRow, SnagScreenshot } from "../protocol";
 import { captureScreenshot } from "../screenshot";
 import { countUnseenDone, markDoneSeen } from "../seen-done";
 import { TAB_REST_SHAPE, type TabShape } from "../sheet";
+import { SnagLocaleProvider, useSnagStrings } from "../locale-context";
 import { SnagStyles } from "../styles";
 import { FloatingButton } from "./floating-button";
 import { PageMarkers } from "./page-markers";
@@ -48,6 +49,14 @@ export interface SnagOverlayProps {
  * visibility gate, so this is safe to mount unconditionally in every build.
  */
 export function SnagOverlay({ container }: SnagOverlayProps) {
+  return (
+    <SnagLocaleProvider>
+      <SnagOverlayInner container={container} />
+    </SnagLocaleProvider>
+  );
+}
+
+function SnagOverlayInner({ container }: SnagOverlayProps) {
   const [initialized, setInitialized] = useState(() => getSnagConfig() != null);
   const [enabled, setEnabled] = useState(false);
   const [followupsEnabled, setFollowupsEnabled] = useState(false);
@@ -222,6 +231,7 @@ export function SnagOverlay({ container }: SnagOverlayProps) {
   if (!mounted || !enabled) return null;
 
   const theme = resolveTheme();
+  const { dir } = useSnagStrings();
 
   const openPanel = async (tab: "new" | "list", from: TabShape, focusId?: string) => {
     if (opening || panelVisible) return;
@@ -240,8 +250,8 @@ export function SnagOverlay({ container }: SnagOverlayProps) {
   openPanelRef.current = (tab, from, focusId) => void openPanel(tab, from, focusId);
 
   return createPortal(
-    <div data-snag-overlay="true" dir="ltr">
-      <SnagStyles theme={theme} />
+    <div data-snag-overlay="true" dir={dir}>
+      <SnagStyles theme={theme} dir={dir} />
       {!panelVisible ? (
         <StatusToasts
           toasts={toasts}

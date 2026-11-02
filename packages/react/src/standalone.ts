@@ -2,8 +2,12 @@ import { createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 
 import { SnagOverlay } from "./components/snag-overlay";
-import { initSnag, type SnagConfig } from "./config";
-import type { SnagTheme } from "./theme";
+import { getSnagConfig, initSnag, type SnagConfig } from "./config";
+import {
+  CONFIG_ELEMENT_ID,
+  readPageConfig,
+  type SnagPageConfig,
+} from "./page-config";
 
 /**
  * Script-tag build for server-rendered apps (Laravel, Filament, Livewire, ...).
@@ -11,37 +15,13 @@ import type { SnagTheme } from "./theme";
  * the overlay into `#snag-root`. Exposed as `window.Snag`.
  */
 
-export interface SnagPageConfig {
-  endpoint: string;
-  projectKey: string;
-  requester?: string | null;
-  context?: Record<string, unknown>;
-  markers?: boolean;
-  debug?: boolean;
-  theme?: Partial<SnagTheme>;
-}
+export { CONFIG_ELEMENT_ID, readPageConfig };
+export type { SnagPageConfig };
 
-export const CONFIG_ELEMENT_ID = "snag-config";
 export const ROOT_ELEMENT_ID = "snag-root";
 
 let root: Root | null = null;
 let container: Element | null = null;
-
-/** Parse the server-written page config; null when absent or invalid. */
-export function readPageConfig(doc: Document = document): SnagPageConfig | null {
-  const element = doc.getElementById(CONFIG_ELEMENT_ID);
-  if (!element?.textContent) return null;
-  try {
-    const parsed: unknown = JSON.parse(element.textContent);
-    if (!parsed || typeof parsed !== "object") return null;
-    const value = parsed as Partial<SnagPageConfig>;
-    if (typeof value.endpoint !== "string" || !value.endpoint) return null;
-    if (typeof value.projectKey !== "string" || !value.projectKey) return null;
-    return value as SnagPageConfig;
-  } catch {
-    return null;
-  }
-}
 
 /**
  * Configure Snag. Requester and context are re-read from the page config on
@@ -54,6 +34,7 @@ export function init(page: SnagPageConfig, extra: Partial<SnagConfig> = {}): voi
     markers: page.markers,
     debug: page.debug,
     theme: page.theme,
+    locale: page.locale,
     getRequester: () => (readPageConfig() ?? page).requester ?? null,
     getContext: () => (readPageConfig() ?? page).context ?? {},
     ...extra,
@@ -109,11 +90,8 @@ function boot(): void {
     mount();
   }
   document.addEventListener("livewire:navigated", () => {
-    if (!root) {
-      const next = readPageConfig();
-      if (!next) return;
-      init(next);
-    }
+    const next = readPageConfig();
+    if (next && (!root || next.locale !== getSnagConfig()?.locale)) init(next);
     onNavigated();
   });
 }

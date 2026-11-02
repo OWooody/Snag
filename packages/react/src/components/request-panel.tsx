@@ -10,7 +10,8 @@ import {
 
 import { createSnagRequest } from "../api";
 import { attachmentFields, attachmentsExceedBudget, type LocalAttachment } from "../attachments";
-import { resolveContext } from "../config";
+import { getSnagConfig, resolveContext } from "../config";
+import { useSnagStrings } from "../locale-context";
 import {
   compositeElementHighlights,
   pagePosition,
@@ -47,7 +48,7 @@ import { Switch } from "./controls";
 import { ElementPicker } from "./element-picker";
 import { markerFor } from "./page-markers";
 import { PreviewPill } from "./preview-pill";
-import { ChatIcon, TAB_LABEL } from "./floating-button";
+import { ChatIcon } from "./floating-button";
 import { RequestsList } from "./requests-list";
 import { ScreenshotAnnotator } from "./screenshot-annotator";
 
@@ -58,11 +59,7 @@ const SHEET_CORNER = 18;
 const SHEET_STROKE = "rgba(255, 255, 255, 0.6)";
 /** Keep in sync with the relay's `elements` max. */
 const MAX_ELEMENTS = 8;
-const GO_STATUS = [
-  "Reading this screen…",
-  "Analyzing the request…",
-  "Doing the magic",
-];
+const GO_STATUS_KEYS = ["submit.reading", "submit.analyzing", "submit.magic"] as const;
 
 const overlayPillStyle: CSSProperties = {
   padding: "4px 8px",
@@ -108,6 +105,8 @@ export function RequestPanel({
   agentMode = null,
   badgeCount = 0,
 }: RequestPanelProps) {
+  const { t } = useSnagStrings();
+  const goStatus = GO_STATUS_KEYS.map((key) => t(key));
   const [tab, setTab] = useState<Tab>(initialTab);
   const [phase, setPhase] = useState<Phase>("editing");
   const [statusIndex, setStatusIndex] = useState(0);
@@ -142,11 +141,11 @@ export function RequestPanel({
       return;
     }
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      setStatusIndex(GO_STATUS.length - 1);
+      setStatusIndex(GO_STATUS_KEYS.length - 1);
       return;
     }
     const id = window.setInterval(() => {
-      setStatusIndex((index) => (index + 1) % GO_STATUS.length);
+      setStatusIndex((index) => (index + 1) % GO_STATUS_KEYS.length);
     }, 1400);
     return () => window.clearInterval(id);
   }, [phase]);
@@ -205,13 +204,13 @@ export function RequestPanel({
   const submit = async () => {
     const trimmed = prompt.trim();
     if (!trimmed) {
-      setErrorMessage("Describe the change first.");
+      setErrorMessage(t("submit.needDescription"));
       return;
     }
     const screenshotBase64Length =
       includeScreenshot && workingScreenshot ? workingScreenshot.base64.length : 0;
     if (attachmentsExceedBudget(screenshotBase64Length, attachments)) {
-      setErrorMessage("Attachments are too large. Remove an image and try again.");
+      setErrorMessage(t("submit.tooLarge"));
       return;
     }
     setPhase("submitting");
@@ -230,7 +229,8 @@ export function RequestPanel({
             : undefined,
         elements: elements.length > 0 ? elements.map((item) => item.info) : undefined,
         marker: markerFor(elements),
-        locale: typeof context.locale === "string" ? context.locale : undefined,
+        locale:
+          typeof context.locale === "string" ? context.locale : getSnagConfig()?.locale,
       });
       rememberOwnRequest(response.id);
       setOfferNotifications(shouldOfferNotifications());
@@ -239,7 +239,7 @@ export function RequestPanel({
       setPhase("done");
       setListRefreshKey((key) => key + 1);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Request failed");
+      setErrorMessage(error instanceof Error ? error.message : t("submit.failed"));
       setPhase("editing");
     }
   };
@@ -315,7 +315,7 @@ export function RequestPanel({
     );
   }
 
-  const pickLabel = elements.length > 0 ? "Edit elements" : "Select elements";
+  const pickLabel = elements.length > 0 ? t("composer.pickEdit") : t("composer.pick");
 
   // Narrow viewports get an edge-to-edge sheet, so the flare would fall off-screen.
   const fullFlare =
@@ -326,20 +326,20 @@ export function RequestPanel({
     f: fullFlare,
     r: SHEET_CORNER,
   };
-  const t = Math.min(1, Math.max(0, progress));
-  const shape = lerpShape(open ? morphFrom : TAB_REST_SHAPE, fullShape, t);
+  const amount = Math.min(1, Math.max(0, progress));
+  const shape = lerpShape(open ? morphFrom : TAB_REST_SHAPE, fullShape, amount);
   const outline = { ...shape, h: shape.h + 1 };
   const shapeX = (sheetSize.width - tabShapeWidth(shape)) / 2;
   const shapeY = sheetSize.height - shape.h;
-  const contentReveal = Math.min(1, Math.max(0, (t - 0.55) / 0.45));
+  const contentReveal = Math.min(1, Math.max(0, (amount - 0.55) / 0.45));
   const labelFade =
-    open && morphFrom.h >= TAB_PEEK_SHAPE.h ? Math.max(0, 1 - t * 5) : 0;
+    open && morphFrom.h >= TAB_PEEK_SHAPE.h ? Math.max(0, 1 - amount * 5) : 0;
 
   return (
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Snag change request"
+      aria-label={t("composer.aria")}
       style={{
         position: "fixed",
         inset: 0,
@@ -381,7 +381,7 @@ export function RequestPanel({
           height={sheetSize.height + 1}
           style={{
             position: "absolute",
-            left: 0,
+            insetInlineStart: 0,
             top: 0,
             overflow: "visible",
             pointerEvents: "none",
@@ -399,8 +399,7 @@ export function RequestPanel({
             aria-hidden
             style={{
               position: "absolute",
-              left: 0,
-              right: 0,
+              insetInline: 0,
               bottom: TAB_PEEK_SHAPE.h / 2,
               transform: "translateY(50%)",
               display: "flex",
@@ -417,13 +416,13 @@ export function RequestPanel({
             }}
           >
             <ChatIcon />
-            {TAB_LABEL}
+            {t("tab.open")}
           </div>
         ) : null}
         <div
           style={{
             position: "relative",
-            marginRight: fullFlare,
+            marginInlineEnd: fullFlare,
             maxHeight: "85vh",
             opacity: contentReveal,
             transform: `translateY(${(1 - contentReveal) * 10}px)`,
@@ -449,11 +448,11 @@ export function RequestPanel({
               marginBottom: 16,
             }}
           >
-            <h2 style={{ margin: 0, fontSize: 18, color: theme.text }}>Snag</h2>
+            <h2 style={{ margin: 0, fontSize: 18, color: theme.text }}>{t("nav.snag")}</h2>
             <button
               type="button"
               onClick={requestClose}
-              aria-label="Close"
+              aria-label={t("nav.close")}
               style={{
                 width: 30,
                 height: 30,
@@ -510,18 +509,12 @@ export function RequestPanel({
               ) : phase === "done" ? (
                 <div>
                   <p style={{ color: theme.text, fontSize: 15 }}>
-                    {agentMode === "execute"
-                      ? "Request submitted. The agent plans the change first."
-                      : "Request submitted. An agent is working on it."}
+                    {agentMode === "execute" ? t("submit.donePlan") : t("submit.doneWork")}
                   </p>
                   {agentMode === "execute" ? (
                     <p style={{ color: theme.textMuted, fontSize: 13, lineHeight: 1.45 }}>
-                      {followupsEnabled
-                        ? "If anything is unclear you'll get questions here. "
-                        : ""}
-                      Depending on the change, a developer may check it first, or you may be
-                      asked to try a preview before it goes live. Progress shows on the request
-                      card.
+                      {followupsEnabled ? t("submit.followupsHint") : ""}
+                      {t("submit.executeHint")}
                     </p>
                   ) : null}
                   {agentUrl ? (
@@ -531,7 +524,7 @@ export function RequestPanel({
                       rel="noopener noreferrer"
                       style={{ color: theme.accent, fontWeight: 700 }}
                     >
-                      Open agent
+                      {t("submit.openAgent")}
                     </a>
                   ) : null}
                   {offerNotifications ? (
@@ -556,7 +549,7 @@ export function RequestPanel({
                       cursor: "pointer",
                     }}
                   >
-                    {submittedId ? "Track this request" : "View requests"}
+                    {submittedId ? t("submit.track") : t("submit.viewRequests")}
                   </button>
                   <button
                     type="button"
@@ -574,7 +567,7 @@ export function RequestPanel({
                       cursor: "pointer",
                     }}
                   >
-                    New request
+                    {t("nav.new")}
                   </button>
                 </div>
               ) : (
@@ -598,7 +591,7 @@ export function RequestPanel({
                       marginBottom: 8,
                     }}
                   >
-                    CHANGE REQUEST
+                    {t("nav.changeRequest")}
                   </label>
                   <AttachmentPicker
                     attachments={attachments}
@@ -612,7 +605,7 @@ export function RequestPanel({
                       onChange={(event) => setPrompt(event.target.value)}
                       maxLength={MAX_PROMPT_LENGTH}
                       disabled={phase === "submitting"}
-                      placeholder="What should change on this screen?"
+                      placeholder={t("composer.placeholder")}
                       rows={5}
                       style={{
                         width: "100%",
@@ -644,7 +637,7 @@ export function RequestPanel({
                           type="button"
                           onClick={() => setAnnotating(true)}
                           disabled={phase === "submitting"}
-                          aria-label="Mark up screenshot"
+                          aria-label={t("composer.markupAria")}
                           style={{
                             display: "block",
                             width: "100%",
@@ -656,7 +649,7 @@ export function RequestPanel({
                         >
                           <img
                             src={`data:image/jpeg;base64,${(previewScreenshot ?? workingScreenshot).base64}`}
-                            alt="Screenshot preview"
+                            alt={t("composer.screenshotAlt")}
                             style={{
                               width: "100%",
                               maxHeight: 160,
@@ -670,7 +663,7 @@ export function RequestPanel({
                         <div
                           style={{
                             position: "absolute",
-                            left: 10,
+                            insetInlineStart: 10,
                             bottom: 10,
                             display: "flex",
                             gap: 6,
@@ -678,7 +671,7 @@ export function RequestPanel({
                           }}
                         >
                           <span style={overlayPillStyle}>
-                            {isAnnotated ? "Marked up · Edit" : "Mark up"}
+                            {isAnnotated ? t("composer.markupEdit") : t("composer.markup")}
                           </span>
                           <button
                             type="button"
@@ -708,7 +701,7 @@ export function RequestPanel({
                           theme={theme}
                           onChange={setIncludeScreenshot}
                         >
-                          Include screenshot with request
+                          {t("composer.includeScreenshot")}
                         </Switch>
                       </div>
                     </div>
@@ -765,7 +758,7 @@ export function RequestPanel({
                     }}
                   >
                     <span aria-live="polite">
-                      {phase === "submitting" ? GO_STATUS[statusIndex] : "Go"}
+                      {phase === "submitting" ? goStatus[statusIndex] : t("composer.go")}
                     </span>
                   </button>
                 </>
@@ -837,10 +830,11 @@ function SheetScrollThumb({
       style={{
         position: "absolute",
         top: thumb.top,
-        right: 0,
+        insetInlineEnd: 0,
         width: 4,
         height: thumb.height,
-        borderRadius: "999px 0 0 999px",
+        borderStartStartRadius: 999,
+        borderEndStartRadius: 999,
         background: color,
         pointerEvents: "none",
       }}
@@ -927,6 +921,7 @@ function AnimatedTabBody({
 
 /** One-time offer after the first submit; the permission prompt needs this click. */
 function NotifyOffer({ theme, onDone }: { theme: SnagTheme; onDone: () => void }) {
+  const { t } = useSnagStrings();
   const [asking, setAsking] = useState(false);
   return (
     <div
@@ -939,8 +934,7 @@ function NotifyOffer({ theme, onDone }: { theme: SnagTheme; onDone: () => void }
       }}
     >
       <p style={{ margin: 0, fontSize: 13, color: theme.text }}>
-        Get a browser notification when the agent has a question or your change is ready, even
-        in another tab.
+        {t("submit.notifyBody")}
       </p>
       <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
         <button
@@ -961,7 +955,7 @@ function NotifyOffer({ theme, onDone }: { theme: SnagTheme; onDone: () => void }
             cursor: asking ? "wait" : "pointer",
           }}
         >
-          Notify me when it's ready
+          {t("submit.notify")}
         </button>
         <button
           type="button"
@@ -980,7 +974,7 @@ function NotifyOffer({ theme, onDone }: { theme: SnagTheme; onDone: () => void }
             cursor: "pointer",
           }}
         >
-          No thanks
+          {t("submit.notNow")}
         </button>
       </div>
     </div>
@@ -998,6 +992,7 @@ function FlowStepList({
   disabled: boolean;
   onRemove: (index: number) => void;
 }) {
+  const { t } = useSnagStrings();
   if (steps.length === 0) return null;
   return (
     <div style={{ marginBottom: 16 }}>
@@ -1010,10 +1005,10 @@ function FlowStepList({
           marginBottom: 8,
         }}
       >
-        HOW YOU GOT HERE
+        {t("composer.howYouGotHere")}
       </div>
       <ul
-        aria-label="Recent steps"
+        aria-label={t("composer.recentSteps")}
         style={{
           listStyle: "none",
           margin: 0,
@@ -1064,14 +1059,14 @@ function FlowStepList({
                 textOverflow: "ellipsis",
               }}
             >
-              {step.type === "click" ? step.label : "Opened"}
+              {step.type === "click" ? step.label : t("composer.opened")}
               <span style={{ color: theme.textMuted }}> · {step.path}</span>
             </span>
             <button
               type="button"
               onClick={() => onRemove(index)}
               disabled={disabled}
-              aria-label={`Remove step ${index + 1}`}
+              aria-label={t("composer.removeStep", { number: index + 1 })}
               style={{
                 flexShrink: 0,
                 width: 24,
@@ -1105,10 +1100,11 @@ function PickedElementList({
   disabled: boolean;
   onRemove: (index: number) => void;
 }) {
+  const { t } = useSnagStrings();
   if (elements.length === 0) return null;
   return (
     <ul
-      aria-label="Selected elements"
+      aria-label={t("composer.selectedElements")}
       style={{
         listStyle: "none",
         margin: "10px 0 0",
@@ -1201,9 +1197,10 @@ function TabBar({
   badgeCount: number;
   onSelect: (tab: Tab) => void;
 }) {
+  const { t } = useSnagStrings();
   const tabs: { id: Tab; label: string; icon: ReactNode; badgeCount?: number }[] = [
-    { id: "new", label: "New request", icon: <ChatIcon size={20} /> },
-    { id: "list", label: "Requests", icon: <InboxIcon />, badgeCount },
+    { id: "new", label: t("nav.new"), icon: <ChatIcon size={20} /> },
+    { id: "list", label: t("nav.requests"), icon: <InboxIcon />, badgeCount },
   ];
   const index = Math.max(0, tabs.findIndex((t) => t.id === tab));
   const share = 100 / tabs.length;
@@ -1211,7 +1208,7 @@ function TabBar({
   return (
     <div
       role="tablist"
-      aria-label="Snag"
+      aria-label={t("nav.snag")}
       style={{
         position: "relative",
         display: "flex",
@@ -1236,12 +1233,12 @@ function TabBar({
         style={{
           position: "absolute",
           bottom: -1,
-          left: `${index * share}%`,
+          insetInlineStart: `${index * share}%`,
           width: `${share}%`,
           display: "flex",
           justifyContent: "center",
           pointerEvents: "none",
-          transition: `left ${TAB_MOTION_MS}ms cubic-bezier(0.32, 0.72, 0, 1)`,
+          transition: `inset-inline-start ${TAB_MOTION_MS}ms cubic-bezier(0.32, 0.72, 0, 1)`,
         }}
       >
         <span
@@ -1272,6 +1269,7 @@ function TabButton({
   onClick: () => void;
   badgeCount?: number;
 }) {
+  const { t } = useSnagStrings();
   const badgeLabel = badgeCount > 9 ? "9+" : String(badgeCount);
   return (
     <button
@@ -1281,7 +1279,7 @@ function TabButton({
       className="snag-tabbar-tab snag-focus"
       onClick={onClick}
       aria-label={
-        badgeCount > 0 ? `${label}. ${badgeCount} awaiting your reply` : label
+        badgeCount > 0 ? `${label}. ${t("tab.awaitingReply", { count: badgeCount })}` : label
       }
       style={{
         position: "relative",
@@ -1310,7 +1308,7 @@ function TabButton({
             style={{
               position: "absolute",
               top: -6,
-              left: 14,
+              insetInlineStart: 14,
               minWidth: 16,
               height: 16,
               padding: "0 4px",

@@ -98,6 +98,7 @@ export function App() {
 | `getRequesterToken` | Signed requester token from your backend, sent as `x-snag-requester-token`. Verifies who filed the request — required for execute-mode auto-merge (see below) |
 | `getAuthToken` | Send `Authorization: Bearer` when the user is logged in |
 | `theme` | Override tab/panel colors (`accent` drives the in-progress sweep, `danger` the waiting-on-you glow, `success` the finished state) |
+| `locale` | Overlay language. `"ar"` or any `ar-*` value shows Arabic and RTL. Missing or unknown values stay English and LTR. Not read from `<html lang>` or the browser |
 | `debug: true` | Log probe/request details to the console |
 | `markers: false` | Hide the numbered pins that mark open requests on the page |
 

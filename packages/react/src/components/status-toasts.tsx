@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 
+import { useSnagStrings } from "../locale-context";
 import type { StatusEvent } from "../notifications";
 import { GLASS_BLUR_SATURATE, GLASS_FILL } from "../sheet";
 import type { SnagTheme } from "../theme";
@@ -71,6 +72,7 @@ function ToastCard({
     return () => window.clearTimeout(id);
   }, []);
 
+  const { t } = useSnagStrings();
   const problem = toast.event.status === "error";
   return (
     <div
@@ -78,13 +80,14 @@ function ToastCard({
         display: "flex",
         alignItems: "center",
         gap: 10,
-        padding: "10px 10px 10px 14px",
+        padding: "10px 10px",
+        paddingInlineStart: 14,
         borderRadius: 12,
         background: GLASS_FILL,
         backdropFilter: GLASS_BLUR_SATURATE,
         WebkitBackdropFilter: GLASS_BLUR_SATURATE,
         border: "1px solid rgba(255,255,255,0.55)",
-        borderLeft: `3px solid ${problem ? theme.danger : theme.accent}`,
+        borderInlineStart: `3px solid ${problem ? theme.danger : theme.accent}`,
         boxShadow: "0 8px 30px rgba(0,0,0,0.18)",
       }}
     >
@@ -119,7 +122,7 @@ function ToastCard({
             cursor: "pointer",
           }}
         >
-          Reload page
+          {t("toast.reload")}
         </button>
       ) : null}
       <button
@@ -138,12 +141,12 @@ function ToastCard({
           cursor: "pointer",
         }}
       >
-        View
+        {t("toast.view")}
       </button>
       <button
         type="button"
         onClick={onDismiss}
-        aria-label="Dismiss"
+        aria-label={t("toast.dismiss")}
         className="snag-focus"
         style={{
           flexShrink: 0,

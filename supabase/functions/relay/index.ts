@@ -70,7 +70,13 @@ import {
   markerFromContext,
   requestMarkerSchema,
 } from "../_shared/request_marker.ts";
-import { requestStageLabel } from "../_shared/request_stage.ts";
+import {
+  blockedRulesFromDecision,
+  handoffCodeFromReason,
+  rejectionReasonForRow,
+  requestStageCode,
+  requestStageLabel,
+} from "../_shared/request_stage.ts";
 import {
   mapTerminalRequestStatus,
   requesterQuestionsFormatLines,
@@ -936,9 +942,15 @@ async function listRequests(
     summary: row.summary,
     error: row.error,
     rejection_note: row.status === "rejected" ? row.rejection_note : null,
+    rejection_reason: rejectionReasonForRow(row),
+    blocked_rules: row.status === "rejected" ? blockedRulesFromDecision(row.policy_decision) : [],
     close_note: row.status === "closed_by_requester" ? row.close_note : null,
     handoff_reason: row.status === "awaiting_review" ? row.handoff_reason : null,
+    handoff_code: row.status === "awaiting_review"
+      ? handoffCodeFromReason(row.handoff_reason)
+      : null,
     phase: row.phase,
+    stage: requestStageCode(row),
     stage_label: requestStageLabel(row),
     plan: row.plan
       ? {

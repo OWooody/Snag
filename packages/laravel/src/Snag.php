@@ -17,6 +17,9 @@ class Snag
     /** @var (Closure(mixed, Request): ?string)|null */
     private static ?Closure $requesterResolver = null;
 
+    /** @var (Closure(Request): ?string)|null */
+    private static ?Closure $localeResolver = null;
+
     /** @var list<Closure(array<string, mixed>, Request): array<string, mixed>> */
     private static array $contextExtenders = [];
 
@@ -35,6 +38,17 @@ class Snag
     }
 
     /**
+     * Overlay language. Return "ar" or an ar-* value for Arabic and RTL.
+     * A missing or empty value keeps the overlay in English.
+     *
+     * @param  Closure(Request $request): ?string  $resolver
+     */
+    public static function resolveLocaleUsing(?Closure $resolver): void
+    {
+        static::$localeResolver = $resolver;
+    }
+
+    /**
      * @param  Closure(array<string, mixed> $context, Request $request): array<string, mixed>  $extender
      */
     public static function extendContextUsing(Closure $extender): void
@@ -45,6 +59,7 @@ class Snag
     public static function flushState(): void
     {
         static::$requesterResolver = null;
+        static::$localeResolver = null;
         static::$contextExtenders = [];
     }
 
@@ -99,6 +114,7 @@ class Snag
             'markers' => (bool) $config->get('snag.markers', true),
             'debug' => (bool) $config->get('snag.debug', false),
             'theme' => (array) $config->get('snag.theme', []) ?: null,
+            'locale' => $this->locale($request),
         ], static fn ($value) => $value !== null);
     }
 
@@ -121,6 +137,22 @@ class Snag
         }
 
         return $context;
+    }
+
+    public function locale(Request $request): ?string
+    {
+        if (static::$localeResolver) {
+            $value = $this->safely(fn () => (static::$localeResolver)($request), null);
+        } else {
+            $value = $this->app['config']->get('snag.locale');
+        }
+
+        if (! is_scalar($value)) {
+            return null;
+        }
+        $value = trim((string) $value);
+
+        return $value === '' ? null : $value;
     }
 
     public function requester(Request $request): ?string

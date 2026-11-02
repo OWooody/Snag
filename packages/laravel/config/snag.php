@@ -93,4 +93,17 @@ return [
     // Overrides for the overlay theme, for example ['accent' => '#5B4CF5'].
     'theme' => [],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Overlay language
+    |--------------------------------------------------------------------------
+    |
+    | Optional. "ar" or any ar-* value shows Arabic and RTL. Leave unset (or
+    | empty) to keep English and LTR. For a language that changes per user,
+    | call Snag::resolveLocaleUsing(...) in a service provider instead.
+    |
+    */
+
+    'locale' => env('SNAG_LOCALE'),
+
 ];

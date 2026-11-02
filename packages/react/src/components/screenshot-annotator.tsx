@@ -14,6 +14,7 @@ import {
   type StrokePoint,
   type StrokeTool,
 } from "../stroke-utils";
+import { useSnagStrings } from "../locale-context";
 import type { SnagTheme } from "../theme";
 
 interface ScreenshotAnnotatorProps {
@@ -29,6 +30,7 @@ export function ScreenshotAnnotator({
   onDone,
   onCancel,
 }: ScreenshotAnnotatorProps) {
+  const { t } = useSnagStrings();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [tool, setTool] = useState<StrokeTool>("pen");
@@ -176,7 +178,7 @@ export function ScreenshotAnnotator({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Annotate screenshot"
+      aria-label={t("annotate.aria")}
       style={{
         position: "fixed",
         inset: 0,
@@ -211,11 +213,11 @@ export function ScreenshotAnnotator({
             justifyContent: "space-between",
           }}
         >
-          <h2 style={{ margin: 0, fontSize: 17, color: theme.text }}>Mark up screenshot</h2>
+          <h2 style={{ margin: 0, fontSize: 17, color: theme.text }}>{t("annotate.title")}</h2>
           <button
             type="button"
             onClick={requestClose}
-            aria-label="Cancel annotation"
+            aria-label={t("annotate.cancel")}
             disabled={saving}
             style={{
               width: 30,
@@ -245,28 +247,28 @@ export function ScreenshotAnnotator({
           }}
         >
           <ToolButton
-            label="Pen"
+            label={t("annotate.pen")}
             active={tool === "pen"}
             theme={theme}
             onClick={() => setTool("pen")}
             disabled={saving}
           />
           <ToolButton
-            label="Highlighter"
+            label={t("annotate.highlighter")}
             active={tool === "highlighter"}
             theme={theme}
             onClick={() => setTool("highlighter")}
             disabled={saving}
           />
           <ToolButton
-            label="Undo"
+            label={t("annotate.undo")}
             active={false}
             theme={theme}
             onClick={undo}
             disabled={saving || !hasStrokes}
           />
           <ToolButton
-            label="Clear"
+            label={t("annotate.clear")}
             active={false}
             theme={theme}
             onClick={clearAll}
@@ -299,7 +301,7 @@ export function ScreenshotAnnotator({
           >
             <img
               src={`data:image/jpeg;base64,${screenshot.base64}`}
-              alt="Screenshot to annotate"
+              alt={t("annotate.alt")}
               draggable={false}
               style={{
                 display: "block",
@@ -342,7 +344,7 @@ export function ScreenshotAnnotator({
               cursor: "pointer",
             }}
           >
-            Cancel
+            {t("annotate.cancelAction")}
           </button>
           <button
             type="button"
@@ -360,7 +362,7 @@ export function ScreenshotAnnotator({
               opacity: saving ? 0.7 : 1,
             }}
           >
-            {saving ? "Saving…" : "Done"}
+            {saving ? t("annotate.saving") : t("annotate.done")}
           </button>
         </div>
       </div>

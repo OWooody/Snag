@@ -1,5 +1,7 @@
 export { initSnag } from "./config";
 export type { SnagConfig } from "./config";
+export { resolveLocale, directionFor } from "./i18n";
+export type { SnagLocale, SnagDirection } from "./i18n";
 export { SnagOverlay } from "./components/snag-overlay";
 export type { SnagTheme } from "./theme";
 export type {

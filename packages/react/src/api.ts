@@ -1,9 +1,11 @@
 import {
   getSnagConfig,
   isDebugEnabled,
+  resolveLocaleConfig,
   resolveRequester,
   resolveRequesterToken,
 } from "./config";
+import { translate } from "./i18n";
 import { trackRequestStatuses } from "./notifications";
 import type {
   CloseSnagRequestResponse,
@@ -95,7 +97,7 @@ export async function createSnagRequest(
   body: CreateSnagRequestBody,
 ): Promise<CreateSnagRequestResponse> {
   const config = getSnagConfig();
-  if (!config) throw new Error("Snag is not initialized");
+  if (!config) throw new Error(translate(resolveLocaleConfig(), "error.notInitialized"));
   const response = await fetch(config.endpoint, {
     method: "POST",
     headers: await buildHeaders(),
@@ -106,7 +108,10 @@ export async function createSnagRequest(
     | null;
   if (!response.ok || !payload?.id) {
     debugLog("create request failed", response.status, payload);
-    throw new Error(payload?.error ?? `Request failed (${response.status})`);
+    throw new Error(
+      payload?.error ??
+        translate(resolveLocaleConfig(), "error.requestFailed", { status: response.status }),
+    );
   }
   return payload;
 }
@@ -117,7 +122,7 @@ export async function replyToSnagRequest(
   attachments?: { images?: SnagReferenceImage[]; files?: SnagReferenceFile[] },
 ): Promise<ReplySnagRequestResponse> {
   const config = getSnagConfig();
-  if (!config) throw new Error("Snag is not initialized");
+  if (!config) throw new Error(translate(resolveLocaleConfig(), "error.notInitialized"));
   const response = await fetch(config.endpoint, {
     method: "POST",
     headers: await buildHeaders(),
@@ -133,7 +138,10 @@ export async function replyToSnagRequest(
     | null;
   if (!response.ok || !payload?.id) {
     debugLog("reply failed", response.status, payload);
-    throw new Error(payload?.error ?? `Reply failed (${response.status})`);
+    throw new Error(
+      payload?.error ??
+        translate(resolveLocaleConfig(), "error.replyFailed", { status: response.status }),
+    );
   }
   return payload;
 }
@@ -142,7 +150,7 @@ export async function confirmSnagRequest(
   body: ConfirmSnagRequestBody,
 ): Promise<ConfirmSnagRequestResponse> {
   const config = getSnagConfig();
-  if (!config) throw new Error("Snag is not initialized");
+  if (!config) throw new Error(translate(resolveLocaleConfig(), "error.notInitialized"));
   const response = await fetch(config.endpoint, {
     method: "POST",
     headers: await buildHeaders(),
@@ -153,7 +161,10 @@ export async function confirmSnagRequest(
     | null;
   if (!response.ok || !payload?.id) {
     debugLog("confirm failed", response.status, payload);
-    throw new Error(payload?.error ?? `Confirmation failed (${response.status})`);
+    throw new Error(
+      payload?.error ??
+        translate(resolveLocaleConfig(), "error.confirmFailed", { status: response.status }),
+    );
   }
   return payload;
 }
@@ -163,7 +174,7 @@ export async function closeSnagRequest(
   note?: string,
 ): Promise<CloseSnagRequestResponse> {
   const config = getSnagConfig();
-  if (!config) throw new Error("Snag is not initialized");
+  if (!config) throw new Error(translate(resolveLocaleConfig(), "error.notInitialized"));
   const trimmed = note?.trim();
   const response = await fetch(config.endpoint, {
     method: "POST",
@@ -179,7 +190,10 @@ export async function closeSnagRequest(
     | null;
   if (!response.ok || !payload?.id) {
     debugLog("close failed", response.status, payload);
-    throw new Error(payload?.error ?? `Could not close the request (${response.status})`);
+    throw new Error(
+      payload?.error ??
+        translate(resolveLocaleConfig(), "error.closeFailed", { status: response.status }),
+    );
   }
   return payload;
 }

@@ -3,7 +3,9 @@
  * Size limits match supabase/functions/_shared/attachments.ts.
  */
 
+import { resolveLocaleConfig } from "./config";
 import { extractDocumentText } from "./extract-document";
+import { translate } from "./i18n";
 import type { SnagReferenceFile, SnagReferenceImage } from "./protocol";
 
 export const MAX_REFERENCE_IMAGES = 3;
@@ -115,7 +117,7 @@ export function messageWithAttachments(
 ): string {
   const trimmed = text.trim();
   if (trimmed) return trimmed.slice(0, maxLength);
-  if (items.length > 0) return ATTACHMENT_ONLY_MESSAGE;
+  if (items.length > 0) return translate(resolveLocaleConfig(), "attach.only");
   return "";
 }
 
@@ -173,7 +175,7 @@ async function encodeImage(file: File): Promise<{ base64: string; width: number;
       canvas.width = width;
       canvas.height = height;
       const ctx = canvas.getContext("2d");
-      if (!ctx) throw new Error("Could not read that image.");
+      if (!ctx) throw new Error(translate(resolveLocaleConfig(), "attach.readFailed"));
       ctx.drawImage(bitmap, 0, 0, width, height);
       const dataUrl = canvas.toDataURL("image/jpeg", quality);
       const base64 = dataUrl.replace(/^data:image\/jpeg;base64,/, "");
@@ -208,18 +210,19 @@ export async function readAttachments(
   for (const file of files) {
     const name = safeAttachmentName(file.name);
     if (file.size > MAX_RAW_BYTES) {
-      error ??= `${name} is too large.`;
+      error ??= translate(resolveLocaleConfig(), "attach.tooLarge", { name });
       continue;
     }
     const kind = kindFor(file);
     if (!kind) {
-      error ??=
-        `${name} isn't supported. Use an image, PDF, Word, Excel, PowerPoint, or a text file.`;
+      error ??= translate(resolveLocaleConfig(), "attach.unsupported", { name });
       continue;
     }
     if (kind === "image") {
       if (imageCount >= MAX_REFERENCE_IMAGES) {
-        error ??= `You can attach up to ${MAX_REFERENCE_IMAGES} images.`;
+        error ??= translate(resolveLocaleConfig(), "attach.maxImages", {
+          max: MAX_REFERENCE_IMAGES,
+        });
         continue;
       }
       try {
@@ -236,13 +239,15 @@ export async function readAttachments(
       } catch (failure) {
         error ??=
           failure instanceof Error && failure.message === "too-large"
-            ? `${name} is too large. Try a smaller image.`
-            : `Couldn't read ${name}.`;
+            ? translate(resolveLocaleConfig(), "attach.imageTooLarge", { name })
+            : translate(resolveLocaleConfig(), "attach.readFailedName", { name });
       }
       continue;
     }
     if (fileCount >= MAX_REFERENCE_FILES) {
-      error ??= `You can attach up to ${MAX_REFERENCE_FILES} files.`;
+      error ??= translate(resolveLocaleConfig(), "attach.maxFiles", {
+        max: MAX_REFERENCE_FILES,
+      });
       continue;
     }
     let text: string;
@@ -254,10 +259,10 @@ export async function readAttachments(
         const reason = failure instanceof Error ? failure.message : "";
         error ??=
           reason === "password"
-            ? `${name} is password-protected.`
+            ? translate(resolveLocaleConfig(), "attach.password", { name })
             : reason === "empty"
-              ? `${name} has no text we can read. If it is a scan, attach a picture of it instead.`
-              : `Couldn't read ${name}.`;
+              ? translate(resolveLocaleConfig(), "attach.noText", { name })
+              : translate(resolveLocaleConfig(), "attach.readFailedName", { name });
         continue;
       }
     } else {
@@ -265,7 +270,7 @@ export async function readAttachments(
     }
     text = capReferenceText(text);
     if (!text.trim()) {
-      error ??= `${name} is empty.`;
+      error ??= translate(resolveLocaleConfig(), "attach.empty", { name });
       continue;
     }
     added.push({

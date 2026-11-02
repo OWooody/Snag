@@ -202,6 +202,14 @@ export interface SnagRequestRow {
   error: string | null;
   /** The developer's note when the plan was rejected. */
   rejection_note?: string | null;
+  /** Why the request was rejected. Policy blocks are not developer decisions. */
+  rejection_reason?: "policy_block" | "developer" | null;
+  /** Names of the block rules that rejected the request. */
+  blocked_rules?: string[];
+  /** Stable stage code the overlay translates. `stage_label` is the English fallback. */
+  stage?: "planning" | "building" | "waiting_preview" | "waiting_checks" | null;
+  /** Stable handoff code the overlay translates. `handoff_reason` is the English fallback. */
+  handoff_code?: string | null;
   /** The requester's note when they closed the request. */
   close_note?: string | null;
   /** Why the request went to a developer while awaiting_review. Informational, not an error. */
