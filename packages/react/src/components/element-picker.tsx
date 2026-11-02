@@ -9,6 +9,7 @@ import {
 
 import { describeElement, elementLabel } from "../element-info";
 import { GLASS_FILL, GLASS_SURFACE } from "../sheet";
+import { useSnagStrings } from "../locale-context";
 import type { SnagTheme } from "../theme";
 
 interface ElementPickerProps {
@@ -58,6 +59,7 @@ function maxDepth(element: Element | null): number {
  * Arrow Up/Down walk to the parent/child, Enter finishes, Esc cancels.
  */
 export function ElementPicker({ theme, initial, max, onDone, onCancel }: ElementPickerProps) {
+  const { t } = useSnagStrings();
   const [target, setTarget] = useState<Element | null>(null);
   const [depth, setDepth] = useState(0);
   const [touchMode, setTouchMode] = useState(false);
@@ -163,7 +165,7 @@ export function ElementPicker({ theme, initial, max, onDone, onCancel }: Element
   const labelAbove = rect ? rect.top > 30 : true;
 
   return (
-    <div role="dialog" aria-modal="true" aria-label="Select an element">
+    <div role="dialog" aria-modal="true" aria-label={t("picker.aria")}>
       <div
         onPointerMove={onPointerMove}
         onPointerDown={onPointerDown}
@@ -278,7 +280,9 @@ export function ElementPicker({ theme, initial, max, onDone, onCancel }: Element
           gap: 8,
           maxWidth: "calc(100% - 24px)",
           boxSizing: "border-box",
-          padding: "8px 8px 8px 14px",
+          paddingBlock: 8,
+          paddingInlineStart: 14,
+          paddingInlineEnd: 8,
           borderRadius: 12,
           background: GLASS_FILL,
           backdropFilter: "blur(20px)",
@@ -290,36 +294,36 @@ export function ElementPicker({ theme, initial, max, onDone, onCancel }: Element
         <div aria-live="polite" style={{ minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: theme.text }}>
             {full
-              ? `Up to ${max} elements`
+              ? t("picker.max", { max })
               : touchMode
-                ? "Tap an element, then Add"
-                : "Click the elements to change"}
+                ? t("picker.tap")
+                : t("picker.click")}
           </div>
           {!touchMode ? (
             <div style={{ fontSize: 11, color: theme.textMuted }}>
-              Click again to remove · ↑ ↓ parent / child · Enter done · Esc cancel
+              {t("picker.hint")}
             </div>
           ) : null}
         </div>
         {touchMode && selected ? (
           <>
             <BannerButton
-              label="Parent"
+              label={t("picker.parent")}
               theme={theme}
               disabled={depth >= maxDepth(target)}
               onClick={() => setDepth((value) => value + 1)}
             />
             <BannerButton
-              label={selectedIsPicked ? "Remove" : "Add"}
+              label={selectedIsPicked ? t("picker.remove") : t("picker.add")}
               theme={theme}
               disabled={!selectedIsPicked && full}
               onClick={() => toggle(selected)}
             />
           </>
         ) : null}
-        <BannerButton label="Cancel" theme={theme} onClick={onCancel} />
+        <BannerButton label={t("picker.cancel")} theme={theme} onClick={onCancel} />
         <BannerButton
-          label={picked.length > 0 ? `Done (${picked.length})` : "Done"}
+          label={picked.length > 0 ? t("picker.doneCount", { count: picked.length }) : t("picker.done")}
           theme={theme}
           primary
           disabled={picked.length === 0}

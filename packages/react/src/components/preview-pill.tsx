@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { applyPreview, type PreviewOp } from "../dom-preview";
 import { GLASS_BLUR_SATURATE, GLASS_FILL } from "../sheet";
+import { useSnagStrings } from "../locale-context";
 import type { SnagTheme } from "../theme";
 
 /**
@@ -17,6 +18,7 @@ export function PreviewPill({
   theme: SnagTheme;
   onClose: () => void;
 }) {
+  const { t } = useSnagStrings();
   const [counts, setCounts] = useState<{ applied: number; skipped: number } | null>(null);
 
   useEffect(() => {
@@ -52,7 +54,9 @@ export function PreviewPill({
         width: "max-content",
         maxWidth: "calc(100% - 24px)",
         boxSizing: "border-box",
-        padding: "10px 10px 10px 16px",
+        paddingBlock: 10,
+        paddingInlineStart: 16,
+        paddingInlineEnd: 10,
         borderRadius: 999,
         background: GLASS_FILL,
         backdropFilter: GLASS_BLUR_SATURATE,
@@ -62,13 +66,13 @@ export function PreviewPill({
       }}
     >
       <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: theme.text }}>Approximate preview</div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: theme.text }}>{t("preview.title")}</div>
         <div style={{ fontSize: 11, color: theme.textMuted }}>
           {nothingMatched
-            ? "Couldn't find these elements on this screen."
+            ? t("preview.missing")
             : counts && counts.skipped > 0
-              ? `Some parts of the plan aren't on this screen. The real change may look a little different.`
-              : "The real change may look a little different."}
+              ? t("preview.partial")
+              : t("preview.disclaimer")}
         </div>
       </div>
       <button
@@ -87,7 +91,7 @@ export function PreviewPill({
           cursor: "pointer",
         }}
       >
-        Back to plan
+        {t("preview.back")}
       </button>
     </div>
   );

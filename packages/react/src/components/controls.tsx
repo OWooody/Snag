@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { GLASS_SURFACE, SNAG_EASE, usePrefersReducedMotion } from "../sheet";
 import { withAlpha } from "../styles";
+import { useSnagStrings } from "../locale-context";
 import type { SnagTheme } from "../theme";
 
 /** Toggleable filter pill; replaces a bare checkbox in toolbars. */
@@ -76,6 +77,7 @@ export function RefreshButton({
   theme: SnagTheme;
   onRefresh: () => Promise<void>;
 }) {
+  const { t } = useSnagStrings();
   const reducedMotion = usePrefersReducedMotion();
   const [state, setState] = useState<"idle" | "spinning" | "done">("idle");
   const settled = useRef(false);
@@ -117,9 +119,9 @@ export function RefreshButton({
     <button
       type="button"
       onClick={() => void refresh()}
-      aria-label="Refresh requests"
+      aria-label={t("list.refreshAria")}
       aria-busy={state === "spinning"}
-      title="Refresh"
+      title={t("list.refresh")}
       data-state={state}
       className="snag-focus snag-refresh"
       style={{
@@ -185,7 +187,7 @@ export function RefreshButton({
         </span>
       </span>
       <span role="status" className="snag-visually-hidden">
-        {done ? "Requests updated" : ""}
+        {done ? t("list.updated") : ""}
       </span>
     </button>
   );
@@ -244,14 +246,13 @@ export function Switch({
           style={{
             position: "absolute",
             top: 2,
-            left: 2,
+            insetInlineStart: checked ? 16 : 2,
             width: 16,
             height: 16,
             borderRadius: 999,
             background: "#fff",
             boxShadow: "0 1px 3px rgba(0,0,0,0.22)",
-            transform: checked ? "translateX(14px)" : "translateX(0)",
-            transition: `transform 260ms ${SNAG_EASE}`,
+            transition: `inset-inline-start 260ms ${SNAG_EASE}`,
           }}
         />
       </span>

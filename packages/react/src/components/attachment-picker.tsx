@@ -5,6 +5,7 @@ import {
   readAttachments,
   type LocalAttachment,
 } from "../attachments";
+import { useSnagStrings } from "../locale-context";
 import { GLASS_SURFACE } from "../sheet";
 import type { SnagTheme } from "../theme";
 
@@ -30,6 +31,7 @@ export function AttachmentPicker({
   /** The message field. The + sits in its bottom-left corner. */
   children?: ReactNode;
 }) {
+  const { t } = useSnagStrings();
   const inputRef = useRef<HTMLInputElement>(null);
   const [reading, setReading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -51,13 +53,13 @@ export function AttachmentPicker({
   const plus = (
     <button
       type="button"
-      aria-label="Add image or file"
-      title="Add image or file"
+      aria-label={t("attach.add")}
+      title={t("attach.add")}
       disabled={busy}
       onClick={() => inputRef.current?.click()}
       style={{
         position: children ? "absolute" : "relative",
-        left: children ? 6 : 0,
+        insetInlineStart: children ? 6 : 0,
         bottom: children ? 6 : undefined,
         display: "inline-flex",
         alignItems: "center",
@@ -110,7 +112,8 @@ export function AttachmentPicker({
                 position: "relative",
                 width: item.kind === "image" ? 76 : undefined,
                 maxWidth: "100%",
-                padding: item.kind === "file" ? "6px 28px 6px 8px" : 0,
+                padding: item.kind === "file" ? "6px 8px" : 0,
+                paddingInlineEnd: item.kind === "file" ? 28 : undefined,
                 borderRadius: 8,
                 background: GLASS_SURFACE,
                 border: "1px solid rgba(255,255,255,0.4)",
@@ -163,13 +166,13 @@ export function AttachmentPicker({
               )}
               <button
                 type="button"
-                aria-label={`Remove ${item.name}`}
+                aria-label={t("attach.remove", { name: item.name })}
                 disabled={busy}
                 onClick={() => onChange(attachments.filter((other) => other.id !== item.id))}
                 style={{
                   position: "absolute",
                   top: 4,
-                  right: 4,
+                  insetInlineEnd: 4,
                   width: 18,
                   height: 18,
                   borderRadius: 9,

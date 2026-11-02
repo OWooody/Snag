@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
 import type { PickedElement } from "../element-highlights";
 import type { SnagRequestMarker, SnagRequestRow, SnagRequestStatus } from "../protocol";
+import { useSnagStrings } from "../locale-context";
 import type { SnagTheme } from "../theme";
 
 const MARKER_SIZE = 22;
@@ -123,6 +124,7 @@ export function PageMarkers({
   theme: SnagTheme;
   onOpen: (row: SnagRequestRow) => void;
 }) {
+  const { t } = useSnagStrings();
   const pathname = usePathname();
   const visible = useMemo(
     () =>
@@ -167,7 +169,7 @@ export function PageMarkers({
           type="button"
           className="snag-focus snag-page-marker"
           onClick={() => onOpen(row)}
-          aria-label={`Open request ${number}: ${row.prompt}`}
+          aria-label={t("marker.aria", { number, prompt: row.prompt })}
           title={row.prompt.length > 120 ? `${row.prompt.slice(0, 117)}…` : row.prompt}
           style={{
             position: "fixed",

@@ -229,7 +229,7 @@ export function LightMarkdown({
             style={{
               ...base,
               // Keep list markers — `display: flex` on ol/ul hides numbering.
-              paddingLeft: 22,
+              paddingInlineStart: 22,
               margin: 0,
               listStyleType: block.type === "ol" ? "decimal" : "disc",
               listStylePosition: "outside",

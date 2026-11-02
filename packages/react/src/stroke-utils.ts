@@ -1,5 +1,7 @@
 import { getStroke } from "perfect-freehand";
 
+import { resolveLocaleConfig } from "./config";
+import { translate } from "./i18n";
 import type { SnagScreenshot } from "./protocol";
 
 export type StrokeTool = "pen" | "highlighter";
@@ -83,7 +85,8 @@ export function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image();
     image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error("Failed to load screenshot for annotation"));
+    image.onerror = () =>
+      reject(new Error(translate(resolveLocaleConfig(), "annotate.loadFailed")));
     image.src = src;
   });
 }

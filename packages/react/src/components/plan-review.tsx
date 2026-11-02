@@ -4,6 +4,7 @@ import { confirmSnagRequest, replyToSnagRequest } from "../api";
 import { attachmentFields, messageWithAttachments, type LocalAttachment } from "../attachments";
 import { parsePreviewOps, type PreviewOp } from "../dom-preview";
 import type { SnagRequestPlan } from "../protocol";
+import { useSnagStrings } from "../locale-context";
 import type { SnagTheme } from "../theme";
 import { AttachmentPicker, COMPOSER_PADDING } from "./attachment-picker";
 
@@ -31,6 +32,7 @@ export function PlanReview({
   /** Collapse the sheet and show `ops` on the page. */
   onShowPreview?: (ops: PreviewOp[]) => void;
 }) {
+  const { t } = useSnagStrings();
   const previewOps = useMemo(() => parsePreviewOps(plan.preview), [plan.preview]);
   const [adjusting, setAdjusting] = useState(false);
   const [feedback, setFeedback] = useState("");
@@ -48,7 +50,7 @@ export function PlanReview({
       setAdjusting(false);
       onDone();
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : "Something went wrong");
+      setError(failure instanceof Error ? failure.message : t("plan.failed"));
     } finally {
       setBusy(false);
     }
@@ -60,7 +62,7 @@ export function PlanReview({
   const sendAdjustment = () => {
     const message = messageWithAttachments(feedback, attachments, MAX_FEEDBACK_LENGTH);
     if (!message) {
-      setError("Describe the change or attach an image or file.");
+      setError(t("plan.empty"));
       return;
     }
     void run(() => replyToSnagRequest(requestId, message, attachmentFields(attachments)));
@@ -69,10 +71,10 @@ export function PlanReview({
   return (
     <div style={{ marginTop: 10 }}>
       <p style={{ fontSize: 13, fontWeight: 600, color: theme.text, margin: "0 0 6px" }}>
-        Here's what the agent plans to change
+        {t("plan.heading")}
       </p>
       {plan.changes.length > 0 ? (
-        <ul style={{ margin: "0 0 8px", paddingLeft: 18, color: theme.text, fontSize: 13 }}>
+        <ul style={{ margin: "0 0 8px", paddingInlineStart: 18, color: theme.text, fontSize: 13 }}>
           {plan.changes.map((change, index) => (
             <li key={index} style={{ marginBottom: 2 }}>
               {change}
@@ -83,7 +85,7 @@ export function PlanReview({
         <p style={{ fontSize: 13, color: theme.text, margin: "0 0 8px" }}>{plan.summary}</p>
       ) : null}
       <p style={{ fontSize: 12, color: theme.textMuted, margin: "0 0 10px" }}>
-        Nothing is built until you approve. A developer may still check it before it goes live.
+        {t("plan.disclaimer")}
       </p>
       {previewOps && onShowPreview ? (
         <button
@@ -92,7 +94,7 @@ export function PlanReview({
           disabled={busy}
           style={{ ...buttonStyle(false, busy), width: "100%", marginBottom: 8 }}
         >
-          Show me the expected result
+          {t("plan.preview")}
         </button>
       ) : null}
       {adjusting ? (
@@ -107,7 +109,7 @@ export function PlanReview({
               value={feedback}
               onChange={(event) => setFeedback(event.target.value.slice(0, MAX_FEEDBACK_LENGTH))}
               disabled={busy}
-              placeholder="What should be different?"
+              placeholder={t("plan.placeholder")}
               rows={3}
               style={{ ...fieldStyle, padding: COMPOSER_PADDING }}
             />
@@ -119,7 +121,7 @@ export function PlanReview({
               disabled={busy}
               style={buttonStyle(false, busy)}
             >
-              Cancel
+              {t("plan.cancel")}
             </button>
             <button
               type="button"
@@ -127,7 +129,7 @@ export function PlanReview({
               disabled={busy}
               style={buttonStyle(true, busy)}
             >
-              {busy ? "Sending…" : "Send changes"}
+              {busy ? t("plan.sending") : t("plan.send")}
             </button>
           </div>
         </>
@@ -139,10 +141,10 @@ export function PlanReview({
             disabled={busy}
             style={buttonStyle(false, busy)}
           >
-            Adjust
+            {t("plan.adjust")}
           </button>
           <button type="button" onClick={approve} disabled={busy} style={buttonStyle(true, busy)}>
-            {busy ? "Approving…" : "Looks right, build it"}
+            {busy ? t("plan.approving") : t("plan.approve")}
           </button>
         </div>
       )}

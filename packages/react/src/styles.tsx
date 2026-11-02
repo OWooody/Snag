@@ -15,14 +15,19 @@ export function withAlpha(hex: string, alpha: number): string {
  * Keyframes and pseudo-class rules inline styles can't express. Rendered once
  * inside the overlay root; every selector is scoped to it.
  */
-export function SnagStyles({ theme }: { theme: SnagTheme }) {
+export function SnagStyles({ theme, dir = "ltr" }: { theme: SnagTheme; dir?: "ltr" | "rtl" }) {
   const root = "[data-snag-overlay]";
   const css = `
-/* Stay LTR when the host page is RTL. The repeated attribute beats rules like
+/* Isolate from the host page. The repeated attribute beats rules like
    html[dir=rtl] body * { direction: rtl !important }, including on descendants. */
 ${root}${root},
 ${root}${root} * {
+  direction: ${dir} !important;
+}
+${root} .snag-ltr,
+${root} .snag-ltr * {
   direction: ltr !important;
+  unicode-bidi: isolate;
 }
 ${root}${root} {
   unicode-bidi: isolate;
@@ -89,6 +94,11 @@ ${root} select {
   0% { transform: translateX(-14px); }
   100% { transform: translateX(32px); }
 }
+@keyframes snag-tab-sweep-rtl {
+  0% { transform: translateX(14px); }
+  100% { transform: translateX(-32px); }
+}
+${root}[dir="rtl"] .snag-tab-sweep { animation-name: snag-tab-sweep-rtl; }
 @keyframes snag-step-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.45; }

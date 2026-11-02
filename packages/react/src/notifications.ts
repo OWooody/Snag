@@ -7,6 +7,8 @@
  * to "no notification" rather than throwing.
  */
 
+import { resolveLocaleConfig } from "./config";
+import { toastTitleKey, translate } from "./i18n";
 import type { SnagRequestRow, SnagRequestStatus } from "./protocol";
 
 const OWN_KEY = "snag:own-requests";
@@ -28,6 +30,12 @@ const EVENT_TITLES: Partial<Record<SnagRequestStatus, string>> = {
   error: "Your request hit a problem",
   rejected: "A developer declined your request",
 };
+
+function eventTitle(row: SnagRequestRow): string | null {
+  const key = toastTitleKey(row.status, row.rejection_reason);
+  if (key) return translate(resolveLocaleConfig(), key);
+  return EVENT_TITLES[row.status] ?? null;
+}
 
 function readOwn(): string[] {
   try {
@@ -71,7 +79,7 @@ export function trackRequestStatuses(rows: SnagRequestRow[]): void {
     if (!own.has(row.id)) continue;
     const before = previous.get(row.id);
     if (before === undefined || before === row.status) continue;
-    const title = EVENT_TITLES[row.status];
+    const title = eventTitle(row);
     if (!title) continue;
     for (const listener of listeners) listener({ row, status: row.status, title });
   }

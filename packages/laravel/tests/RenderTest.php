@@ -141,6 +141,20 @@ class RenderTest extends TestCase
         $this->assertSame('laravel', $context['framework']);
     }
 
+    public function test_locale_is_omitted_unless_set(): void
+    {
+        $this->assertArrayNotHasKey('locale', $this->configFrom(Blade::render('@snag')));
+
+        config(['snag.locale' => 'ar']);
+        $this->app['request']->attributes->remove('snag.rendered');
+        $this->assertSame('ar', $this->configFrom(Blade::render('@snag'))['locale']);
+
+        $this->app['request']->attributes->remove('snag.rendered');
+        config(['snag.locale' => '']);
+        Snag::resolveLocaleUsing(fn () => 'ar-SA');
+        $this->assertSame('ar-SA', $this->configFrom(Blade::render('@snag'))['locale']);
+    }
+
     public function test_failing_extender_keeps_base_context(): void
     {
         Snag::extendContextUsing(fn () => throw new \RuntimeException('boom'));

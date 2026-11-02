@@ -15,6 +15,7 @@ import {
   useSpring,
   type TabShape,
 } from "../sheet";
+import { useSnagStrings } from "../locale-context";
 import type { SnagTheme } from "../theme";
 
 export const TAB_LABEL = "What's on your mind?";
@@ -47,6 +48,7 @@ export function FloatingButton({
   busy = false,
   onPress,
 }: FloatingButtonProps) {
+  const { t, plural } = useSnagStrings();
   const [hovered, setHovered] = useState(false);
   const [focusVisible, setFocusVisible] = useState(false);
   const reducedMotion = usePrefersReducedMotion();
@@ -82,13 +84,13 @@ export function FloatingButton({
   const drawn = { ...shape, h: shape.h + 1 };
 
   const baseLabel = environmentLabel
-    ? `Snag (${environmentLabel}): request a change on this screen`
-    : "Snag: request a change on this screen";
+    ? t("tab.ariaEnv", { env: environmentLabel })
+    : t("tab.aria");
   const fullLabel = [
     baseLabel,
-    hasBadge ? `${badgeCount} awaiting your reply` : null,
-    hasDone ? `${doneCount} ${doneCount === 1 ? "request" : "requests"} finished` : null,
-    running && !hasBadge && !hasDone ? "A request is in progress" : null,
+    hasBadge ? t("tab.awaitingReply", { count: badgeCount }) : null,
+    hasDone ? plural(doneCount, "tab.finished.one", "tab.finished.other") : null,
+    running && !hasBadge && !hasDone ? t("tab.inProgress") : null,
   ]
     .filter(Boolean)
     .join(". ");
@@ -182,7 +184,7 @@ export function FloatingButton({
             overflow: "hidden",
             whiteSpace: "nowrap",
             maxWidth: peeking ? 200 : 0,
-            marginRight: peeking && (pill || busy) ? 10 : 0,
+            marginInlineEnd: peeking && (pill || busy) ? 10 : 0,
             opacity: peeking ? 1 : 0,
             color: theme.text,
             fontSize: 13,
@@ -192,7 +194,7 @@ export function FloatingButton({
           }}
         >
           <ChatIcon />
-          {TAB_LABEL}
+          {t("tab.open")}
         </span>
         <span
           className={pill && !peeking ? pill.glow : undefined}
@@ -255,7 +257,7 @@ export function FloatingButton({
               overflow: "hidden",
               width: peeking ? DONE_PILL_WIDTH : 0,
               height: 18,
-              marginLeft: peeking ? 6 : 0,
+              marginInlineStart: peeking ? 6 : 0,
               borderRadius: 999,
               background: theme.success,
               opacity: peeking ? 1 : 0,

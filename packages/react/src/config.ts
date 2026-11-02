@@ -1,5 +1,6 @@
-import { defaultTheme, type SnagTheme } from "./theme";
 import { mergeContext, startConsoleErrorBuffer } from "./auto-context";
+import { resolveLocale, type SnagLocale } from "./i18n";
+import { defaultTheme, type SnagTheme } from "./theme";
 
 export interface SnagConfig {
   /** Relay URL implementing the Snag protocol (see protocol.ts). */
@@ -45,6 +46,11 @@ export interface SnagConfig {
   /** Enable console debug logging. Defaults to non-production. */
   debug?: boolean;
   theme?: Partial<SnagTheme>;
+  /**
+   * Overlay language. `"ar"` or any `ar-*` value shows Arabic and RTL.
+   * Missing or unknown values stay English and LTR.
+   */
+  locale?: string;
 }
 
 let config: SnagConfig | null = null;
@@ -86,6 +92,11 @@ export async function resolveContext(): Promise<Record<string, unknown>> {
 export function isDebugEnabled(): boolean {
   if (config?.debug !== undefined) return config.debug;
   return false;
+}
+
+/** Overlay language from the last `initSnag` call. Defaults to English. */
+export function resolveLocaleConfig(): SnagLocale {
+  return resolveLocale(config?.locale);
 }
 
 const MAX_REQUESTER_LENGTH = 128;
